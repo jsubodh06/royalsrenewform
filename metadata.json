@@ -1,0 +1,6 @@
+{
+  "name": "JSG ROYALS — YEAR 2 • 2027",
+  "description": "Exclusive private membership portal for JSG Royals Year 2 verification and updates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
