@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'subodhjain2007777@gmail.com' ||
+        request.auth.token.email == 'admin@jsgroyals.org' ||
+        (request.auth.token.role != null && (request.auth.token.role == 'admin' || request.auth.token.role == 'super_admin'))
+      );
+    }
+
+    function isCoupleOwner(coupleId) {
+      return isAuthenticated() && (
+        isAdmin() ||
+        (request.auth.token.coupleId != null && request.auth.token.coupleId == coupleId)
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.matches('^JR[0-9]{3}$');
+    }
+
+    // Members collection: Master Year-1 records
+    match /members/{coupleId} {
+      allow get: if isAuthenticated();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Year-2 profiles & drafts: Isolated per Couple ID
+    match /year2_profiles/{coupleId} {
+      allow get: if isCoupleOwner(coupleId);
+      allow list: if isAdmin();
+      allow create, update: if isCoupleOwner(coupleId) && isValidId(coupleId);
+      allow delete: if isAdmin();
+    }
+
+    // Submissions: Single submission enforcement
+    match /submissions/{coupleId} {
+      allow get: if isCoupleOwner(coupleId);
+      allow list: if isAdmin();
+      allow create: if isCoupleOwner(coupleId) && isValidId(coupleId) && !exists(/databases/$(database)/documents/submissions/$(coupleId));
+      allow update, delete: if isAdmin();
+    }
+  }
+}

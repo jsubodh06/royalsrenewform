@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "Member": {
+      "title": "Member",
+      "description": "JSG Royals Master Year-1 Couple Record",
+      "type": "object",
+      "properties": {
+        "couple_id": {
+          "type": "string",
+          "description": "Unique permanent Couple ID from JR001 to JR110",
+          "pattern": "^JR[0-9]{3}$"
+        },
+        "husband_name": {
+          "type": "string",
+          "description": "Full name of the husband"
+        },
+        "wife_name": {
+          "type": "string",
+          "description": "Full name of the wife"
+        },
+        "husband_registered_mobile": {
+          "type": "string",
+          "description": "Registered 10-digit mobile number for husband"
+        },
+        "wife_registered_mobile": {
+          "type": "string",
+          "description": "Registered 10-digit mobile number for wife"
+        },
+        "year1_status": {
+          "type": "string",
+          "description": "Year 1 membership status"
+        }
+      },
+      "required": ["couple_id", "husband_name", "wife_name", "year1_status"]
+    },
+    "Year2Profile": {
+      "title": "Year2Profile",
+      "description": "Year 2 profile updates and photo metadata",
+      "type": "object",
+      "properties": {
+        "couple_id": {
+          "type": "string",
+          "description": "Owner couple ID",
+          "pattern": "^JR[0-9]{3}$"
+        },
+        "city": {
+          "type": "string",
+          "description": "Current residential city"
+        },
+        "residential_address": {
+          "type": "string",
+          "description": "Current residential address"
+        },
+        "occupation_status": {
+          "type": "string",
+          "description": "Occupation status or updates"
+        },
+        "family_status": {
+          "type": "string",
+          "description": "Family and children updates"
+        },
+        "photo_id": {
+          "type": "string",
+          "description": "Private photo identifier"
+        },
+        "family_photo_url": {
+          "type": "string",
+          "description": "Secure reference to family photo"
+        },
+        "last_step": {
+          "type": "number",
+          "description": "Form progression step"
+        }
+      },
+      "required": ["couple_id"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "Final Year 2 application submission",
+      "type": "object",
+      "properties": {
+        "couple_id": {
+          "type": "string",
+          "description": "Submitted couple ID",
+          "pattern": "^JR[0-9]{3}$"
+        },
+        "submission_status": {
+          "type": "string",
+          "description": "Status of submission",
+          "enum": ["submitted", "approved", "under_review"]
+        },
+        "submitted_at": {
+          "type": "string",
+          "description": "ISO timestamp of submission"
+        },
+        "submitted_by_mobile": {
+          "type": "string",
+          "description": "Mobile number used to submit"
+        }
+      },
+      "required": ["couple_id", "submission_status", "submitted_at"]
+    }
+  },
+  "firestore": {
+    "/members/{coupleId}": {
+      "schema": "Member",
+      "description": "Read-only Year 1 records for members; writeable only by admin"
+    },
+    "/year2_profiles/{coupleId}": {
+      "schema": "Year2Profile",
+      "description": "Year 2 profile and draft details owned by couple"
+    },
+    "/submissions/{coupleId}": {
+      "schema": "Submission",
+      "description": "Final locked submission record per couple"
+    }
+  }
+}

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Crown, ShieldCheck, ArrowRight, Sparkles, HeartHandshake, Lock } from 'lucide-react';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal.tsx';
 
 interface LandingScreenProps {
   onBegin: () => void;
@@ -7,6 +8,7 @@ interface LandingScreenProps {
 }
 
 export const LandingScreen: React.FC<LandingScreenProps> = ({ onBegin, onOpenAdmin }) => {
+  const [showPolicy, setShowPolicy] = useState(false);
   return (
     <div className="min-h-[calc(100vh-60px)] flex flex-col justify-between py-8 px-4 sm:px-6">
       <div className="max-w-md mx-auto w-full flex-1 flex flex-col justify-center items-center text-center">
@@ -82,12 +84,22 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onBegin, onOpenAdm
         <span>JSG Royals • 2027 Executive Committee</span>
         <span className="hidden sm:inline">•</span>
         <button
+          onClick={() => setShowPolicy(true)}
+          className="text-[#78716C] hover:text-[#1C1917] underline decoration-[#D4AF37]/50 cursor-pointer"
+        >
+          Privacy & Security Policy
+        </button>
+        <span className="hidden sm:inline">•</span>
+        <button
           onClick={onOpenAdmin}
-          className="text-[#78716C] hover:text-[#1C1917] underline decoration-[#D4AF37]/50"
+          className="text-[#78716C] hover:text-[#1C1917] underline decoration-[#D4AF37]/50 cursor-pointer"
         >
           Committee Administration
         </button>
       </footer>
+
+      {/* Official Privacy & Security Policy Modal */}
+      <PrivacyPolicyModal isOpen={showPolicy} onClose={() => setShowPolicy(false)} />
     </div>
   );
 };
