@@ -2,16 +2,44 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-const dataDir = path.resolve(process.cwd(), 'data');
+const isVercel = process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const dataDir = isVercel
+  ? path.resolve('/tmp', 'data')
+  : path.resolve(process.cwd(), 'data');
+
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const dbPath = path.join(dataDir, 'jsg_royals.db');
+
+// If on Vercel and the database does not exist in /tmp/data, copy the bundled seed db
+if (isVercel && !fs.existsSync(dbPath)) {
+  const seedDbPath = path.resolve(process.cwd(), 'data', 'jsg_royals.db');
+  if (fs.existsSync(seedDbPath)) {
+    try {
+      fs.copyFileSync(seedDbPath, dbPath);
+      const seedWal = path.resolve(process.cwd(), 'data', 'jsg_royals.db-wal');
+      const seedShm = path.resolve(process.cwd(), 'data', 'jsg_royals.db-shm');
+      if (fs.existsSync(seedWal)) fs.copyFileSync(seedWal, path.join(dataDir, 'jsg_royals.db-wal'));
+      if (fs.existsSync(seedShm)) fs.copyFileSync(seedShm, path.join(dataDir, 'jsg_royals.db-shm'));
+      console.log('Successfully copied seed SQLite database to /tmp/data');
+    } catch (e) {
+      console.warn('Could not copy seed database to /tmp:', e);
+    }
+  }
+}
+
 export const db = new Database(dbPath);
 
-// Enable foreign key constraints and WAL mode for reliability and concurrency
-db.pragma('journal_mode = WAL');
+// Enable foreign key constraints and journaling mode
+try {
+  db.pragma('journal_mode = WAL');
+} catch (e) {
+  try {
+    db.pragma('journal_mode = DELETE');
+  } catch (err) {}
+}
 db.pragma('foreign_keys = ON');
 
 export function initDatabase() {
@@ -208,8 +236,106 @@ export function initDatabase() {
   ensureYear2Columns();
   ensureMemberColumns();
 
-  // Seed ONLY 3 clearly marked fictional test members for Step 2 (if not already seeded)
-  seed3FictionalTestMembers(false);
+  // Ensure members are seeded: if fewer than 110 members exist, auto-seed from CSV
+  ensureMasterMembersSeeded();
+}
+
+function parseRFC4180(text: string): string[][] {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+    if (inQuotes) {
+      if (char === '"') {
+        if (nextChar === '"') {
+          currentField += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        currentField += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        currentRow.push(currentField);
+        currentField = '';
+      } else if (char === '\r') {
+        if (nextChar === '\n') i++;
+        currentRow.push(currentField);
+        rows.push(currentRow);
+        currentRow = [];
+        currentField = '';
+      } else if (char === '\n') {
+        currentRow.push(currentField);
+        rows.push(currentRow);
+        currentRow = [];
+        currentField = '';
+      } else {
+        currentField += char;
+      }
+    }
+  }
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField);
+    rows.push(currentRow);
+  }
+  return rows;
+}
+
+function ensureMasterMembersSeeded() {
+  try {
+    const countRow = db.prepare('SELECT COUNT(*) as count FROM members').get() as { count: number };
+    if (countRow && countRow.count >= 110) {
+      return; // Already has full master dataset
+    }
+
+    const csvPath = path.resolve(
+      process.cwd(),
+      'public/assets/aistudio/Members_JSG_THE_ROYAL_S_2026_Membership_Application_Form__Responses__7f81956f.csv'
+    );
+    if (fs.existsSync(csvPath)) {
+      const csvText = fs.readFileSync(csvPath, 'utf8');
+      const rows = parseRFC4180(csvText);
+      if (rows.length >= 111) {
+        const recordsToImport: any[] = [];
+        for (let i = 1; i <= 110; i++) {
+          const row = rows[i];
+          const coupleId = `JR${String(i).padStart(3, '0')}`;
+          recordsToImport.push({
+            couple_id: coupleId,
+            husband_name: row[1]?.trim() || 'Member Husband',
+            husband_registered_mobile: row[2]?.trim() || null,
+            husband_dob: row[16]?.trim() || null,
+            wife_name: row[8]?.trim() || 'Member Spouse',
+            wife_registered_mobile: row[9]?.trim() || null,
+            wife_dob: row[17]?.trim() || null,
+            marriage_anniversary: row[18]?.trim() || null,
+            kids: row[19]?.trim() || null,
+            year1_status: 'Active / Year-1 Member',
+            city: row[15]?.trim() || 'Indore',
+            residential_address: row[15]?.trim() || '',
+            husband_occupation: row[4]?.trim() || '',
+            husband_organization: row[5]?.trim() || '',
+            wife_occupation: row[11]?.trim() || '',
+            wife_organization: row[12]?.trim() || ''
+          });
+        }
+        validateAndImportYear1Members(recordsToImport, 'system_auto_seed');
+        console.log('Auto-seeded 110 real JSG Royals members from CSV.');
+        return;
+      }
+    }
+
+    seed3FictionalTestMembers(false);
+  } catch (err) {
+    console.error('ensureMasterMembersSeeded error:', err);
+  }
 }
 
 export function logAdminAudit(adminEmail: string, action: string, targetCoupleId?: string, details?: string) {

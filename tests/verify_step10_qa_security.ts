@@ -68,6 +68,7 @@ async function runStep10QA() {
   const jr1Member = db.prepare('SELECT * FROM members WHERE couple_id = ?').get('JR001') as any;
   const husbandMobile = jr1Member.husband_registered_mobile;
   const wifeMobile = jr1Member.wife_registered_mobile;
+  db.prepare('DELETE FROM otp_codes WHERE mobile = ?').run(husbandMobile);
 
   const reqOtpRes = await fetch(`${BASE_URL}/auth/request-otp`, {
     method: 'POST',

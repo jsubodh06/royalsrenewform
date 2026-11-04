@@ -8,7 +8,22 @@ import {
   AdminSession,
 } from './types.ts';
 
-const API_BASE = '/api';
+export const LIVE_BACKEND_URL = 'https://ais-pre-t5c2x6fk3je4yhythikayj-923279058412.asia-southeast1.run.app';
+
+export function getApiBase(): string {
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL) {
+    return (import.meta as any).env.VITE_API_BASE_URL;
+  }
+  return '/api';
+}
+
+export const API_BASE = getApiBase();
+
+export function getPhotoDisplayUrl(photoId: string, token?: string | null): string {
+  const base = getApiBase();
+  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `${base}/member/photo/${photoId}${tokenQuery}`;
+}
 
 export async function apiRequest<T>(
   endpoint: string,
@@ -172,7 +187,7 @@ export async function uploadPhotoMultipartApi(
   const formData = new FormData();
   formData.append('photo', file);
 
-  const response = await fetch('/api/member/upload-photo', {
+  const response = await fetch(`${API_BASE}/member/upload-photo`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

@@ -24,7 +24,10 @@ import {
 export const apiRouter = Router();
 
 // Private Photo Storage Setup
-const photosBaseDir = path.resolve(process.cwd(), 'data', 'year2-photos');
+const isVercel = process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const photosBaseDir = isVercel
+  ? path.resolve('/tmp', 'data', 'year2-photos')
+  : path.resolve(process.cwd(), 'data', 'year2-photos');
 if (!fs.existsSync(photosBaseDir)) {
   fs.mkdirSync(photosBaseDir, { recursive: true });
 }
@@ -874,8 +877,11 @@ apiRouter.get(['/member/photo', '/member/photo/:photoId'], (req: AuthenticatedRe
       return res.status(403).json({ error: 'Forbidden: You do not have permission to access another couple\'s private photo.' });
     }
 
-    const fullFilePath = path.resolve(process.cwd(), photo.storage_path);
-    if (!fullFilePath.startsWith(photosBaseDir) || !fs.existsSync(fullFilePath)) {
+    let fullFilePath = path.resolve(process.cwd(), photo.storage_path);
+    if (!fs.existsSync(fullFilePath)) {
+      fullFilePath = path.resolve(photosBaseDir, photo.couple_id, path.basename(photo.storage_path));
+    }
+    if (!fs.existsSync(fullFilePath)) {
       return res.status(404).json({ error: 'Photo file not found on disk.' });
     }
 
