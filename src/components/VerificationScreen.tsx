@@ -22,7 +22,6 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [testOtpNotice, setTestOtpNotice] = useState<string | null>(null);
   const [registeredCoupleId, setRegisteredCoupleId] = useState<string | null>(null);
   const [registeredName, setRegisteredName] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(60);
@@ -47,7 +46,6 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
     if (e) e.preventDefault();
     setError(null);
     setSuccessMsg(null);
-    setTestOtpNotice(null);
 
     const clean = mobile.replace(/\D/g, '').slice(-10);
     if (clean.length !== 10) {
@@ -61,36 +59,52 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
       const res = await requestOtpApi(clean);
       setRegisteredCoupleId(res.coupleId);
       setRegisteredName(res.registeredName);
-      const testCode = res.testOtp || (res as any).developmentTestOtp || '123456';
-      setTestOtpNotice(testCode);
 
-      // 2. Try sending real SMS via Firebase Phone Authentication
-      let firebaseSmsSuccess = false;
-      try {
-        if (typeof window !== 'undefined' && auth) {
-          if (!(window as any).recaptchaVerifier) {
-            (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-              size: 'invisible',
-              callback: () => {}
-            });
+      // 2. Dispatch real SMS via Firebase Phone Authentication
+      if (typeof window !== 'undefined' && auth) {
+        try {
+          if ((window as any).recaptchaVerifier) {
+            (window as any).recaptchaVerifier.clear();
+            (window as any).recaptchaVerifier = null;
           }
-          const confirmation = await signInWithPhoneNumber(auth, `+91${clean}`, (window as any).recaptchaVerifier);
-          setConfirmationResult(confirmation);
-          firebaseSmsSuccess = true;
-          setSmsSentViaFirebase(true);
-          setSuccessMsg(`Official SMS dispatched to +91 ${clean} via Firebase Phone Auth!`);
-        }
-      } catch (fbErr: any) {
-        console.warn('Firebase SMS provider note (using sandbox test code):', fbErr?.message || fbErr);
-        setSmsSentViaFirebase(false);
-        setSuccessMsg(res.message);
+        } catch (e) {}
+
+        const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          size: 'invisible',
+          callback: () => {}
+        });
+        (window as any).recaptchaVerifier = recaptchaVerifier;
+
+        const confirmation = await signInWithPhoneNumber(auth, `+91${clean}`, recaptchaVerifier);
+        setConfirmationResult(confirmation);
+        setSmsSentViaFirebase(true);
+        setSuccessMsg(`Official SMS verification code dispatched to +91 ${clean}.`);
+        setStep('otp');
+        setCountdown(60);
+        setOtp('');
+      } else {
+        throw new Error('Firebase Authentication is not available.');
+      }
+    } catch (err: any) {
+      console.error('Phone verification request error:', err);
+      const fbCode = err?.code || '';
+      const fbMsg = err?.message || '';
+      let friendlyError = fbMsg || 'Failed to dispatch SMS to your phone.';
+
+      if (fbCode === 'auth/unauthorized-domain') {
+        friendlyError = `Domain "${typeof window !== 'undefined' ? window.location.hostname : ''}" is not authorized in Firebase. Please add this domain under Firebase Console → Authentication → Settings → Authorized domains.`;
+      } else if (fbCode === 'auth/operation-not-allowed') {
+        friendlyError = 'Phone sign-in is disabled in Firebase. Please enable Phone provider in Firebase Console → Authentication → Sign-in method.';
+      } else if (fbCode === 'auth/captcha-check-failed' || fbCode === 'auth/invalid-app-credential') {
+        friendlyError = 'Security reCAPTCHA verification failed. Please refresh the page and try again.';
+      } else if (fbCode === 'auth/quota-exceeded') {
+        friendlyError = 'Daily SMS quota exceeded on your Firebase project plan.';
+      } else if (err.message && err.message.includes('not registered')) {
+        friendlyError = err.message;
       }
 
-      setStep('otp');
-      setCountdown(60);
-      setOtp('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to send OTP.');
+      setError(friendlyError);
+      // Stay on mobile step so user sees why SMS was not sent
     } finally {
       setLoading(false);
     }
@@ -101,32 +115,35 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
     setError(null);
 
     const cleanOtp = otp.trim();
-    if (cleanOtp.length < 4) {
-      setError('Please enter the verification OTP code.');
+    if (cleanOtp.length < 6) {
+      setError('Please enter the 6-digit OTP code received on your mobile.');
       return;
     }
 
     setLoading(true);
     try {
-      // If Firebase sent real SMS and user is not entering the fallback test OTP
-      if (smsSentViaFirebase && confirmationResult && cleanOtp !== testOtpNotice) {
-        try {
-          await confirmationResult.confirm(cleanOtp);
-          const res = await verifyFirebaseSessionApi(mobile);
-          localStorage.setItem('jsg_member_token', res.token);
-          onVerified(res.member, res.token);
-          return;
-        } catch (fbErr: any) {
-          console.warn('Firebase confirmation error, attempting backend verification:', fbErr);
-        }
+      if (confirmationResult) {
+        // Authenticate strictly with Firebase using the code sent to their phone
+        await confirmationResult.confirm(cleanOtp);
+        const res = await verifyFirebaseSessionApi(mobile);
+        localStorage.setItem('jsg_member_token', res.token);
+        onVerified(res.member, res.token);
+        return;
       }
 
-      // Default / Sandbox backend verification
+      // Fallback for internal test runners (e.g. 999000000X)
       const res = await verifyOtpApi(mobile, cleanOtp);
       localStorage.setItem('jsg_member_token', res.token);
       onVerified(res.member, res.token);
     } catch (err: any) {
-      setError(err.message || 'Invalid OTP code.');
+      const fbCode = err?.code || '';
+      let msg = err?.message || 'Invalid OTP code.';
+      if (fbCode === 'auth/invalid-verification-code') {
+        msg = 'Incorrect SMS verification code. Please check the SMS received on your phone.';
+      } else if (fbCode === 'auth/code-expired') {
+        msg = 'The SMS verification code has expired. Please request a new code.';
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -245,14 +262,14 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
               </div>
             )}
 
-            {/* Live Verification Notice */}
+            {/* Real SMS Verification Notice */}
             <div className="mb-4 p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE] text-xs text-[#57534E]">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1.5">
                 <ShieldCheck className="w-4 h-4 text-[#8C6D2B]" />
-                <span className="font-semibold text-[#1C1917]">Verification Code Dispatched</span>
+                <span className="font-semibold text-[#1C1917]">SMS Verification Dispatched</span>
               </div>
               <p className="text-[12px] text-[#78716C] leading-relaxed">
-                Please enter the 6-digit OTP code sent to your registered mobile number <strong className="text-[#1C1917]">+91 {mobile}</strong>.
+                A 6-digit verification code has been dispatched via SMS to your registered mobile <strong className="text-[#1C1917]">+91 {mobile}</strong>. Enter it below to access your account.
               </p>
             </div>
 
@@ -318,7 +335,7 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
         )}
 
         {/* Invisible Firebase reCAPTCHA anchor */}
-        <div id="recaptcha-container" className="hidden"></div>
+        <div id="recaptcha-container"></div>
       </div>
     </div>
   );

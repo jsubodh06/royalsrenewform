@@ -55,7 +55,6 @@ export async function requestOtpApi(mobile: string) {
     coupleId: string;
     mobile: string;
     registeredName: string;
-    testOtp: string;
     message: string;
   }>('/auth/request-otp', {
     method: 'POST',

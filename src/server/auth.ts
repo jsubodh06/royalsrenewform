@@ -143,15 +143,15 @@ export function requestOtp(mobile: string, options?: { bypassCooldown?: boolean 
     throw new Error('Maximum verification attempts exceeded. For your security, this number is temporarily locked. Please try again later.');
   }
 
-  // 5. Generate 6-digit numeric OTP
-  // In development test mode, we generate a cryptographically valid 6-digit code
-  // and in isolated test mode we also accept universal test code '123456'.
+  // 5. Generate cryptographically random 6-digit numeric OTP
   const generatedOtp = crypto.randomInt(100000, 999999).toString();
-  const testOtpToStore = '123456'; // Standardized deterministic test OTP for automated test cases
+  // Support deterministic code ONLY for internal mock test runner numbers (999000000X)
+  const isInternalTestNumber = cleanMobile.startsWith('999000000');
+  const otpToHash = isInternalTestNumber ? '123456' : generatedOtp;
 
   // 6. Secure Hashing: Never store plaintext OTP
   const salt = crypto.randomBytes(16).toString('hex');
-  const otpHash = hashOtp(testOtpToStore, salt);
+  const otpHash = hashOtp(otpToHash, salt);
 
   // Short expiry: 3 minutes validity (180,000 ms)
   const expiresAt = now + 3 * 60 * 1000;
