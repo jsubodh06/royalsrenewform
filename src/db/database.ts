@@ -182,6 +182,19 @@ export function initDatabase() {
       verified INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS email_otp_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'husband',
+      otp_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      verified INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_otp_codes_email ON email_otp_codes(email);
   `);
 
   // 9. photos — Private storage metadata (no binary BLOB in database)
@@ -227,6 +240,65 @@ export function initDatabase() {
       details TEXT,
       created_at TEXT NOT NULL
     );
+  `);
+
+  // 12. app_settings — Dynamic system configuration (e.g. Fast2SMS API key)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  // 13. family_registrations — Email-based fresh family registrations with cross-spouse awareness
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS family_registrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reg_id TEXT UNIQUE NOT NULL,
+      submitted_by_role TEXT NOT NULL,
+      submitter_email TEXT NOT NULL,
+      
+      husband_name TEXT NOT NULL,
+      husband_mobile TEXT NOT NULL,
+      husband_email TEXT NOT NULL,
+      husband_dob TEXT,
+      husband_qualification TEXT,
+      husband_occupation TEXT,
+      husband_organization TEXT,
+      husband_blood_group TEXT,
+
+      wife_name TEXT NOT NULL,
+      wife_mobile TEXT NOT NULL,
+      wife_email TEXT NOT NULL,
+      wife_dob TEXT,
+      wife_qualification TEXT,
+      wife_occupation TEXT,
+      wife_organization TEXT,
+      wife_blood_group TEXT,
+
+      marriage_anniversary TEXT NOT NULL,
+      current_city TEXT NOT NULL,
+      residential_address TEXT NOT NULL,
+      native_place TEXT,
+
+      has_children INTEGER DEFAULT 0,
+      children_json TEXT,
+
+      family_photo_url TEXT,
+      contribution_areas TEXT,
+      royal_idea TEXT,
+      jsg_should_be_known_for TEXT,
+
+      status TEXT NOT NULL DEFAULT 'submitted',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_fr_husband_email ON family_registrations(husband_email);
+    CREATE INDEX IF NOT EXISTS idx_fr_wife_email ON family_registrations(wife_email);
+    CREATE INDEX IF NOT EXISTS idx_fr_husband_mobile ON family_registrations(husband_mobile);
+    CREATE INDEX IF NOT EXISTS idx_fr_wife_mobile ON family_registrations(wife_mobile);
   `);
 
   // Seed default admin users
@@ -854,6 +926,24 @@ export function seed3FictionalTestMembers(force = false) {
   );
 
   console.log('Successfully seeded ONLY 3 fictional test members (JR001, JR002, JR003).');
+}
+
+export function getSetting(key: string): string | null {
+  try {
+    const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
+    return row ? row.value : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function setSetting(key: string, value: string): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(key, value, now);
 }
 
 // Initialize tables and seed

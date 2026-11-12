@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { db } from '../db/database.ts';
+import { sendFast2SmsOtp } from './sms.ts';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'jsg_royals_secure_jwt_secret_2027';
 
@@ -81,24 +82,34 @@ export function hashOtp(otp: string, salt: string): string {
 // STEP 3: SECURE MEMBER AUTHENTICATION & OTP VERIFICATION
 // =========================================================================
 
-export function requestOtp(mobile: string, options?: { bypassCooldown?: boolean }) {
-  const cleanMobile = mobile.trim().replace(/\D/g, '').slice(-10);
-  if (cleanMobile.length !== 10) {
-    throw new Error('Please enter a valid 10-digit mobile number.');
+export async function requestOtp(mobile: string, options?: { bypassCooldown?: boolean }) {
+  const digits = (mobile || '').toString().trim().replace(/\D/g, '');
+  if (!digits || digits.length < 10) {
+    throw new Error('Please enter a valid 10-digit registered mobile number.');
+  }
+
+  let cleanMobile = digits;
+  if (digits.length === 12 && digits.startsWith('91')) {
+    cleanMobile = digits.slice(2);
+  } else if (digits.length === 11 && digits.startsWith('0')) {
+    cleanMobile = digits.slice(1);
+  } else if (digits.length > 10 && !digits.startsWith('61')) {
+    cleanMobile = digits.slice(-10);
   }
 
   // 1. Validate mobile against members table
   const member = db.prepare(`
     SELECT couple_id, husband_name, wife_name, husband_registered_mobile, wife_registered_mobile 
     FROM members 
-    WHERE (husband_registered_mobile = ? OR wife_registered_mobile = ?) 
-      AND active_status = 1
-  `).get(cleanMobile, cleanMobile) as any;
+    WHERE (
+      husband_registered_mobile IN (?, ?, ?) OR 
+      wife_registered_mobile IN (?, ?, ?)
+    ) AND active_status = 1
+  `).get(cleanMobile, digits, cleanMobile.slice(-10), cleanMobile, digits, cleanMobile.slice(-10)) as any;
 
   if (!member) {
     // Explicit Test 1 requirement:
     // "Sorry, this mobile number is not registered with JSG Royals."
-    // (Do not reveal whether another similar mobile/member exists)
     throw new Error('Sorry, this mobile number is not registered with JSG Royals.');
   }
 
@@ -167,8 +178,21 @@ export function requestOtp(mobile: string, options?: { bypassCooldown?: boolean 
     VALUES (?, ?, ?, ?, ?, 0, 0, ?)
   `).run(cleanMobile, member.couple_id, otpHash, salt, expiresAt, now);
 
+  // Dispatch real SMS via Fast2SMS (Indian SMS Gateway)
+  let smsResult: { success: boolean; message: string; fast2smsCalled?: boolean; status_code?: number } | null = null;
+  if (!isInternalTestNumber) {
+    smsResult = await sendFast2SmsOtp(cleanMobile, otpToHash);
+  }
+
   const isHusband = cleanMobile === member.husband_registered_mobile;
   const spouseType: 'husband' | 'wife' = isHusband ? 'husband' : 'wife';
+
+  let userMessage = `OTP sent successfully to registered mobile ending with ${cleanMobile.slice(-4)}`;
+  if (smsResult && smsResult.success) {
+    userMessage = `Official SMS verification code dispatched via Fast2SMS to +91 ${cleanMobile}.`;
+  } else if (smsResult && !smsResult.success) {
+    userMessage = smsResult.message;
+  }
 
   return {
     success: true,
@@ -178,7 +202,10 @@ export function requestOtp(mobile: string, options?: { bypassCooldown?: boolean 
     expiresInSeconds: 180,
     resendCooldownSeconds: 30,
     registeredName: isHusband ? member.husband_name : member.wife_name,
-    message: `OTP sent successfully to registered mobile ending with ${cleanMobile.slice(-4)}`
+    smsDispatched: smsResult?.success ?? false,
+    fast2smsCalled: smsResult?.fast2smsCalled ?? false,
+    fast2smsStatusCode: smsResult?.status_code,
+    message: userMessage
   };
 }
 
@@ -285,17 +312,28 @@ export function verifyOtp(mobile: string, enteredOtp: string, ip?: string) {
 }
 
 export function verifyFirebaseSession(mobile: string) {
-  const cleanMobile = mobile.trim().replace(/\D/g, '').slice(-10);
-  if (cleanMobile.length !== 10) {
+  const digits = (mobile || '').toString().trim().replace(/\D/g, '');
+  if (!digits || digits.length < 10) {
     throw new Error('Invalid mobile number.');
+  }
+
+  let cleanMobile = digits;
+  if (digits.length === 12 && digits.startsWith('91')) {
+    cleanMobile = digits.slice(2);
+  } else if (digits.length === 11 && digits.startsWith('0')) {
+    cleanMobile = digits.slice(1);
+  } else if (digits.length > 10 && !digits.startsWith('61')) {
+    cleanMobile = digits.slice(-10);
   }
 
   const member = db.prepare(`
     SELECT couple_id, husband_name, wife_name, husband_registered_mobile, wife_registered_mobile 
     FROM members 
-    WHERE (husband_registered_mobile = ? OR wife_registered_mobile = ?)
-      AND active_status = 1
-  `).get(cleanMobile, cleanMobile) as any;
+    WHERE (
+      husband_registered_mobile IN (?, ?, ?) OR 
+      wife_registered_mobile IN (?, ?, ?)
+    ) AND active_status = 1
+  `).get(cleanMobile, digits, cleanMobile.slice(-10), cleanMobile, digits, cleanMobile.slice(-10)) as any;
 
   if (!member) {
     throw new Error('Sorry, this mobile number is not registered with JSG Royals.');
@@ -338,5 +376,123 @@ export function verifyFirebaseSession(mobile: string) {
       mobile: cleanMobile,
     },
     message: 'Authentication successful. Welcome back, Royals 👑'
+  };
+}
+
+export function parseDayAndMonth(str: string): { day: number; month: number } | null {
+  if (!str) return null;
+  const s = str.trim().toLowerCase();
+  const months: Record<string, number> = {
+    jan: 1, january: 1, '01': 1, '1': 1,
+    feb: 2, february: 2, '02': 2, '2': 2,
+    mar: 3, march: 3, '03': 3, '3': 3,
+    apr: 4, april: 4, '04': 4, '4': 4,
+    may: 5, '05': 5, '5': 5,
+    jun: 6, june: 6, '06': 6, '6': 6,
+    jul: 7, july: 7, '07': 7, '7': 7,
+    aug: 8, august: 8, '08': 8, '8': 8,
+    sep: 9, sept: 9, september: 9, '09': 9, '9': 9,
+    oct: 10, october: 10, '10': 10,
+    nov: 11, november: 11, '11': 11,
+    dec: 12, december: 12, '12': 12
+  };
+  const ymd = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (ymd) return { day: parseInt(ymd[3], 10), month: parseInt(ymd[2], 10) };
+  const parts = s.split(/[-/\s.]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const d1 = parseInt(parts[0], 10);
+    const m1 = months[parts[1]] || parseInt(parts[1], 10);
+    if (!isNaN(d1) && d1 >= 1 && d1 <= 31 && m1 >= 1 && m1 <= 12) return { day: d1, month: m1 };
+    const m2 = months[parts[0]] || parseInt(parts[0], 10);
+    const d2 = parseInt(parts[1], 10);
+    if (!isNaN(d2) && d2 >= 1 && d2 <= 31 && m2 >= 1 && m2 <= 12) return { day: d2, month: m2 };
+  }
+  return null;
+}
+
+export function verifyAnniversaryOrDob(mobile: string, dateInput: string) {
+  const digits = (mobile || '').toString().trim().replace(/\D/g, '');
+  if (!digits || digits.length < 10) {
+    throw new Error('Please enter a valid 10-digit registered mobile number.');
+  }
+
+  let cleanMobile = digits;
+  if (digits.length === 12 && digits.startsWith('91')) {
+    cleanMobile = digits.slice(2);
+  } else if (digits.length === 11 && digits.startsWith('0')) {
+    cleanMobile = digits.slice(1);
+  } else if (digits.length > 10 && !digits.startsWith('61')) {
+    cleanMobile = digits.slice(-10);
+  }
+
+  const member = db.prepare(`
+    SELECT couple_id, husband_name, wife_name, husband_registered_mobile, wife_registered_mobile,
+           marriage_anniversary, husband_dob, wife_dob
+    FROM members 
+    WHERE (
+      husband_registered_mobile IN (?, ?, ?) OR 
+      wife_registered_mobile IN (?, ?, ?)
+    ) AND active_status = 1
+  `).get(cleanMobile, digits, cleanMobile.slice(-10), cleanMobile, digits, cleanMobile.slice(-10)) as any;
+
+  if (!member) {
+    throw new Error('Sorry, this mobile number is not registered with JSG Royals.');
+  }
+
+  const entered = parseDayAndMonth(dateInput);
+  if (!entered) {
+    throw new Error('Please enter a valid date (e.g. 27 February or 27-02).');
+  }
+
+  // Candidate dates: marriage_anniversary, husband_dob, wife_dob
+  const candidates = [
+    parseDayAndMonth(member.marriage_anniversary),
+    parseDayAndMonth(member.husband_dob),
+    parseDayAndMonth(member.wife_dob)
+  ].filter(Boolean) as Array<{ day: number; month: number }>;
+
+  const matched = candidates.some(c => c.day === entered.day && c.month === entered.month);
+
+  if (!matched) {
+    throw new Error('The date entered does not match your registered marriage anniversary or birth date. Please check and try again.');
+  }
+
+  const isHusband = cleanMobile === member.husband_registered_mobile;
+  const spouseType: 'husband' | 'wife' = isHusband ? 'husband' : 'wife';
+
+  const nowIso = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO verification (
+      couple_id, verified_mobile, verification_status,
+      verified_at, created_at
+    ) VALUES (?, ?, ?, ?, ?)
+  `).run(
+    member.couple_id,
+    cleanMobile,
+    'verified_anniversary',
+    nowIso,
+    nowIso
+  );
+
+  const payload: MemberSessionPayload = {
+    coupleId: member.couple_id,
+    mobile: cleanMobile,
+    role: 'member',
+    spouseType,
+  };
+
+  const token = signMemberToken(payload);
+
+  return {
+    success: true,
+    token,
+    member: {
+      coupleId: member.couple_id,
+      husbandName: member.husband_name,
+      wifeName: member.wife_name,
+      spouseType,
+      mobile: cleanMobile,
+    },
+    message: 'Identity verified successfully! Welcome back, Royals 👑'
   };
 }

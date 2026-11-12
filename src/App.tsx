@@ -6,6 +6,7 @@ import { Year1ProfileCard } from './components/Year1ProfileCard.tsx';
 import { Year2Form } from './components/Year2Form.tsx';
 import { SuccessScreen } from './components/SuccessScreen.tsx';
 import { AdminDashboard } from './components/AdminDashboard.tsx';
+import { RoyalFamilyPortal } from './components/RoyalFamilyPortal.tsx';
 import {
   MemberSession,
   AdminSession,
@@ -30,8 +31,8 @@ export default function App() {
   );
   const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
 
-  // Active View: 'landing' | 'verify' | 'profile' | 'form' | 'success' | 'admin'
-  const [activeView, setActiveView] = useState<string>('landing');
+  // Active View: 'family' (Primary fresh email portal) | 'landing' | 'verify' | 'profile' | 'form' | 'success' | 'admin'
+  const [activeView, setActiveView] = useState<string>('family');
 
   // Loaded Member Profile Data
   const [memberYear1, setMemberYear1] = useState<MemberYear1 | null>(null);
@@ -167,82 +168,90 @@ export default function App() {
           if (memberSession) {
             setActiveView(isSubmitted ? 'success' : 'profile');
           } else {
-            setActiveView('landing');
+            setActiveView('family');
           }
         }}
         activeView={activeView}
       />
 
-      {/* Primary View Routing */}
-      <main className="flex-1">
-        {activeView === 'landing' && (
-          <LandingScreen
-            onBegin={() => setActiveView('verify')}
-            onOpenAdmin={() => setActiveView('admin')}
-          />
-        )}
+      {/* Primary View Routing with Smooth Fade-in and Slide-up Transition */}
+      <main className="flex-1 flex flex-col overflow-x-hidden">
+        <div key={activeView} className="animate-fade-in-up flex-1 flex flex-col">
+          {activeView === 'family' && (
+            <RoyalFamilyPortal
+              onOpenAdmin={() => setActiveView('admin')}
+            />
+          )}
 
-        {activeView === 'verify' && (
-          <VerificationScreen
-            initialMobile={prefilledMobile}
-            onVerified={handleMemberVerified}
-            onBack={() => setActiveView('landing')}
-          />
-        )}
+          {activeView === 'landing' && (
+            <LandingScreen
+              onBegin={() => setActiveView('verify')}
+              onOpenAdmin={() => setActiveView('admin')}
+            />
+          )}
 
-        {activeView === 'profile' && memberYear1 && memberSession && memberToken && (
-          <Year1ProfileCard
-            member={memberYear1}
-            session={memberSession}
-            token={memberToken}
-            corrections={corrections}
-            hasDraft={hasDraft}
-            onConfirmYear1={() => {
-              fetchCurrentMember(memberToken, 'form');
-            }}
-            onGoToYear2={() => {
-              setActiveView('form');
-            }}
-            onRefresh={() => fetchCurrentMember(memberToken)}
-          />
-        )}
+          {activeView === 'verify' && (
+            <VerificationScreen
+              initialMobile={prefilledMobile}
+              onVerified={handleMemberVerified}
+              onBack={() => setActiveView('landing')}
+            />
+          )}
 
-        {activeView === 'form' && memberYear1 && memberToken && (
-          <Year2Form
-            token={memberToken}
-            member={memberYear1}
-            initialProfile={year2Profile}
-            initialPreferences={year2Preferences}
-            initialPhoto={currentPhoto}
-            hasDraft={hasDraft}
-            isSubmitted={isSubmitted}
-            submissionDate={submission?.submitted_at}
-            onSuccessSubmit={() => {
-              setIsSubmitted(true);
-              fetchCurrentMember(memberToken, 'success');
-            }}
-            onBackToProfile={() => setActiveView('profile')}
-          />
-        )}
+          {activeView === 'profile' && memberYear1 && memberSession && memberToken && (
+            <Year1ProfileCard
+              member={memberYear1}
+              session={memberSession}
+              token={memberToken}
+              corrections={corrections}
+              hasDraft={hasDraft}
+              onConfirmYear1={() => {
+                fetchCurrentMember(memberToken, 'form');
+              }}
+              onGoToYear2={() => {
+                setActiveView('form');
+              }}
+              onRefresh={() => fetchCurrentMember(memberToken)}
+            />
+          )}
 
-        {activeView === 'success' && memberYear1 && memberToken && (
-          <SuccessScreen
-            member={memberYear1}
-            profile={year2Profile}
-            preferences={year2Preferences}
-            submission={submission}
-            token={memberToken}
-          />
-        )}
+          {activeView === 'form' && memberYear1 && memberToken && (
+            <Year2Form
+              token={memberToken}
+              member={memberYear1}
+              initialProfile={year2Profile}
+              initialPreferences={year2Preferences}
+              initialPhoto={currentPhoto}
+              hasDraft={hasDraft}
+              isSubmitted={isSubmitted}
+              submissionDate={submission?.submitted_at}
+              onSuccessSubmit={() => {
+                setIsSubmitted(true);
+                fetchCurrentMember(memberToken, 'success');
+              }}
+              onBackToProfile={() => setActiveView('profile')}
+            />
+          )}
 
-        {activeView === 'admin' && (
-          <AdminDashboard
-            adminToken={adminToken}
-            adminSession={adminSession}
-            onAdminLoginSuccess={handleAdminLoginSuccess}
-            onAdminLogout={handleAdminLogout}
-          />
-        )}
+          {activeView === 'success' && memberYear1 && memberToken && (
+            <SuccessScreen
+              member={memberYear1}
+              profile={year2Profile}
+              preferences={year2Preferences}
+              submission={submission}
+              token={memberToken}
+            />
+          )}
+
+          {activeView === 'admin' && (
+            <AdminDashboard
+              adminToken={adminToken}
+              adminSession={adminSession}
+              onAdminLoginSuccess={handleAdminLoginSuccess}
+              onAdminLogout={handleAdminLogout}
+            />
+          )}
+        </div>
       </main>
     </div>
   );

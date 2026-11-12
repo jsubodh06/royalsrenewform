@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -9,17 +9,29 @@ import {
   logAdminAudit,
   seed3FictionalTestMembers,
   validateAndImportYear1Members,
-  getMembersImportStatus
+  getMembersImportStatus,
+  setSetting,
+  getSetting,
 } from '../db/database.ts';
 import {
   requestOtp,
   verifyOtp,
   verifyFirebaseSession,
+  verifyAnniversaryOrDob,
   signAdminToken,
   requireMember,
   requireAdmin,
   AuthenticatedRequest,
 } from './auth.ts';
+import {
+  isFast2SmsConfigured,
+  getFast2SmsApiKey,
+  checkFast2SmsWallet,
+} from './sms.ts';
+import { requestEmailOtp, verifyEmailOtp, getEmailConfigStatus, saveEmailConfig, resetEmailConfig } from './emailOtp.ts';
+
+// Clear any bad credentials so app operates in reliable, safe mode without SMTP errors
+resetEmailConfig();
 
 export const apiRouter = Router();
 
@@ -98,13 +110,13 @@ function validateImageMagicBytes(buffer: Buffer): { valid: boolean; detectedMime
 // ==========================================
 
 // Request OTP for registered mobile
-apiRouter.post('/auth/request-otp', (req, res) => {
+apiRouter.post('/auth/request-otp', async (req, res) => {
   try {
     const { mobile } = req.body;
     if (!mobile) {
       return res.status(400).json({ error: 'Mobile number is required.' });
     }
-    const result = requestOtp(mobile);
+    const result = await requestOtp(mobile);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to process OTP request.' });
@@ -137,6 +149,20 @@ apiRouter.post('/auth/firebase-verify-session', (req, res) => {
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Firebase phone verification failed.' });
+  }
+});
+
+// Challenge-Response verification via Marriage Anniversary / Birthday (Zero SMS / No Credit Card required)
+apiRouter.post('/auth/verify-secret', (req, res) => {
+  try {
+    const { mobile, dateInput } = req.body;
+    if (!mobile || !dateInput) {
+      return res.status(400).json({ error: 'Registered mobile number and Anniversary / Birthday date are required.' });
+    }
+    const result = verifyAnniversaryOrDob(mobile, dateInput);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Verification failed.' });
   }
 });
 
@@ -1685,3 +1711,498 @@ apiRouter.post('/admin/import-members', requireAdmin, (req: AuthenticatedRequest
     res.status(400).json({ error: err.message || 'Import failed.' });
   }
 });
+
+// ==========================================
+// FAST2SMS CONFIGURATION & STATUS
+// ==========================================
+
+// Get Fast2SMS status & wallet balance
+apiRouter.get('/admin/sms-config', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const isConfigured = isFast2SmsConfigured();
+    const apiKey = getFast2SmsApiKey();
+    const maskedKey = apiKey ? `${apiKey.slice(0, 4)}••••••••${apiKey.slice(-4)}` : null;
+    let walletInfo = null;
+    if (isConfigured) {
+      walletInfo = await checkFast2SmsWallet();
+    }
+    res.json({
+      configured: isConfigured,
+      gateway: 'Fast2SMS (bulkV2 OTP route)',
+      maskedKey,
+      wallet: walletInfo?.wallet || null,
+      walletError: walletInfo && !walletInfo.success ? walletInfo.message : null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to check SMS configuration.' });
+  }
+});
+
+// Update Fast2SMS API Key
+apiRouter.post('/admin/sms-config', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { apiKey } = req.body;
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 5) {
+      return res.status(400).json({ error: 'Please provide a valid Fast2SMS API Key.' });
+    }
+    setSetting('fast2sms_api_key', apiKey.trim());
+    logAdminAudit(req.admin!.email, 'UPDATE_FAST2SMS_KEY', undefined, 'Updated Fast2SMS API Key');
+
+    const walletCheck = await checkFast2SmsWallet();
+    res.json({
+      success: true,
+      message: 'Fast2SMS API Key updated successfully.',
+      walletCheck,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to update SMS configuration.' });
+  }
+});
+
+// Run live diagnostic test on Fast2SMS API with current credentials
+apiRouter.post('/admin/test-fast2sms', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const apiKey = getFast2SmsApiKey();
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Fast2SMS API Key is not configured yet.' });
+    }
+
+    const testMobile = (req.body?.mobile || '9977933333').replace(/\D/g, '').slice(-10);
+
+    // 1. Test Wallet
+    let walletResult: any = null;
+    try {
+      const wRes = await fetch('https://www.fast2sms.com/dev/wallet', {
+        method: 'POST',
+        headers: { 'authorization': apiKey },
+      });
+      walletResult = await wRes.json().catch(() => ({}));
+    } catch (e: any) {
+      walletResult = { error: e.message };
+    }
+
+    // 2. Test OTP Route
+    let otpRouteResult: any = null;
+    try {
+      const oRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+        method: 'POST',
+        headers: {
+          'authorization': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          route: 'otp',
+          variables_values: '123456',
+          numbers: testMobile,
+        }),
+      });
+      otpRouteResult = await oRes.json().catch(() => ({}));
+    } catch (e: any) {
+      otpRouteResult = { error: e.message };
+    }
+
+    // 3. Test Quick Route (q)
+    let quickRouteResult: any = null;
+    try {
+      const qRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+        method: 'POST',
+        headers: {
+          'authorization': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          route: 'q',
+          message: 'JSG Royals Fast2SMS API connection diagnostic test.',
+          language: 'english',
+          flash: 0,
+          numbers: testMobile,
+        }),
+      });
+      quickRouteResult = await qRes.json().catch(() => ({}));
+    } catch (e: any) {
+      quickRouteResult = { error: e.message };
+    }
+
+    const maskedKey = `${apiKey.slice(0, 4)}••••••••${apiKey.slice(-4)}`;
+
+    let statusSummary = 'Credentials valid.';
+    if (quickRouteResult?.status_code === 999) {
+      statusSummary = 'Credentials valid, but Fast2SMS requires ₹100 INR recharge before API route can deliver live SMS.';
+    } else if (otpRouteResult?.status_code === 996) {
+      statusSummary = 'Credentials valid, but Fast2SMS requires 1-time Website Verification under Dev API -> OTP Message menu.';
+    }
+
+    res.json({
+      success: true,
+      maskedKey,
+      testMobile,
+      walletResult,
+      otpRouteResult,
+      quickRouteResult,
+      statusSummary,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Diagnostic test failed.' });
+  }
+});
+
+// View recent OTP attempts
+apiRouter.get('/admin/recent-otps', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const records = db.prepare(`
+      SELECT o.id, o.mobile, o.couple_id, o.created_at, o.expires_at, o.attempts, o.verified,
+             m.husband_name, m.wife_name
+      FROM otp_codes o
+      LEFT JOIN members m ON m.couple_id = o.couple_id
+      ORDER BY o.id DESC LIMIT 15
+    `).all();
+    res.json({ success: true, records });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve recent OTP activity.' });
+  }
+});
+
+// =========================================================================
+// FRESH EMAIL-BASED FAMILY REGISTRATION & SPOUSE DETECTION ENDPOINTS
+// =========================================================================
+
+// Request 6-digit Email OTP
+apiRouter.post('/family/request-email-otp', async (req: Request, res: Response) => {
+  try {
+    const email = req.body?.email;
+    const role = req.body?.role || 'husband';
+    const result = await requestEmailOtp(email, role);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to send email verification code.' });
+  }
+});
+
+// Get Email Delivery Configuration Status
+apiRouter.get('/family/email-config', (_req: Request, res: Response) => {
+  res.json(getEmailConfigStatus());
+});
+
+// Update Email Delivery Configuration (Resend, Gmail, Brevo, or SMTP)
+apiRouter.post('/family/email-config', async (req: Request, res: Response) => {
+  try {
+    const status = await saveEmailConfig(req.body);
+    res.json({ success: true, ...status });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to save email configuration.' });
+  }
+});
+
+// Verify 6-digit Email OTP
+apiRouter.post('/family/verify-email-otp', (req: Request, res: Response) => {
+  try {
+    const { email, otp } = req.body;
+    const result = verifyEmailOtp(email, otp);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Verification failed.' });
+  }
+});
+
+// 1. Check if email (or spouse's email) has already been submitted
+apiRouter.post('/family/check-email', (req: Request, res: Response) => {
+  try {
+    const rawEmail = (req.body?.email || '').trim().toLowerCase();
+    const role = (req.body?.role || '').trim().toLowerCase(); // 'husband' | 'wife'
+    if (!rawEmail || !rawEmail.includes('@')) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    const record = db.prepare(`
+      SELECT * FROM family_registrations 
+      WHERE LOWER(husband_email) = ? OR LOWER(wife_email) = ?
+      ORDER BY id DESC LIMIT 1
+    `).get(rawEmail, rawEmail) as any;
+
+    if (!record) {
+      return res.json({ exists: false });
+    }
+
+    const isHusbandEmail = record.husband_email.toLowerCase() === rawEmail;
+    const isWifeEmail = record.wife_email.toLowerCase() === rawEmail;
+    const submittedByRole = record.submitted_by_role;
+
+    let filedBySpouse = false;
+    let spouseName = '';
+    let spouseRole: 'husband' | 'wife' = 'husband';
+    let message = '';
+
+    const dateFormatted = new Date(record.created_at).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    // Priority 1: Direct match based on who owns the email in the verified record
+    if (isWifeEmail && submittedByRole === 'husband') {
+      filedBySpouse = true;
+      spouseName = record.husband_name;
+      spouseRole = 'husband';
+      message = `✨ Your husband, ${record.husband_name}, has already registered your royal household on ${dateFormatted}!`;
+    } else if (isHusbandEmail && submittedByRole === 'wife') {
+      filedBySpouse = true;
+      spouseName = record.wife_name;
+      spouseRole = 'wife';
+      message = `✨ Your wife, ${record.wife_name}, has already registered your royal household on ${dateFormatted}!`;
+    } else if (isHusbandEmail && submittedByRole === 'husband') {
+      filedBySpouse = false;
+      spouseName = record.wife_name;
+      spouseRole = 'wife';
+      message = `✨ You have already completed the registration for your royal household on ${dateFormatted}.`;
+    } else if (isWifeEmail && submittedByRole === 'wife') {
+      filedBySpouse = false;
+      spouseName = record.husband_name;
+      spouseRole = 'husband';
+      message = `✨ You have already completed the registration for your royal household on ${dateFormatted}.`;
+    } else if (role === 'wife' && submittedByRole === 'husband') {
+      filedBySpouse = true;
+      spouseName = record.husband_name;
+      spouseRole = 'husband';
+      message = `✨ Your husband, ${record.husband_name}, has already registered your royal household on ${dateFormatted}!`;
+    } else if (role === 'husband' && submittedByRole === 'wife') {
+      filedBySpouse = true;
+      spouseName = record.wife_name;
+      spouseRole = 'wife';
+      message = `✨ Your wife, ${record.wife_name}, has already registered your royal household on ${dateFormatted}!`;
+    } else {
+      filedBySpouse = false;
+      spouseName = submittedByRole === 'husband' ? record.wife_name : record.husband_name;
+      spouseRole = submittedByRole === 'husband' ? 'wife' : 'husband';
+      message = `✨ Your royal family dossier was already recorded on ${dateFormatted}.`;
+    }
+
+    let parsedChildren = [];
+    try {
+      parsedChildren = record.children_json ? JSON.parse(record.children_json) : [];
+    } catch (e) {
+      parsedChildren = [];
+    }
+
+    res.json({
+      exists: true,
+      filedBySpouse,
+      spouseName,
+      spouseRole,
+      submitterRole: submittedByRole,
+      submitterEmail: record.submitter_email,
+      submittedAt: record.created_at,
+      message,
+      registration: {
+        ...record,
+        children: parsedChildren
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to check email registration.' });
+  }
+});
+
+// 2. Submit new family dossier
+apiRouter.post('/family/register', (req: Request, res: Response) => {
+  try {
+    const {
+      submitted_by_role,
+      submitter_email,
+      husband_name,
+      husband_mobile,
+      husband_email,
+      husband_dob,
+      husband_qualification,
+      husband_occupation,
+      husband_organization,
+      husband_blood_group,
+      wife_name,
+      wife_mobile,
+      wife_email,
+      wife_dob,
+      wife_qualification,
+      wife_occupation,
+      wife_organization,
+      wife_blood_group,
+      marriage_anniversary,
+      current_city,
+      residential_address,
+      native_place,
+      has_children,
+      children,
+      family_photo_url,
+      contribution_areas,
+      royal_idea,
+      jsg_should_be_known_for
+    } = req.body;
+
+    if (!husband_name || !husband_mobile || !husband_email) {
+      return res.status(400).json({ error: 'Husband Name, Mobile number, and Email are required.' });
+    }
+    if (!wife_name || !wife_mobile || !wife_email) {
+      return res.status(400).json({ error: 'Wife Name, Mobile number, and Email are required.' });
+    }
+    if (!marriage_anniversary) {
+      return res.status(400).json({ error: 'Marriage Anniversary date is required.' });
+    }
+    if (!current_city || !residential_address) {
+      return res.status(400).json({ error: 'Current City and Residential Address are required.' });
+    }
+
+    const hEmail = husband_email.trim().toLowerCase();
+    const wEmail = wife_email.trim().toLowerCase();
+    const subEmail = (submitter_email || (submitted_by_role === 'wife' ? wEmail : hEmail)).trim().toLowerCase();
+    const subRole = submitted_by_role === 'wife' ? 'wife' : 'husband';
+
+    // Verify if either email was already submitted
+    const existing = db.prepare(`
+      SELECT * FROM family_registrations
+      WHERE LOWER(husband_email) = ? OR LOWER(wife_email) = ?
+         OR LOWER(husband_email) = ? OR LOWER(wife_email) = ?
+      ORDER BY id DESC LIMIT 1
+    `).get(hEmail, hEmail, wEmail, wEmail) as any;
+
+    if (existing) {
+      const dateFormatted = new Date(existing.created_at).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+      const spouseTitle = existing.submitted_by_role === 'husband' ? 'husband' : 'wife';
+      const spouseName = existing.submitted_by_role === 'husband' ? existing.husband_name : existing.wife_name;
+
+      let parsedChildren = [];
+      try {
+        parsedChildren = existing.children_json ? JSON.parse(existing.children_json) : [];
+      } catch (e) {}
+
+      return res.status(409).json({
+        error: 'Already registered',
+        alreadyRegistered: true,
+        filedBySpouse: existing.submitted_by_role !== subRole,
+        spouseName,
+        spouseRole: spouseTitle,
+        message: `✨ Your ${spouseTitle}, ${spouseName}, has already submitted your family dossier on ${dateFormatted}!`,
+        registration: {
+          ...existing,
+          children: parsedChildren
+        }
+      });
+    }
+
+    const regId = `ROYAL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const now = new Date().toISOString();
+    const childrenJson = Array.isArray(children) ? JSON.stringify(children) : (typeof children === 'string' ? children : '[]');
+
+    db.prepare(`
+      INSERT INTO family_registrations (
+        reg_id, submitted_by_role, submitter_email,
+        husband_name, husband_mobile, husband_email, husband_dob,
+        husband_qualification, husband_occupation, husband_organization, husband_blood_group,
+        wife_name, wife_mobile, wife_email, wife_dob,
+        wife_qualification, wife_occupation, wife_organization, wife_blood_group,
+        marriage_anniversary, current_city, residential_address, native_place,
+        has_children, children_json, family_photo_url,
+        contribution_areas, royal_idea, jsg_should_be_known_for,
+        status, created_at, updated_at
+      ) VALUES (
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        'submitted', ?, ?
+      )
+    `).run(
+      regId, subRole, subEmail,
+      husband_name.trim(), husband_mobile.trim(), hEmail, husband_dob || null,
+      husband_qualification || null, husband_occupation || null, husband_organization || null, husband_blood_group || null,
+      wife_name.trim(), wife_mobile.trim(), wEmail, wife_dob || null,
+      wife_qualification || null, wife_occupation || null, wife_organization || null, wife_blood_group || null,
+      marriage_anniversary, current_city.trim(), residential_address.trim(), native_place || null,
+      has_children ? 1 : 0, childrenJson, family_photo_url || null,
+      contribution_areas || null, royal_idea || null, jsg_should_be_known_for || null,
+      now, now
+    );
+
+    const created = db.prepare('SELECT * FROM family_registrations WHERE reg_id = ?').get(regId) as any;
+    let parsedCreatedChildren = [];
+    try {
+      parsedCreatedChildren = created.children_json ? JSON.parse(created.children_json) : [];
+    } catch (e) {}
+
+    res.json({
+      success: true,
+      regId,
+      message: 'Family dossier registered successfully!',
+      registration: {
+        ...created,
+        children: parsedCreatedChildren
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to submit family registration.' });
+  }
+});
+
+// 3. Upload family photo
+apiRouter.post('/family/upload-photo', handlePhotoUploadMiddleware, (req: any, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Please choose an image file to upload.' });
+    }
+
+    const validation = validateImageMagicBytes(req.file.buffer);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error || 'Invalid image file format.' });
+    }
+
+    const ext = validation.ext || 'jpg';
+    const filename = `family_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+    const targetDir = path.resolve(photosBaseDir, 'family');
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    const filePath = path.resolve(targetDir, filename);
+    fs.writeFileSync(filePath, req.file.buffer);
+
+    // Also create data URL for instant resilient preview
+    const base64Data = req.file.buffer.toString('base64');
+    const dataUrl = `data:${validation.detectedMime || 'image/jpeg'};base64,${base64Data}`;
+
+    res.json({
+      success: true,
+      filename,
+      url: dataUrl
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to upload photo.' });
+  }
+});
+
+// 4. Admin API to view all fresh family registrations
+apiRouter.get('/admin/family-registrations', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const rows = db.prepare('SELECT * FROM family_registrations ORDER BY id DESC').all() as any[];
+    const formatted = rows.map((r) => {
+      let children = [];
+      try {
+        children = r.children_json ? JSON.parse(r.children_json) : [];
+      } catch (e) {}
+      return {
+        ...r,
+        children
+      };
+    });
+    res.json({ success: true, count: formatted.length, registrations: formatted });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve family registrations.' });
+  }
+});
+
+

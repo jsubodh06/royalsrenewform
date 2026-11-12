@@ -81,20 +81,13 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onBegin, onOpenAdm
 
       {/* Footer info */}
       <footer className="text-center text-xs text-[#A8A29E] pt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-        <span>JSG Royals • 2027 Executive Committee</span>
+        <span>JSG Royals • Official Family Registry</span>
         <span className="hidden sm:inline">•</span>
         <button
           onClick={() => setShowPolicy(true)}
           className="text-[#78716C] hover:text-[#1C1917] underline decoration-[#D4AF37]/50 cursor-pointer"
         >
-          Privacy & Security Policy
-        </button>
-        <span className="hidden sm:inline">•</span>
-        <button
-          onClick={onOpenAdmin}
-          className="text-[#78716C] hover:text-[#1C1917] underline decoration-[#D4AF37]/50 cursor-pointer"
-        >
-          Committee Administration
+          Privacy &amp; Security Policy
         </button>
       </footer>
 

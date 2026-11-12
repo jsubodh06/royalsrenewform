@@ -55,6 +55,9 @@ export async function requestOtpApi(mobile: string) {
     coupleId: string;
     mobile: string;
     registeredName: string;
+    smsDispatched?: boolean;
+    fast2smsCalled?: boolean;
+    fast2smsStatusCode?: number;
     message: string;
   }>('/auth/request-otp', {
     method: 'POST',
@@ -82,6 +85,18 @@ export async function verifyFirebaseSessionApi(mobile: string) {
   });
 }
 
+export async function verifySecretApi(mobile: string, dateInput: string) {
+  return apiRequest<{
+    success: boolean;
+    token: string;
+    member: MemberSession;
+    message: string;
+  }>('/auth/verify-secret', {
+    method: 'POST',
+    body: JSON.stringify({ mobile, dateInput }),
+  });
+}
+
 export async function adminLoginApi(email: string, pin: string) {
   return apiRequest<{
     token: string;
@@ -89,6 +104,66 @@ export async function adminLoginApi(email: string, pin: string) {
   }>('/auth/admin-login', {
     method: 'POST',
     body: JSON.stringify({ email, password: pin }),
+  });
+}
+
+export async function getAdminSmsConfigApi(token: string) {
+  return apiRequest<{
+    configured: boolean;
+    gateway: string;
+    maskedKey: string | null;
+    wallet: string | null;
+    walletError: string | null;
+  }>('/admin/sms-config', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+export async function updateAdminSmsConfigApi(token: string, apiKey: string) {
+  return apiRequest<{
+    success: boolean;
+    message: string;
+    walletCheck?: any;
+  }>('/admin/sms-config', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ apiKey })
+  });
+}
+
+export async function testFast2SmsApi(token: string, mobile?: string) {
+  return apiRequest<{
+    success: boolean;
+    maskedKey: string;
+    testMobile: string;
+    walletResult: any;
+    otpRouteResult: any;
+    quickRouteResult: any;
+    statusSummary: string;
+    timestamp: string;
+  }>('/admin/test-fast2sms', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ mobile }),
+  });
+}
+
+export async function getRecentOtpsApi(token: string) {
+  return apiRequest<{
+    success: boolean;
+    records: Array<{
+      id: number;
+      mobile: string;
+      couple_id: string;
+      created_at: number;
+      expires_at: number;
+      attempts: number;
+      verified: number;
+      husband_name: string;
+      wife_name: string;
+    }>;
+  }>('/admin/recent-otps', {
+    headers: { Authorization: `Bearer ${token}` },
   });
 }
 
@@ -404,3 +479,129 @@ export async function importMembersApi(
     body: JSON.stringify(payload),
   });
 }
+
+// Fresh Email-Based Family Registration APIs & 6-Digit Email OTP
+export async function requestFamilyEmailOtpApi(email: string, role: 'husband' | 'wife') {
+  return apiRequest<{
+    success: boolean;
+    email: string;
+    role: 'husband' | 'wife';
+    expiresInSeconds: number;
+    cooldownSeconds: number;
+    emailSentReal: boolean;
+    isAlreadyRegistered: boolean;
+    spouseName?: string;
+    spouseRole?: 'husband' | 'wife';
+    filedBySpouse?: boolean;
+    devOtp?: string;
+    deliveryWarning?: string;
+    providerUsed?: string;
+    message: string;
+  }>('/family/request-email-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email, role }),
+  });
+}
+
+export async function verifyFamilyEmailOtpApi(email: string, otp: string) {
+  return apiRequest<{
+    verified: boolean;
+    email: string;
+    role: 'husband' | 'wife';
+    alreadyRegistered: boolean;
+    filedBySpouse?: boolean;
+    spouseName?: string;
+    spouseRole?: 'husband' | 'wife';
+    message: string;
+    registration?: any;
+  }>('/family/verify-email-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp }),
+  });
+}
+
+export async function getEmailConfigApi() {
+  return apiRequest<{
+    isConfigured: boolean;
+    activeProvider: 'resend' | 'brevo' | 'gmail' | 'smtp' | 'demo';
+    senderEmail: string;
+    mode: 'live' | 'demo';
+  }>('/family/email-config');
+}
+
+export async function saveEmailConfigApi(config: any) {
+  return apiRequest<{
+    success: boolean;
+    isConfigured: boolean;
+    activeProvider: string;
+    senderEmail: string;
+    mode: string;
+  }>('/family/email-config', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  });
+}
+
+export async function checkFamilyEmailApi(email: string, role: 'husband' | 'wife') {
+  return apiRequest<{
+    exists: boolean;
+    filedBySpouse?: boolean;
+    spouseName?: string;
+    spouseRole?: 'husband' | 'wife';
+    submitterRole?: string;
+    submitterEmail?: string;
+    submittedAt?: string;
+    message?: string;
+    registration?: any;
+  }>('/family/check-email', {
+    method: 'POST',
+    body: JSON.stringify({ email, role }),
+  });
+}
+
+export async function registerFamilyApi(data: any) {
+  return apiRequest<{
+    success: boolean;
+    regId: string;
+    message: string;
+    registration: any;
+    alreadyRegistered?: boolean;
+    filedBySpouse?: boolean;
+    spouseName?: string;
+    spouseRole?: string;
+  }>('/family/register', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function uploadFamilyPhotoApi(file: File) {
+  const formData = new FormData();
+  formData.append('photo', file);
+
+  const response = await fetch('/api/family/upload-photo', {
+    method: 'POST',
+    body: formData,
+  });
+
+  const resData = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(resData.error || `Upload failed with status ${response.status}`);
+  }
+  return resData as {
+    success: boolean;
+    filename: string;
+    url: string;
+  };
+}
+
+export async function getAdminFamilyRegistrationsApi(adminToken: string) {
+  return apiRequest<{
+    success: boolean;
+    count: number;
+    registrations: any[];
+  }>('/admin/family-registrations', {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+}
+

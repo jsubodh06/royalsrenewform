@@ -108,11 +108,11 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
           {/* Notice Box */}
           <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE] text-xs text-[#78716C]">
             <p className="font-semibold text-[#1C1917] mb-1">
-              JSG Royals Executive Committee Notice
+              JSG Royals Registry Notice
             </p>
             <p>
-              This portal is maintained exclusively for active JSG Royals member families. For any questions regarding your membership records,
-              please reach out to the Executive Committee administration.
+              This portal is maintained exclusively for verified JSG Royals member families. For any questions regarding your membership records,
+              please reach out through official club channels.
             </p>
           </div>
         </div>

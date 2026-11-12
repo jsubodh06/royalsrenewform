@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Smartphone, KeyRound, ArrowRight, ArrowLeft, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
-import { requestOtpApi, verifyOtpApi, verifyFirebaseSessionApi } from '../lib/api.ts';
+import { requestOtpApi, verifyOtpApi } from '../lib/api.ts';
 import { MemberSession } from '../lib/types.ts';
-import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
-import { auth } from '../lib/firebase.ts';
 
 interface VerificationScreenProps {
   initialMobile?: string;
@@ -24,13 +22,11 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [registeredCoupleId, setRegisteredCoupleId] = useState<string | null>(null);
   const [registeredName, setRegisteredName] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(60);
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-  const [smsSentViaFirebase, setSmsSentViaFirebase] = useState<boolean>(false);
+  const [countdown, setCountdown] = useState(30);
 
   useEffect(() => {
     if (initialMobile) {
-      setMobile(initialMobile);
+      setMobile(initialMobile.replace(/\D/g, '').slice(-10));
     }
   }, [initialMobile]);
 
@@ -42,6 +38,7 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
     return () => clearInterval(timer);
   }, [step, countdown]);
 
+  // Request 6-digit OTP dispatched to mobile
   const handleRequestOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
@@ -55,61 +52,34 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
 
     setLoading(true);
     try {
-      // 1. Verify that mobile is registered with JSG Royals
       const res = await requestOtpApi(clean);
       setRegisteredCoupleId(res.coupleId);
       setRegisteredName(res.registeredName);
 
-      // 2. Dispatch real SMS via Firebase Phone Authentication
-      if (typeof window !== 'undefined' && auth) {
-        try {
-          if ((window as any).recaptchaVerifier) {
-            (window as any).recaptchaVerifier.clear();
-            (window as any).recaptchaVerifier = null;
-          }
-        } catch (e) {}
-
-        const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible',
-          callback: () => {}
-        });
-        (window as any).recaptchaVerifier = recaptchaVerifier;
-
-        const confirmation = await signInWithPhoneNumber(auth, `+91${clean}`, recaptchaVerifier);
-        setConfirmationResult(confirmation);
-        setSmsSentViaFirebase(true);
-        setSuccessMsg(`Official SMS verification code dispatched to +91 ${clean}.`);
-        setStep('otp');
-        setCountdown(60);
-        setOtp('');
-      } else {
-        throw new Error('Firebase Authentication is not available.');
+      if (res.smsDispatched === false) {
+        setError(res.message || 'Fast2SMS could not deliver the OTP SMS.');
+        return;
       }
+
+      setSuccessMsg(res.message || `Official SMS verification code dispatched to +91 ${clean}.`);
+      setStep('otp');
+      setCountdown(30);
+      setOtp('');
     } catch (err: any) {
       console.error('Phone verification request error:', err);
-      const fbCode = err?.code || '';
-      const fbMsg = err?.message || '';
-      let friendlyError = fbMsg || 'Failed to dispatch SMS to your phone.';
+      let friendlyError = err?.message || 'Failed to dispatch OTP to your phone.';
 
-      if (fbCode === 'auth/unauthorized-domain') {
-        friendlyError = `Domain "${typeof window !== 'undefined' ? window.location.hostname : ''}" is not authorized in Firebase. Please add this domain under Firebase Console → Authentication → Settings → Authorized domains.`;
-      } else if (fbCode === 'auth/operation-not-allowed') {
-        friendlyError = 'Phone sign-in is disabled in Firebase. Please enable Phone provider in Firebase Console → Authentication → Sign-in method.';
-      } else if (fbCode === 'auth/captcha-check-failed' || fbCode === 'auth/invalid-app-credential') {
-        friendlyError = 'Security reCAPTCHA verification failed. Please refresh the page and try again.';
-      } else if (fbCode === 'auth/quota-exceeded') {
-        friendlyError = 'Daily SMS quota exceeded on your Firebase project plan.';
-      } else if (err.message && err.message.includes('not registered')) {
-        friendlyError = err.message;
+      if (err.message && err.message.includes('not registered')) {
+        friendlyError = 'Sorry, this mobile number is not registered in the JSG Royals Year-1 directory. Please check the registered mobile number for either husband or wife.';
       }
 
       setError(friendlyError);
-      // Stay on mobile step so user sees why SMS was not sent
     } finally {
       setLoading(false);
     }
   };
 
+  // Verify 6-digit OTP code
   const handleVerifyOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
@@ -122,27 +92,11 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
 
     setLoading(true);
     try {
-      if (confirmationResult) {
-        // Authenticate strictly with Firebase using the code sent to their phone
-        await confirmationResult.confirm(cleanOtp);
-        const res = await verifyFirebaseSessionApi(mobile);
-        localStorage.setItem('jsg_member_token', res.token);
-        onVerified(res.member, res.token);
-        return;
-      }
-
-      // Fallback for internal test runners (e.g. 999000000X)
       const res = await verifyOtpApi(mobile, cleanOtp);
       localStorage.setItem('jsg_member_token', res.token);
       onVerified(res.member, res.token);
     } catch (err: any) {
-      const fbCode = err?.code || '';
-      let msg = err?.message || 'Invalid OTP code.';
-      if (fbCode === 'auth/invalid-verification-code') {
-        msg = 'Incorrect SMS verification code. Please check the SMS received on your phone.';
-      } else if (fbCode === 'auth/code-expired') {
-        msg = 'The SMS verification code has expired. Please request a new code.';
-      }
+      let msg = err?.message || 'Invalid OTP code. Please check the SMS and try again.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -156,43 +110,74 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
         {/* Back Link */}
         <button
           onClick={step === 'otp' ? () => setStep('mobile') : onBack}
-          className="inline-flex items-center gap-1.5 text-xs text-[#78716C] hover:text-[#1C1917] mb-6 font-medium transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs text-[#78716C] hover:text-[#1C1917] mb-6 font-medium transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>{step === 'otp' ? 'Change mobile number' : 'Back to Home'}</span>
         </button>
 
-        {step === 'mobile' ? (
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#F5EFE6] text-[#8C6D2B] flex items-center justify-center border border-[#E2D5BE]">
-                <Smartphone className="w-6 h-6 text-[#8C6D2B]" />
-              </div>
-              <div>
-                <h2 className="font-serif-royal text-xl font-bold text-[#1C1917]">
-                  Verify Identity
-                </h2>
-                <p className="text-xs text-[#78716C]">
-                  Enter your registered mobile number
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-[#57534E] mb-6 bg-[#FAF7F2] p-3 rounded-xl border border-[#EDE3D3] leading-relaxed">
-              Either <strong>Husband’s</strong> or <strong>Wife’s</strong> registered mobile number will securely authenticate your Couple ID.
-            </p>
-
-            {error && (
-              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-12 h-12 rounded-2xl bg-[#F5EFE6] text-[#8C6D2B] flex items-center justify-center border border-[#E2D5BE] shrink-0">
+            {step === 'mobile' ? (
+              <Smartphone className="w-6 h-6 text-[#8C6D2B]" />
+            ) : (
+              <KeyRound className="w-6 h-6 text-[#8C6D2B]" />
             )}
+          </div>
+          <div>
+            <h2 className="font-serif-royal text-xl font-bold text-[#1C1917]">
+              {step === 'mobile' ? 'Member Verification' : 'Enter OTP Code'}
+            </h2>
+            <p className="text-xs text-[#78716C]">
+              {step === 'mobile'
+                ? 'Enter your registered mobile to receive OTP'
+                : `Dispatched to +91 ${mobile}`}
+            </p>
+          </div>
+        </div>
+
+        {/* Success Alert */}
+        {successMsg && (
+          <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
+        {/* Error Alert */}
+        {error && (
+          <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-700" />
+            <div className="flex-1 leading-relaxed">
+              <span className="font-semibold block mb-0.5">SMS Notification:</span>
+              <span>{error}</span>
+              {(error.toLowerCase().includes('website verification') || error.toLowerCase().includes('kyc') || error.toLowerCase().includes('otp message')) && (
+                <div className="mt-2.5 pt-2 border-t border-amber-200 text-[11px] text-amber-800 space-y-1">
+                  <p className="font-semibold">How to complete Fast2SMS 1-time verification:</p>
+                  <ol className="list-decimal list-inside space-y-0.5 pl-1">
+                    <li>Log in to <a href="https://www.fast2sms.com" target="_blank" rel="noreferrer" className="underline font-bold">fast2sms.com</a></li>
+                    <li>Go to <strong>Dev API &gt; OTP Message &gt; Website Verification</strong> (or KYC)</li>
+                    <li>Enter domain: <code className="bg-amber-100 px-1 rounded font-mono font-bold">royalsrenewform.vercel.app</code></li>
+                    <li>Ensure wallet has ₹100+ minimum balance</li>
+                  </ol>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* STEP 1: MOBILE NUMBER INPUT */}
+        {step === 'mobile' && (
+          <div>
+            <p className="text-xs text-[#57534E] mb-5 bg-[#FAF7F2] p-3.5 rounded-xl border border-[#EDE3D3] leading-relaxed">
+              Either <strong>Husband’s</strong> or <strong>Wife’s</strong> registered mobile number will securely identify your Couple ID.
+            </p>
 
             <form onSubmit={handleRequestOtp} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-2">
-                  Registered Mobile Number
+                  Registered Indian Mobile Number
                 </label>
                 <div className="relative flex rounded-xl border border-[#D9CDB8] overflow-hidden focus-within:ring-2 focus-within:ring-[#C5A869] focus-within:border-[#C5A869]">
                   <span className="inline-flex items-center px-3.5 bg-[#FAF7F2] text-[#78716C] text-sm font-medium border-r border-[#D9CDB8]">
@@ -214,38 +199,27 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
               <button
                 type="submit"
                 disabled={loading || mobile.length < 10}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-sm shadow-sm transition-all flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-4 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-sm shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {loading ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin text-[#D4AF37]" />
-                    <span>Sending Verification Code...</span>
+                    <span>Dispatching OTP Code...</span>
                   </>
                 ) : (
                   <>
-                    <span>Send Verification Code</span>
+                    <span>Send Verification OTP</span>
                     <ArrowRight className="w-4 h-4 text-[#D4AF37]" />
                   </>
                 )}
               </button>
             </form>
           </div>
-        ) : (
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#F5EFE6] text-[#8C6D2B] flex items-center justify-center border border-[#E2D5BE]">
-                <KeyRound className="w-6 h-6 text-[#8C6D2B]" />
-              </div>
-              <div>
-                <h2 className="font-serif-royal text-xl font-bold text-[#1C1917]">
-                  Enter OTP
-                </h2>
-                <p className="text-xs text-[#78716C]">
-                  Sent to +91 {mobile}
-                </p>
-              </div>
-            </div>
+        )}
 
+        {/* STEP 2: OTP VERIFICATION */}
+        {step === 'otp' && (
+          <div>
             {registeredCoupleId && (
               <div className="mb-4 bg-[#F8F5EE] border border-[#DFCFAE] rounded-xl p-3 flex items-center justify-between">
                 <div>
@@ -262,23 +236,15 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
               </div>
             )}
 
-            {/* Real SMS Verification Notice */}
             <div className="mb-4 p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE] text-xs text-[#57534E]">
-              <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex items-center gap-2 mb-1">
                 <ShieldCheck className="w-4 h-4 text-[#8C6D2B]" />
-                <span className="font-semibold text-[#1C1917]">SMS Verification Dispatched</span>
+                <span className="font-semibold text-[#1C1917]">OTP Verification Code</span>
               </div>
               <p className="text-[12px] text-[#78716C] leading-relaxed">
-                A 6-digit verification code has been dispatched via SMS to your registered mobile <strong className="text-[#1C1917]">+91 {mobile}</strong>. Enter it below to access your account.
+                Enter the 6-digit code received on your registered phone <strong className="text-[#1C1917]">+91 {mobile}</strong> to access your Year-2 renewal form.
               </p>
             </div>
-
-            {error && (
-              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
 
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
@@ -299,13 +265,13 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
 
               <button
                 type="submit"
-                disabled={loading || otp.length < 4}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-sm shadow-sm transition-all flex items-center justify-center gap-2"
+                disabled={loading || otp.length < 6}
+                className="w-full py-3.5 px-4 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-sm shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {loading ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin text-[#D4AF37]" />
-                    <span>Verifying Session...</span>
+                    <span>Verifying Code...</span>
                   </>
                 ) : (
                   <>
@@ -324,7 +290,7 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => handleRequestOtp()}
-                    className="text-xs font-semibold text-[#8C6D2B] hover:underline"
+                    className="text-xs font-semibold text-[#8C6D2B] hover:underline cursor-pointer"
                   >
                     Resend OTP Code
                   </button>
@@ -333,9 +299,6 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
             </form>
           </div>
         )}
-
-        {/* Invisible Firebase reCAPTCHA anchor */}
-        <div id="recaptcha-container"></div>
       </div>
     </div>
   );

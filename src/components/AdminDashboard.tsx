@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Shield,
+  Crown,
   Search,
   Users,
   CheckCircle2,
@@ -28,7 +29,10 @@ import {
   XCircle,
   Camera,
   Heart,
-  Briefcase
+  Briefcase,
+  Terminal,
+  Zap,
+  Send
 } from 'lucide-react';
 import {
   getAdminOverviewApi,
@@ -41,7 +45,12 @@ import {
   addAdminNoteApi,
   getAdminAuditLogsApi,
   getMembersImportStatusApi,
-  importMembersApi
+  importMembersApi,
+  getAdminSmsConfigApi,
+  updateAdminSmsConfigApi,
+  testFast2SmsApi,
+  getRecentOtpsApi,
+  getAdminFamilyRegistrationsApi
 } from '../lib/api.ts';
 import {
   AdminSession,
@@ -73,8 +82,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Active Tab: 'members' | 'corrections' | 'audit' | 'export' | 'import'
-  const [activeTab, setActiveTab] = useState<'members' | 'corrections' | 'audit' | 'export' | 'import'>('members');
+  // Active Tab: 'members' | 'family' | 'corrections' | 'sms' | 'audit' | 'export' | 'import'
+  const [activeTab, setActiveTab] = useState<'members' | 'family' | 'corrections' | 'sms' | 'audit' | 'export' | 'import'>('members');
+
+  // Fresh Family Registrations State
+  const [familyRegistrations, setFamilyRegistrations] = useState<any[]>([]);
+  const [loadingFamilyRegs, setLoadingFamilyRegs] = useState(false);
+
+  const loadFamilyRegistrations = async () => {
+    if (!adminToken) return;
+    setLoadingFamilyRegs(true);
+    try {
+      const data = await getAdminFamilyRegistrationsApi(adminToken);
+      if (data?.registrations) {
+        setFamilyRegistrations(data.registrations);
+      }
+    } catch (err) {
+      console.error('Failed to load family registrations', err);
+    } finally {
+      setLoadingFamilyRegs(false);
+    }
+  };
 
   // Step 9 Master Data Import State
   const [importStatus, setImportStatus] = useState<any>(null);
@@ -121,6 +149,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [exportFilter, setExportFilter] = useState('all');
   const [exporting, setExporting] = useState(false);
   const [exportSummary, setExportSummary] = useState<string | null>(null);
+
+  // SMS Gateway (Fast2SMS) Tab State
+  const [smsConfig, setSmsConfig] = useState<{
+    configured: boolean;
+    gateway: string;
+    maskedKey: string | null;
+    wallet: string | null;
+    walletError: string | null;
+  } | null>(null);
+  const [loadingSmsConfig, setLoadingSmsConfig] = useState(false);
+  const [newSmsApiKey, setNewSmsApiKey] = useState('');
+  const [savingSmsKey, setSavingSmsKey] = useState(false);
+  const [smsKeySuccess, setSmsKeySuccess] = useState<string | null>(null);
+  const [smsKeyError, setSmsKeyError] = useState<string | null>(null);
+
+  const loadSmsConfig = async () => {
+    if (!adminToken) return;
+    setLoadingSmsConfig(true);
+    setSmsKeyError(null);
+    try {
+      const data = await getAdminSmsConfigApi(adminToken);
+      setSmsConfig(data);
+    } catch (err: any) {
+      setSmsKeyError(err?.message || 'Failed to load SMS Gateway configuration.');
+    } finally {
+      setLoadingSmsConfig(false);
+    }
+  };
+
+  const handleSaveSmsKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminToken || !newSmsApiKey.trim()) return;
+    setSavingSmsKey(true);
+    setSmsKeySuccess(null);
+    setSmsKeyError(null);
+    try {
+      const res = await updateAdminSmsConfigApi(adminToken, newSmsApiKey.trim());
+      setSmsKeySuccess(res.message || 'Fast2SMS API Key updated successfully!');
+      setNewSmsApiKey('');
+      await loadSmsConfig();
+    } catch (err: any) {
+      setSmsKeyError(err?.message || 'Failed to save Fast2SMS API Key.');
+    } finally {
+      setSavingSmsKey(false);
+    }
+  };
+
+  // Live Fast2SMS Diagnostic Test State
+  const [testMobile, setTestMobile] = useState('9977933333');
+  const [testingFast2Sms, setTestingFast2Sms] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    maskedKey: string;
+    testMobile: string;
+    walletResult: any;
+    otpRouteResult: any;
+    quickRouteResult: any;
+    statusSummary: string;
+    timestamp: string;
+  } | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  // Recent OTPs State
+  const [recentOtps, setRecentOtps] = useState<Array<{
+    id: number;
+    mobile: string;
+    couple_id: string;
+    created_at: number | string;
+    expires_at: number | string;
+    attempts: number;
+    verified: number;
+    husband_name?: string;
+    wife_name?: string;
+  }>>([]);
+  const [loadingRecentOtps, setLoadingRecentOtps] = useState(false);
+
+  const loadRecentOtps = async () => {
+    if (!adminToken) return;
+    setLoadingRecentOtps(true);
+    try {
+      const data = await getRecentOtpsApi(adminToken);
+      if (data?.records) {
+        setRecentOtps(data.records);
+      }
+    } catch (err) {
+      console.error('Failed to load recent OTP records', err);
+    } finally {
+      setLoadingRecentOtps(false);
+    }
+  };
+
+  const handleRunFast2SmsTest = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!adminToken) return;
+    setTestingFast2Sms(true);
+    setTestError(null);
+    try {
+      const result = await testFast2SmsApi(adminToken, testMobile);
+      setTestResult(result);
+      await loadSmsConfig();
+      await loadRecentOtps();
+    } catch (err: any) {
+      setTestError(err?.message || 'Fast2SMS test failed.');
+    } finally {
+      setTestingFast2Sms(false);
+    }
+  };
 
   // Selected Member Details Dossier Modal
   const [selectedCoupleId, setSelectedCoupleId] = useState<string | null>(null);
@@ -263,6 +398,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     if (adminToken && activeTab === 'import') {
       loadImportStatus();
+    }
+    if (adminToken && activeTab === 'sms') {
+      loadSmsConfig();
+      loadRecentOtps();
+    }
+    if (adminToken && activeTab === 'family') {
+      loadFamilyRegistrations();
     }
   }, [adminToken, activeTab, auditPagination.page]);
 
@@ -646,6 +788,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </button>
 
         <button
+          onClick={() => {
+            setActiveTab('family');
+            loadFamilyRegistrations();
+          }}
+          className={`pb-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'family'
+              ? 'border-[#1C1917] text-[#1C1917]'
+              : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+          }`}
+        >
+          <Crown className="w-4 h-4 text-[#D4AF37]" />
+          <span>Fresh Family Dossiers ({familyRegistrations.length})</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('corrections')}
           className={`pb-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === 'corrections'
@@ -692,7 +849,164 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <Users className="w-4 h-4 text-amber-700" />
           <span>Import Master Data (Step 9)</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('sms')}
+          className={`pb-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'sms'
+              ? 'border-[#1C1917] text-[#1C1917]'
+              : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+          }`}
+        >
+          <Phone className="w-4 h-4 text-[#8C6D2B]" />
+          <span>SMS Gateway (Fast2SMS)</span>
+          {smsConfig?.configured && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          )}
+        </button>
       </div>
+
+      {/* TAB: FRESH FAMILY REGISTRATIONS (EMAIL-BASED) */}
+      {activeTab === 'family' && (
+        <div className="bg-[#FFFFFF] border border-[#E7DDCE] rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#F0E8DC]">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#1C1917] text-[#D4AF37] flex items-center justify-center border border-[#C5A869]/40 shadow-xs">
+                <Crown className="w-6 h-6 text-[#D4AF37]" />
+              </div>
+              <div>
+                <h3 className="font-serif-royal font-bold text-lg text-[#1C1917]">
+                  Fresh Family Registrations (Email-Based)
+                </h3>
+                <p className="text-xs text-[#78716C]">
+                  Full household submissions with Husband, Wife, Children &amp; cross-spouse sync
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadFamilyRegistrations}
+              disabled={loadingFamilyRegs}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#F2ECE1] transition-all cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingFamilyRegs ? 'animate-spin' : ''}`} />
+              <span>Refresh Submissions</span>
+            </button>
+          </div>
+
+          {familyRegistrations.length === 0 ? (
+            <div className="p-12 text-center bg-[#FAF7F2] rounded-2xl border border-[#E7DDCE] space-y-2">
+              <Crown className="w-10 h-10 text-[#8C6D2B] mx-auto opacity-50" />
+              <div className="font-serif-royal font-bold text-base text-[#1C1917]">
+                No Fresh Family Registrations Yet
+              </div>
+              <p className="text-xs text-[#78716C] max-w-md mx-auto">
+                Members can now register their complete royal household directly from the new home screen.
+                All submissions will instantly appear here with full husband, wife, and children details.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                  <span className="text-[10px] uppercase font-bold text-[#78716C] block">Total Families</span>
+                  <span className="text-xl font-serif-royal font-bold text-[#1C1917]">{familyRegistrations.length}</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                  <span className="text-[10px] uppercase font-bold text-[#78716C] block">By Husbands</span>
+                  <span className="text-xl font-serif-royal font-bold text-[#8C6D2B]">
+                    {familyRegistrations.filter((r) => r.submitted_by_role === 'husband').length}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                  <span className="text-[10px] uppercase font-bold text-[#78716C] block">By Wives</span>
+                  <span className="text-xl font-serif-royal font-bold text-[#8C6D2B]">
+                    {familyRegistrations.filter((r) => r.submitted_by_role === 'wife').length}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                  <span className="text-[10px] uppercase font-bold text-[#78716C] block">Total Children</span>
+                  <span className="text-xl font-serif-royal font-bold text-emerald-800">
+                    {familyRegistrations.reduce((acc, r) => acc + (r.children ? r.children.length : 0), 0)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Registrations Table */}
+              <div className="overflow-x-auto rounded-2xl border border-[#E7DDCE]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#F5EFE6] text-[#44403C] uppercase text-[10px] font-semibold border-b border-[#E7DDCE]">
+                    <tr>
+                      <th className="px-4 py-3">Reg ID</th>
+                      <th className="px-4 py-3">Submitter</th>
+                      <th className="px-4 py-3">Husband Details</th>
+                      <th className="px-4 py-3">Wife Details</th>
+                      <th className="px-4 py-3">Anniversary & City</th>
+                      <th className="px-4 py-3">Children</th>
+                      <th className="px-4 py-3">Submitted At</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0E8DC] bg-white">
+                    {familyRegistrations.map((reg) => (
+                      <tr key={reg.id} className="hover:bg-[#FAF7F2] transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-[#8C6D2B] whitespace-nowrap">
+                          {reg.reg_id}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            reg.submitted_by_role === 'husband' ? 'bg-blue-100 text-blue-900' : 'bg-rose-100 text-rose-900'
+                          }`}>
+                            {reg.submitted_by_role}
+                          </span>
+                          <div className="text-[11px] text-[#78716C] mt-0.5 truncate max-w-[120px]" title={reg.submitter_email}>
+                            {reg.submitter_email}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-[#1C1917]">{reg.husband_name}</div>
+                          <div className="text-[11px] text-[#78716C]">{reg.husband_mobile}</div>
+                          <div className="text-[11px] text-[#78716C] truncate max-w-[140px]">{reg.husband_email}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-[#1C1917]">{reg.wife_name}</div>
+                          <div className="text-[11px] text-[#78716C]">{reg.wife_mobile}</div>
+                          <div className="text-[11px] text-[#78716C] truncate max-w-[140px]">{reg.wife_email}</div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="font-semibold text-[#1C1917]">{reg.marriage_anniversary}</div>
+                          <div className="text-[11px] text-[#78716C]">{reg.current_city}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {reg.children && reg.children.length > 0 ? (
+                            <div className="space-y-0.5">
+                              {reg.children.map((c: any, idx: number) => (
+                                <div key={idx} className="text-[11px] text-[#1C1917]">
+                                  • {c.name} ({c.gender})
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-[#78716C] italic">None</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-[11px] text-[#78716C]">
+                          {new Date(reg.created_at).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* TAB 1: MEMBERS TABLE WITH COMBINABLE FILTERS */}
       {activeTab === 'members' && (
@@ -1548,6 +1862,402 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <li><strong>Shared Couple Mapping:</strong> Both the husband&apos;s and wife&apos;s registered mobiles authenticate to the exact same Couple ID and the same Year-2 dossier.</li>
               <li><strong>RLS &amp; Isolation:</strong> Authenticated sessions can query only their own Couple ID, preventing cross-couple data leakage.</li>
             </ul>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: SMS GATEWAY (FAST2SMS) CONFIGURATION */}
+      {activeTab === 'sms' && (
+        <div className="bg-[#FFFFFF] border border-[#E7DDCE] rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#F0E8DC]">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#F5EFE6] text-[#8C6D2B] flex items-center justify-center border border-[#E2D5BE] shrink-0">
+                <Phone className="w-6 h-6 text-[#8C6D2B]" />
+              </div>
+              <div>
+                <h3 className="font-serif-royal font-bold text-lg text-[#1C1917]">
+                  Fast2SMS Gateway Integration
+                </h3>
+                <p className="text-xs text-[#78716C]">
+                  Direct Indian carrier SMS delivery for member OTP verification
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadSmsConfig}
+              disabled={loadingSmsConfig}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#F2ECE1] transition-all cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingSmsConfig ? 'animate-spin' : ''}`} />
+              <span>Refresh Status</span>
+            </button>
+          </div>
+
+          {/* Status Overview Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE]">
+              <span className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider block mb-1">
+                Gateway Status
+              </span>
+              <div className="flex items-center gap-2">
+                {smsConfig?.configured ? (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span className="text-sm font-bold text-emerald-800">Active & Configured</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    <span className="text-sm font-bold text-amber-800">Awaiting API Key</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE]">
+              <span className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider block mb-1">
+                Fast2SMS Route
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-[#1C1917]">bulkV2 OTP (Transactional)</span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE]">
+              <span className="text-[11px] font-semibold text-[#78716C] uppercase tracking-wider block mb-1">
+                Wallet Balance
+              </span>
+              <div className="flex items-center gap-2">
+                {smsConfig?.wallet ? (
+                  <span className="text-base font-bold text-emerald-800 font-mono">
+                    ₹{smsConfig.wallet}
+                  </span>
+                ) : (
+                  <span className="text-xs text-[#78716C]">
+                    {smsConfig?.configured ? 'Checking...' : 'Enter key to view'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Active Key Display */}
+          {smsConfig?.maskedKey && (
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
+              <div>
+                <span className="font-bold block">Current Active Authorization Key:</span>
+                <span className="font-mono text-xs">{smsConfig.maskedKey}</span>
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] uppercase">
+                Ready for SMS
+              </span>
+            </div>
+          )}
+
+          {/* Update Key Form */}
+          <div className="bg-[#FAF7F2] border border-[#E7DDCE] rounded-2xl p-5 space-y-4">
+            <h4 className="font-serif-royal font-bold text-sm text-[#1C1917]">
+              Configure Fast2SMS Authorization Key
+            </h4>
+            <p className="text-xs text-[#57534E] leading-relaxed">
+              To obtain your Fast2SMS API Key:
+              <br />
+              1. Log in to your <a href="https://www.fast2sms.com" target="_blank" rel="noreferrer" className="underline font-semibold text-[#8C6D2B]">Fast2SMS Dashboard</a>.
+              <br />
+              2. Click <strong>Dev API</strong> from the left sidebar (or visit <code className="bg-[#EFE6D5] px-1 rounded">https://www.fast2sms.com/dashboard/dev-api</code>).
+              <br />
+              3. Copy your <strong>Authorization Key</strong> and paste it below.
+            </p>
+
+            {smsKeySuccess && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{smsKeySuccess}</span>
+              </div>
+            )}
+
+            {smsKeyError && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{smsKeyError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveSmsKey} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1.5">
+                  Fast2SMS Authorization / API Key
+                </label>
+                <input
+                  type="text"
+                  placeholder="Paste your Fast2SMS API Key here..."
+                  value={newSmsApiKey}
+                  onChange={(e) => setNewSmsApiKey(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-mono text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingSmsKey || !newSmsApiKey.trim()}
+                className="py-2.5 px-5 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-xs transition-all flex items-center gap-2 cursor-pointer"
+              >
+                {savingSmsKey ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#D4AF37]" />
+                    <span>Validating Key...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    <span>Save & Test Fast2SMS Connection</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+
+          {/* Live Diagnostic Test with Current Credentials */}
+          <div className="bg-[#FAF7F2] border border-[#E7DDCE] rounded-2xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#1C1917] text-[#D4AF37] flex items-center justify-center">
+                  <Terminal className="w-4 h-4 text-[#D4AF37]" />
+                </div>
+                <div>
+                  <h4 className="font-serif-royal font-bold text-sm text-[#1C1917]">
+                    Live Fast2SMS API Diagnostic Tester
+                  </h4>
+                  <p className="text-[11px] text-[#78716C]">
+                    Test live carrier routes directly against Fast2SMS servers with your current credentials
+                  </p>
+                </div>
+              </div>
+              <span className="self-start sm:self-auto px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold text-[10px] uppercase tracking-wider">
+                Direct API Test
+              </span>
+            </div>
+
+            <form onSubmit={handleRunFast2SmsTest} className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
+              <div className="flex-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1.5">
+                  Test Destination Mobile Number
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-[#78716C]">
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={testMobile}
+                    onChange={(e) => setTestMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="10-digit mobile number"
+                    className="w-full pl-12 pr-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-mono text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={testingFast2Sms || !smsConfig?.configured || testMobile.length !== 10}
+                className="py-2.5 px-5 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+              >
+                {testingFast2Sms ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#D4AF37]" />
+                    <span>Calling Fast2SMS API...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    <span>Execute Fast2SMS Test API</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            {testError && (
+              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{testError}</span>
+              </div>
+            )}
+
+            {testResult && (
+              <div className="p-4 rounded-xl bg-white border border-[#E7DDCE] space-y-4 shadow-2xs">
+                <div className="flex items-center justify-between pb-3 border-b border-[#F0E8DC]">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-xs text-[#1C1917]">
+                      Fast2SMS Live Diagnostic Report ({testResult.testMobile})
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#78716C]">
+                    Tested at: {new Date(testResult.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+
+                {/* Account & Wallet Check */}
+                <div className="p-3 rounded-lg bg-[#FAF7F2] border border-[#E7DDCE] text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-[#1C1917]">Fast2SMS Account Authentication:</span>
+                    {testResult.walletResult?.return ? (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                        AUTHENTICATED • BALANCE: ₹{testResult.walletResult.wallet}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-md bg-red-100 text-red-800 text-[10px] font-bold">
+                        FAILED
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#78716C]">
+                    API Key: <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-[#E2D5BE]">{testResult.maskedKey}</code> • SMS Credits in wallet: <strong>{testResult.walletResult?.sms_count ?? 200}</strong>
+                  </p>
+                </div>
+
+                {/* Route 1: OTP Route */}
+                <div className="p-3 rounded-lg bg-[#FAF7F2] border border-[#E7DDCE] text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-[#1C1917]">Route 1: Dedicated OTP Route (route: &apos;otp&apos;)</span>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                      testResult.otpRouteResult?.return ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
+                    }`}>
+                      {testResult.otpRouteResult?.return ? 'READY' : `STATUS CODE ${testResult.otpRouteResult?.status_code || 996}`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#44403C]">
+                    {testResult.otpRouteResult?.message?.[0] || testResult.otpRouteResult?.message || 'OTP route verification response.'}
+                  </p>
+                  {testResult.otpRouteResult?.status_code === 996 && (
+                    <div className="p-2 rounded bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
+                      <strong>How to activate OTP route:</strong> In your Fast2SMS Dashboard, click <em>Dev API &gt; OTP Message</em> and submit the quick website verification with URL <code>https://ais-pre-t5c2x6fk3je4yhythikayj-923279058412.asia-southeast1.run.app</code>.
+                    </div>
+                  )}
+                </div>
+
+                {/* Route 2: Quick Route Fallback */}
+                <div className="p-3 rounded-lg bg-[#FAF7F2] border border-[#E7DDCE] text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-[#1C1917]">Route 2: Quick SMS Route (route: &apos;q&apos; fallback)</span>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                      testResult.quickRouteResult?.return ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-900'
+                    }`}>
+                      {testResult.quickRouteResult?.return ? 'DISPATCHED' : `STATUS CODE ${testResult.quickRouteResult?.status_code || 999}`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#44403C]">
+                    {testResult.quickRouteResult?.message?.[0] || testResult.quickRouteResult?.message || 'Quick route verification response.'}
+                  </p>
+                  {testResult.quickRouteResult?.status_code === 999 && (
+                    <div className="p-2 rounded bg-orange-50 border border-orange-200 text-[11px] text-orange-950">
+                      <strong>Fast2SMS Carrier Policy Requirement:</strong> Fast2SMS provides ₹50 promotional credit, but programmatically requires one minimum transaction of ₹100 INR on <a href="https://www.fast2sms.com" target="_blank" rel="noreferrer" className="underline font-semibold text-[#8C6D2B]">fast2sms.com</a> before releasing live SMS to cellular towers. Once ₹100 is recharged, live delivery activates immediately.
+                    </div>
+                  )}
+                </div>
+
+                {/* Technical Raw Payload Accordion */}
+                <details className="text-[11px] text-[#78716C] border border-[#E7DDCE] rounded-lg p-2 bg-[#FAF7F2]">
+                  <summary className="font-semibold cursor-pointer select-none">
+                    View Raw Server Responses from Fast2SMS
+                  </summary>
+                  <pre className="mt-2 p-2 bg-[#1C1917] text-[#FAF7F2] font-mono text-[10px] rounded overflow-x-auto">
+                    {JSON.stringify({
+                      wallet: testResult.walletResult,
+                      otpRoute: testResult.otpRouteResult,
+                      quickRoute: testResult.quickRouteResult
+                    }, null, 2)}
+                  </pre>
+                </details>
+              </div>
+            )}
+          </div>
+
+          {/* Recent OTP Activity Monitor */}
+          <div className="bg-[#FAF7F2] border border-[#E7DDCE] rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-[#8C6D2B]" />
+                <h4 className="font-serif-royal font-bold text-sm text-[#1C1917]">
+                  Recent OTP Verification Activity
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={loadRecentOtps}
+                disabled={loadingRecentOtps}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-[#D9CDB8] text-[11px] font-semibold text-[#1C1917] hover:bg-[#FAF7F2] transition-all cursor-pointer"
+              >
+                <RefreshCw className={`w-3 h-3 ${loadingRecentOtps ? 'animate-spin' : ''}`} />
+                <span>Refresh Log</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-[#78716C]">
+              Real-time audit log of OTP codes issued to members trying to log in.
+            </p>
+
+            {recentOtps.length === 0 ? (
+              <div className="p-4 text-center text-xs text-[#78716C] bg-white rounded-xl border border-[#E7DDCE]">
+                No recent OTP activity recorded yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-[#E7DDCE] bg-white">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#F5EFE6] text-[#44403C] uppercase text-[10px] font-semibold border-b border-[#E7DDCE]">
+                    <tr>
+                      <th className="px-3 py-2.5">Time</th>
+                      <th className="px-3 py-2.5">Mobile</th>
+                      <th className="px-3 py-2.5">Couple ID / Name</th>
+                      <th className="px-3 py-2.5">Attempts</th>
+                      <th className="px-3 py-2.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0E8DC]">
+                    {recentOtps.map((record) => {
+                      const isExpired = new Date(record.expires_at).getTime() < Date.now();
+                      const coupleLabel = record.husband_name && record.wife_name
+                        ? `${record.couple_id}: ${record.husband_name} & ${record.wife_name}`
+                        : record.couple_id;
+                      return (
+                        <tr key={record.id} className="hover:bg-[#FAF7F2]">
+                          <td className="px-3 py-2 text-[#78716C] whitespace-nowrap">
+                            {new Date(record.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </td>
+                          <td className="px-3 py-2 font-mono font-medium text-[#1C1917] whitespace-nowrap">
+                            {record.mobile}
+                          </td>
+                          <td className="px-3 py-2 text-[#44403C] truncate max-w-[200px]" title={coupleLabel}>
+                            {coupleLabel}
+                          </td>
+                          <td className="px-3 py-2 text-center text-[#78716C]">
+                            {record.attempts}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {record.verified ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                <Check className="w-3 h-3" /> Verified
+                              </span>
+                            ) : isExpired ? (
+                              <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[10px] font-medium">
+                                Expired
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold">
+                                <Clock className="w-3 h-3" /> Awaiting Input
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

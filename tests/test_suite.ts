@@ -29,7 +29,7 @@ async function runTests() {
 
   // Test Case 1: Wrong mobile
   try {
-    requestOtp('9999999999');
+    await requestOtp('9999999999');
     assert(false, 'Test 1: Wrong mobile should throw error');
   } catch (e: any) {
     assert(e.message.includes('not registered'), 'Test 1: Wrong mobile rejected properly');
@@ -37,7 +37,7 @@ async function runTests() {
 
   // Test Case 2: Correct registered mobile
   try {
-    const otpRes = requestOtp('9990000001');
+    const otpRes = await requestOtp('9990000001');
     assert(otpRes.success && otpRes.coupleId === 'JR001', 'Test 2: Correct registered mobile resolves to JR001');
   } catch (e: any) {
     assert(false, `Test 2 failed: ${e.message}`);
