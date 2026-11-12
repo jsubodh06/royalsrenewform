@@ -95,7 +95,6 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const [gateOtp, setGateOtp] = useState('');
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
-  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState<number>(0);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [gateError, setGateError] = useState<string | null>(null);
@@ -235,7 +234,6 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
     try {
       const res = await requestFamilyEmailOtpApi(gateEmail.trim().toLowerCase(), gateRole);
-      setDevOtp(res.devOtp || null);
       setGateOtp('');
       setResendCooldown(res.cooldownSeconds || 30);
       setGateOtpStep('otp');
@@ -648,23 +646,6 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     Change Email Address
                   </button>
                 </div>
-
-                {/* In-app Instant Test Helper Banner (if available) */}
-                {devOtp && (
-                  <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#FFFBEB] to-[#FEF3C7] border border-[#FDE68A] flex items-center justify-between gap-3 shadow-2xs">
-                    <div className="flex items-center gap-2 text-xs text-[#92400E]">
-                      <Sparkles className="w-4 h-4 text-[#D97706] shrink-0" />
-                      <span>Verification Code: <strong className="font-mono text-sm tracking-widest text-[#B45309]">{devOtp}</strong></span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setGateOtp(devOtp)}
-                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-[#D97706] text-white hover:bg-[#B45309] transition-colors cursor-pointer shrink-0"
-                    >
-                      Autofill Code
-                    </button>
-                  </div>
-                )}
 
                 {/* 6-Digit Numeric Input */}
                 <div>
