@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Crown,
   Heart,
@@ -88,22 +88,23 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   // Navigation View: 'gate' | 'spouse_celebration' | 'form' | 'success'
   const [currentView, setCurrentView] = useState<'gate' | 'spouse_celebration' | 'form' | 'success'>('gate');
 
-  // Gate Check & 6-Digit Email OTP State
+  // Gate Check & Email OTP Verification State (Mandatory 2-Step Real Verification)
   const [gateEmail, setGateEmail] = useState('');
   const [gateRole, setGateRole] = useState<'husband' | 'wife'>('husband');
   const [gateOtpStep, setGateOtpStep] = useState<'email' | 'otp'>('email');
   const [gateOtp, setGateOtp] = useState('');
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState<number>(0);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [gateError, setGateError] = useState<string | null>(null);
+  const [gateSuccessMsg, setGateSuccessMsg] = useState<string | null>(null);
 
-  // Resend cooldown timer
-  React.useEffect(() => {
+  // 30-Second Resend Cooldown Countdown
+  useEffect(() => {
     if (resendCooldown <= 0) return;
     const timer = setInterval(() => {
-      setResendCooldown((prev) => Math.max(0, prev - 1));
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(timer);
   }, [resendCooldown]);
@@ -221,8 +222,8 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     return years >= 0 ? years : 0;
   }, [marriageAnniversary]);
 
-  // 1. Handle Requesting 6-Digit Email OTP
-  const handleSendEmailOtp = async (e?: React.FormEvent) => {
+  // 1. Step 1: Request 6-digit Royal Verification Code to Email
+  const handleRequestOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!gateEmail.trim() || !gateEmail.includes('@')) {
       setGateError('Please enter a valid email address.');
@@ -231,25 +232,28 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
     setSendingOtp(true);
     setGateError(null);
+    setGateSuccessMsg(null);
 
     try {
-      const res = await requestFamilyEmailOtpApi(gateEmail.trim().toLowerCase(), gateRole);
+      const email = gateEmail.trim().toLowerCase();
+      const res = await requestFamilyEmailOtpApi(email, gateRole);
+      setGateOtpStep('otp');
       setGateOtp('');
       setResendCooldown(res.cooldownSeconds || 30);
-      setGateOtpStep('otp');
+      setGateSuccessMsg(res.message || `A 6-digit verification code has been dispatched to ${email}.`);
     } catch (err: any) {
-      setGateError(err?.message || 'Failed to dispatch verification code. Please try again.');
+      setGateError(err?.message || 'Failed to dispatch verification code. Please check your email configuration.');
     } finally {
       setSendingOtp(false);
     }
   };
 
-  // 2. Handle Verifying 6-Digit Email OTP
-  const handleVerifyEmailOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanOtp = gateOtp.replace(/\D/g, '').trim();
-    if (!cleanOtp || cleanOtp.length !== 6) {
-      setGateError('Please enter the 6-digit verification code sent to your email.');
+  // 2. Step 2: Verify 6-digit Royal Verification Code & Grant Access
+  const handleVerifyOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanOtp = gateOtp.replace(/\s+/g, '');
+    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+      setGateError('Please enter the complete 6-digit verification code.');
       return;
     }
 
@@ -257,32 +261,52 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     setGateError(null);
 
     try {
-      const res = await verifyFamilyEmailOtpApi(gateEmail.trim().toLowerCase(), cleanOtp);
+      const email = gateEmail.trim().toLowerCase();
+      const res = await verifyFamilyEmailOtpApi(email, cleanOtp);
 
-      if (res.alreadyRegistered && res.registration) {
-        setExistingRecord(res.registration);
-        setSpouseNotificationMessage(res.message);
-        setIsFiledBySpouse(!!res.filedBySpouse);
-        setSpouseName(res.spouseName || (res.spouseRole === 'husband' ? res.registration.husband_name : res.registration.wife_name));
-        setSpouseRole(res.spouseRole || 'husband');
-        setCurrentView('spouse_celebration');
-        triggerConfettiFanfare();
-      } else {
+      if (res.verified) {
         setIsEmailVerified(true);
-        if (gateRole === 'husband') {
-          setHusbandEmail(gateEmail.trim().toLowerCase());
+
+        if (res.alreadyRegistered && res.registration) {
+          // Spouse already completed registration! Show grand proclamation screen
+          setExistingRecord(res.registration);
+          setSpouseNotificationMessage(res.message || 'Your spouse has already registered your family household!');
+          setIsFiledBySpouse(true);
+          setSpouseName(res.spouseName || (gateRole === 'husband' ? res.registration.wife_name : res.registration.husband_name));
+          setSpouseRole(res.spouseRole || (gateRole === 'husband' ? 'wife' : 'husband'));
+          setCurrentView('spouse_celebration');
+          triggerConfettiFanfare();
         } else {
-          setWifeEmail(gateEmail.trim().toLowerCase());
+          // First-time submission for this household: grant verified access to the 6-step form!
+          if (gateRole === 'husband') {
+            setHusbandEmail(email);
+          } else {
+            setWifeEmail(email);
+          }
+          setCurrentView('form');
+          setActiveStep(1);
+          triggerConfettiFanfare();
         }
-        setCurrentView('form');
-        setActiveStep(1);
-        triggerConfettiFanfare();
       }
     } catch (err: any) {
-      setGateError(err?.message || 'Incorrect or expired verification code.');
+      setGateError(err?.message || 'Verification failed. Please check the 6-digit code and try again.');
     } finally {
       setVerifyingOtp(false);
     }
+  };
+
+  // Resend OTP handler (respects 30s cooldown)
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || sendingOtp) return;
+    await handleRequestOtp();
+  };
+
+  // Switch back to email change step
+  const handleBackToEmail = () => {
+    setGateOtpStep('email');
+    setGateOtp('');
+    setGateError(null);
+    setGateSuccessMsg(null);
   };
 
   // Real-time check if the spouse's email is already registered when typing in form
@@ -517,15 +541,30 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
               </p>
             </div>
 
+            {/* Notifications & Error Banners */}
             {gateError && (
-              <div className="mb-6 p-4 rounded-2xl bg-red-50/90 border border-red-200 text-red-900 text-xs flex items-center gap-3">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
-                <span>{gateError}</span>
+              <div className="mb-6 p-4 rounded-2xl bg-red-50/95 border border-red-200 text-red-900 text-xs flex items-start gap-3 shadow-xs animate-in fade-in">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-red-800">Verification Alert</p>
+                  <p className="leading-relaxed">{gateError}</p>
+                </div>
               </div>
             )}
 
-            {gateOtpStep === 'email' ? (
-              <form onSubmit={handleSendEmailOtp} className="space-y-6">
+            {gateSuccessMsg && gateOtpStep === 'otp' && (
+              <div className="mb-6 p-4 rounded-2xl bg-emerald-50/95 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-3 shadow-xs animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-emerald-800">Verification Code Dispatched</p>
+                  <p className="leading-relaxed">{gateSuccessMsg}</p>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 1: ROYAL EMAIL INPUT */}
+            {gateOtpStep === 'email' && (
+              <form onSubmit={handleRequestOtp} className="space-y-6">
                 
                 {/* Role Selection */}
                 <div>
@@ -589,7 +628,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     <input
                       type="email"
                       required
-                      placeholder="e.g. royal.member@example.com"
+                      placeholder="e.g. subodhjain2007777@gmail.com"
                       value={gateEmail}
                       onChange={(e) => setGateEmail(e.target.value)}
                       className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-[#D9CDB8] text-sm text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869] transition-all shadow-xs"
@@ -598,7 +637,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   <p className="text-[11px] text-[#78716C] mt-2 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
                     <span>
-                      We will send a <strong>6-digit numeric verification code</strong> to your inbox to protect your household records.
+                      A 6-digit verification code will be dispatched to this email to verify your royal household identity.
                     </span>
                   </p>
                 </div>
@@ -616,41 +655,39 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     </>
                   ) : (
                     <>
-                      <KeyRound className="w-4 h-4 text-[#D4AF37]" />
+                      <Crown className="w-4 h-4 text-[#D4AF37]" />
                       <span>Send 6-Digit Royal Code</span>
                       <ArrowRight className="w-4 h-4 text-[#D4AF37]" />
                     </>
                   )}
                 </button>
               </form>
-            ) : (
-              <form onSubmit={handleVerifyEmailOtp} className="space-y-6 animate-fade-in-up">
+            )}
+
+            {/* STEP 2: 6-DIGIT EMAIL OTP VERIFICATION */}
+            {gateOtpStep === 'otp' && (
+              <form onSubmit={handleVerifyOtp} className="space-y-6 animate-in fade-in">
                 
-                {/* Header note about destination */}
-                <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE] text-center space-y-1.5">
-                  <div className="text-xs text-[#78716C]">
-                    Verification code dispatched to:
-                  </div>
-                  <div className="font-mono text-sm font-bold text-[#1C1917] break-all">
-                    {gateEmail}
-                  </div>
+                {/* Back & Email Pill */}
+                <div className="flex items-center justify-between pb-2 border-b border-[#F0E8DC]">
                   <button
                     type="button"
-                    onClick={() => {
-                      setGateOtpStep('email');
-                      setGateOtp('');
-                      setGateError(null);
-                    }}
-                    className="text-[11px] font-semibold text-[#8C6D2B] hover:text-[#5B4314] underline cursor-pointer pt-0.5 inline-block"
+                    onClick={handleBackToEmail}
+                    className="text-xs text-[#78716C] hover:text-[#1C1917] flex items-center gap-1 cursor-pointer font-medium"
                   >
-                    Change Email Address
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Change Email</span>
                   </button>
+                  <div className="text-xs bg-[#FAF7F2] border border-[#E7DDCE] text-[#44403C] px-3 py-1 rounded-full font-mono flex items-center gap-1.5">
+                    <Mail className="w-3 h-3 text-[#8C6D2B]" />
+                    <span>{gateEmail}</span>
+                  </div>
                 </div>
 
-                {/* 6-Digit Numeric Input */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-2 text-center">
-                    Enter 6-Digit Verification Code
+                {/* 6-Digit Verification Code Input */}
+                <div className="text-center space-y-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C]">
+                    Enter 6-Digit Royal Verification Code
                   </label>
                   <div className="relative max-w-xs mx-auto">
                     <input
@@ -662,16 +699,19 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       required
                       placeholder="••••••"
                       value={gateOtp}
-                      onChange={(e) => setGateOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      className="w-full text-center py-3.5 rounded-2xl border-2 border-[#D4AF37] text-2xl font-mono tracking-[0.5em] text-[#1C1917] bg-white outline-hidden focus:ring-4 focus:ring-[#C5A869]/30 transition-all shadow-inner"
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                        setGateOtp(val);
+                      }}
+                      className="w-full py-4 text-center text-3xl font-mono font-bold tracking-[0.4em] rounded-2xl border-2 border-[#D4AF37] bg-white text-[#1C1917] outline-hidden focus:ring-4 focus:ring-[#C5A869]/20 focus:border-[#8C6D2B] transition-all shadow-inner"
                     />
                   </div>
-                  <p className="text-[11px] text-[#78716C] mt-2 text-center">
-                    Code is valid for 10 minutes. Only verified emails may access the form.
+                  <p className="text-[11px] text-[#78716C]">
+                    Please check your email inbox and spam folder for your 6-digit code.
                   </p>
                 </div>
 
-                {/* Verify Button */}
+                {/* Verify Code Button */}
                 <button
                   type="submit"
                   disabled={verifyingOtp || gateOtp.length !== 6}
@@ -684,39 +724,51 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <KeyRound className="w-4 h-4 text-[#D4AF37]" />
                       <span>Verify Code &amp; Enter Dossier</span>
                       <ArrowRight className="w-4 h-4 text-[#D4AF37]" />
                     </>
                   )}
                 </button>
 
-                {/* Resend Code Action */}
+                {/* Resend Controls */}
                 <div className="text-center pt-2">
                   {resendCooldown > 0 ? (
-                    <span className="text-xs text-[#A8A29E]">
-                      Resend code in <strong className="font-mono text-[#8C6D2B]">{resendCooldown}s</strong>
-                    </span>
+                    <p className="text-xs text-[#78716C] font-mono">
+                      Resend code in <strong className="text-[#8C6D2B]">{resendCooldown}s</strong>
+                    </p>
                   ) : (
                     <button
                       type="button"
+                      onClick={handleResendOtp}
                       disabled={sendingOtp}
-                      onClick={() => handleSendEmailOtp()}
-                      className="text-xs font-semibold text-[#8C6D2B] hover:text-[#5B4314] underline cursor-pointer disabled:opacity-50"
+                      className="text-xs text-[#8C6D2B] hover:text-[#6D531E] font-semibold underline underline-offset-4 cursor-pointer inline-flex items-center gap-1.5"
                     >
-                      Resend Verification Code
+                      <RefreshCw className={`w-3.5 h-3.5 ${sendingOtp ? 'animate-spin' : ''}`} />
+                      <span>Resend Verification Code</span>
                     </button>
                   )}
                 </div>
               </form>
             )}
 
-            {/* Smart Cross-Spouse Sync Badge */}
-            <div className="mt-8 pt-6 border-t border-[#F0E8DC] text-center">
+            {/* Smart Cross-Spouse Sync Badge & Discreet Admin Link */}
+            <div className="mt-8 pt-6 border-t border-[#F0E8DC] text-center space-y-3">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FAF7F2] border border-[#E7DDCE] text-[11px] text-[#78716C]">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#8C6D2B]" />
                 <span>Zero Duplicate Entries • Automated Cross-Spouse Synchronization</span>
               </div>
+              {onOpenAdmin && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={onOpenAdmin}
+                    className="text-[10px] text-[#A8A29E] hover:text-[#78716C] tracking-wider uppercase transition-colors cursor-pointer"
+                  >
+                    Secretariat &amp; Gateway Console
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

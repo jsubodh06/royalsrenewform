@@ -16,7 +16,7 @@ import {
   SubmissionData,
   CorrectionRequest,
 } from './lib/types.ts';
-import { getMemberMeApi, adminLoginApi } from './lib/api.ts';
+import { getMemberMeApi, adminLoginApi, getAdminMeApi } from './lib/api.ts';
 import { Loader2 } from 'lucide-react';
 
 export default function App() {
@@ -81,12 +81,35 @@ export default function App() {
   };
 
   useEffect(() => {
+    const handleUrlRoute = () => {
+      if (window.location.hash === '#admin' || window.location.search.includes('admin')) {
+        setActiveView('admin');
+      }
+    };
+    handleUrlRoute();
+    window.addEventListener('hashchange', handleUrlRoute);
+    return () => window.removeEventListener('hashchange', handleUrlRoute);
+  }, []);
+
+  useEffect(() => {
     if (memberToken) {
       fetchCurrentMember(memberToken);
     } else {
       setLoadingInitial(false);
     }
   }, [memberToken]);
+
+  useEffect(() => {
+    if (adminToken) {
+      getAdminMeApi(adminToken)
+        .then((res) => {
+          setAdminSession(res.admin);
+        })
+        .catch(() => {
+          handleAdminLogout();
+        });
+    }
+  }, [adminToken]);
 
   // 2. Member Login Callback
   const handleMemberVerified = (session: MemberSession, token: string) => {

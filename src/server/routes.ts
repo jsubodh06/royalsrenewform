@@ -28,10 +28,7 @@ import {
   getFast2SmsApiKey,
   checkFast2SmsWallet,
 } from './sms.ts';
-import { requestEmailOtp, verifyEmailOtp, getEmailConfigStatus, saveEmailConfig, resetEmailConfig } from './emailOtp.ts';
-
-// Clear any bad credentials so app operates in reliable, safe mode without SMTP errors
-resetEmailConfig();
+import { requestEmailOtp, verifyEmailOtp, getEmailConfigStatus, saveEmailConfig, resetEmailConfig, sendTestEmail } from './emailOtp.ts';
 
 export const apiRouter = Router();
 
@@ -1123,6 +1120,16 @@ apiRouter.post('/member/request-correction', requireMember, (req: AuthenticatedR
 // 3. ADMIN DASHBOARD ENDPOINTS
 // ==========================================
 
+// Validate Admin Session & Fetch Profile
+apiRouter.get('/admin/me', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  res.json({
+    admin: {
+      email: req.admin!.email,
+      role: req.admin!.role
+    }
+  });
+});
+
 // Overview Statistics (Dynamic Database-derived metrics)
 apiRouter.get('/admin/overview', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -1891,6 +1898,17 @@ apiRouter.post('/family/email-config', async (req: Request, res: Response) => {
     res.json({ success: true, ...status });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to save email configuration.' });
+  }
+});
+
+// Admin Live Test Email Dispatcher
+apiRouter.post('/admin/test-email', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const targetEmail = req.body?.email || req.admin?.email;
+    const result = await sendTestEmail(targetEmail);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to dispatch test email.' });
   }
 });
 

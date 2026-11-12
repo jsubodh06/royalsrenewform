@@ -315,6 +315,14 @@ export async function requestCorrectionApi(
 }
 
 // 3. Admin APIs
+export async function getAdminMeApi(adminToken: string) {
+  return apiRequest<{
+    admin: AdminSession;
+  }>('/admin/me', {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+}
+
 export async function getAdminOverviewApi(adminToken: string) {
   return apiRequest<{
     totalMembers: number;
@@ -493,8 +501,6 @@ export async function requestFamilyEmailOtpApi(email: string, role: 'husband' | 
     spouseName?: string;
     spouseRole?: 'husband' | 'wife';
     filedBySpouse?: boolean;
-    devOtp?: string;
-    deliveryWarning?: string;
     providerUsed?: string;
     message: string;
   }>('/family/request-email-otp', {
@@ -539,6 +545,18 @@ export async function saveEmailConfigApi(config: any) {
   }>('/family/email-config', {
     method: 'POST',
     body: JSON.stringify(config),
+  });
+}
+
+export async function sendAdminTestEmailApi(adminToken: string, email?: string) {
+  return apiRequest<{
+    success: boolean;
+    provider: string;
+    message: string;
+  }>('/admin/test-email', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+    headers: { Authorization: `Bearer ${adminToken}` },
   });
 }
 

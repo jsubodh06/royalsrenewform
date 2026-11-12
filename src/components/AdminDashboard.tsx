@@ -32,7 +32,10 @@ import {
   Briefcase,
   Terminal,
   Zap,
-  Send
+  Send,
+  Mail,
+  ExternalLink,
+  KeyRound
 } from 'lucide-react';
 import {
   getAdminOverviewApi,
@@ -50,7 +53,10 @@ import {
   updateAdminSmsConfigApi,
   testFast2SmsApi,
   getRecentOtpsApi,
-  getAdminFamilyRegistrationsApi
+  getAdminFamilyRegistrationsApi,
+  getEmailConfigApi,
+  saveEmailConfigApi,
+  sendAdminTestEmailApi
 } from '../lib/api.ts';
 import {
   AdminSession,
@@ -82,12 +88,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Active Tab: 'members' | 'family' | 'corrections' | 'sms' | 'audit' | 'export' | 'import'
-  const [activeTab, setActiveTab] = useState<'members' | 'family' | 'corrections' | 'sms' | 'audit' | 'export' | 'import'>('members');
+  // Active Tab: 'members' | 'family' | 'corrections' | 'sms' | 'email' | 'audit' | 'export' | 'import'
+  const [activeTab, setActiveTab] = useState<'members' | 'family' | 'corrections' | 'sms' | 'email' | 'audit' | 'export' | 'import'>('members');
 
   // Fresh Family Registrations State
   const [familyRegistrations, setFamilyRegistrations] = useState<any[]>([]);
   const [loadingFamilyRegs, setLoadingFamilyRegs] = useState(false);
+
+  // Central Authentication Error Handler (Auto-logout if session expired or invalid)
+  const handleAuthError = (err: any) => {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('unauthorized') || msg.includes('admin session expired') || msg.includes('forbidden') || msg.includes('401')) {
+      onAdminLogout();
+      return true;
+    }
+    return false;
+  };
 
   const loadFamilyRegistrations = async () => {
     if (!adminToken) return;
@@ -97,7 +113,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (data?.registrations) {
         setFamilyRegistrations(data.registrations);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (handleAuthError(err)) return;
       console.error('Failed to load family registrations', err);
     } finally {
       setLoadingFamilyRegs(false);
@@ -172,6 +189,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const data = await getAdminSmsConfigApi(adminToken);
       setSmsConfig(data);
     } catch (err: any) {
+      if (handleAuthError(err)) return;
       setSmsKeyError(err?.message || 'Failed to load SMS Gateway configuration.');
     } finally {
       setLoadingSmsConfig(false);
@@ -190,6 +208,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setNewSmsApiKey('');
       await loadSmsConfig();
     } catch (err: any) {
+      if (handleAuthError(err)) return;
       setSmsKeyError(err?.message || 'Failed to save Fast2SMS API Key.');
     } finally {
       setSavingSmsKey(false);
@@ -233,7 +252,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (data?.records) {
         setRecentOtps(data.records);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (handleAuthError(err)) return;
       console.error('Failed to load recent OTP records', err);
     } finally {
       setLoadingRecentOtps(false);
@@ -254,6 +274,106 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setTestError(err?.message || 'Fast2SMS test failed.');
     } finally {
       setTestingFast2Sms(false);
+    }
+  };
+
+  // Email Gateway (Gmail / SMTP / Resend) State
+  const [emailConfig, setEmailConfig] = useState<{
+    isConfigured: boolean;
+    activeProvider: string;
+    senderEmail: string;
+    mode: string;
+  } | null>(null);
+  const [loadingEmailConfig, setLoadingEmailConfig] = useState(false);
+  const [emailProvider, setEmailProvider] = useState<'gmail' | 'resend'>('gmail');
+  const [gmailUser, setGmailUser] = useState('subodhjain2007777@gmail.com');
+  const [gmailAppPass, setGmailAppPass] = useState('');
+  const [resendApiKey, setResendApiKey] = useState('');
+  const [savingEmailConfig, setSavingEmailConfig] = useState(false);
+  const [emailSaveSuccess, setEmailSaveSuccess] = useState<string | null>(null);
+  const [emailSaveError, setEmailSaveError] = useState<string | null>(null);
+  const [testEmailAddress, setTestEmailAddress] = useState('subodhjain2007777@gmail.com');
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
+  const [testEmailError, setTestEmailError] = useState<string | null>(null);
+
+  const loadEmailConfig = async () => {
+    setLoadingEmailConfig(true);
+    try {
+      const data = await getEmailConfigApi();
+      setEmailConfig(data);
+      if (data?.activeProvider === 'resend') {
+        setEmailProvider('resend');
+      } else if (data?.activeProvider === 'gmail') {
+        setEmailProvider('gmail');
+        if (data.senderEmail && data.senderEmail.includes('@')) {
+          setGmailUser(data.senderEmail);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load email config', e);
+    } finally {
+      setLoadingEmailConfig(false);
+    }
+  };
+
+  const handleSaveEmailConfig = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSavingEmailConfig(true);
+    setEmailSaveError(null);
+    setEmailSaveSuccess(null);
+    try {
+      const payload: any = { provider: emailProvider };
+      if (emailProvider === 'gmail') {
+        payload.gmailUser = gmailUser.trim();
+        payload.gmailPass = gmailAppPass.trim().replace(/\s+/g, '');
+      } else if (emailProvider === 'resend') {
+        payload.resendApiKey = resendApiKey.trim();
+      }
+      const res = await saveEmailConfigApi(payload);
+      setEmailConfig(res);
+      setEmailSaveSuccess(
+        emailProvider === 'gmail'
+          ? `Gmail SMTP successfully verified and connected! (${gmailUser})`
+          : 'Resend API Key successfully connected!'
+      );
+      setGmailAppPass('');
+    } catch (err: any) {
+      setEmailSaveError(err?.message || 'Failed to verify and save email gateway.');
+    } finally {
+      setSavingEmailConfig(false);
+    }
+  };
+
+  const handleSendTestEmail = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!adminToken) return;
+    setTestingEmail(true);
+    setTestEmailError(null);
+    setTestEmailResult(null);
+    try {
+      const res = await sendAdminTestEmailApi(adminToken, testEmailAddress.trim());
+      setTestEmailResult(res.message || `Test verification email dispatched to ${testEmailAddress}!`);
+    } catch (err: any) {
+      setTestEmailError(err?.message || 'Failed to dispatch test email.');
+    } finally {
+      setTestingEmail(false);
+    }
+  };
+
+  const handleResetEmailConfig = async () => {
+    if (!confirm('Are you sure you want to disconnect and clear email credentials?')) return;
+    setSavingEmailConfig(true);
+    setEmailSaveError(null);
+    setEmailSaveSuccess(null);
+    try {
+      await saveEmailConfigApi({ provider: 'reset' });
+      await loadEmailConfig();
+      setEmailSaveSuccess('Email gateway credentials successfully cleared.');
+    } catch (e: any) {
+      setEmailSaveError(e?.message || 'Failed to clear credentials.');
+    } finally {
+      setSavingEmailConfig(false);
     }
   };
 
@@ -296,7 +416,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const data = await getAdminOverviewApi(adminToken);
       setOverview(data);
-    } catch (err) {
+    } catch (err: any) {
+      if (handleAuthError(err)) return;
       console.error('Failed to load admin overview:', err);
     }
   };
@@ -316,7 +437,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
       setMembers(res.members);
       setPagination(res.pagination);
-    } catch (err) {
+    } catch (err: any) {
+      if (handleAuthError(err)) return;
       console.error('Failed to query members:', err);
     } finally {
       setLoadingMembers(false);
@@ -329,7 +451,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const res = await getAdminCorrectionsApi(adminToken);
       setCorrectionsList(res.corrections);
-    } catch (err) {
+    } catch (err: any) {
+      if (handleAuthError(err)) return;
       console.error('Failed to load corrections:', err);
     }
   };
@@ -342,7 +465,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const res = await getAdminAuditLogsApi(adminToken, page, auditPagination.limit);
       setAuditLogs(res.logs);
       setAuditPagination(res.pagination);
-    } catch (err) {
+    } catch (err: any) {
+      if (handleAuthError(err)) return;
       console.error('Failed to load audit logs:', err);
     } finally {
       setLoadingAudit(false);
@@ -357,6 +481,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const data = await getMembersImportStatusApi(adminToken);
       setImportStatus(data);
     } catch (err: any) {
+      if (handleAuthError(err)) return;
       console.error('Failed to load import status:', err);
     } finally {
       setLoadingImportStatus(false);
@@ -406,6 +531,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (adminToken && activeTab === 'family') {
       loadFamilyRegistrations();
     }
+    if (adminToken && activeTab === 'email') {
+      loadEmailConfig();
+    }
   }, [adminToken, activeTab, auditPagination.page]);
 
   // Debounced search
@@ -426,7 +554,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const detail = await getAdminMemberDetailApi(adminToken, coupleId);
       setMemberDetail(detail as any);
-    } catch (err) {
+    } catch (err: any) {
+      if (handleAuthError(err)) return;
       console.error('Failed to inspect member:', err);
     } finally {
       setLoadingDetail(false);
@@ -861,6 +990,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <Phone className="w-4 h-4 text-[#8C6D2B]" />
           <span>SMS Gateway (Fast2SMS)</span>
           {smsConfig?.configured && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('email')}
+          className={`pb-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'email'
+              ? 'border-[#1C1917] text-[#1C1917]'
+              : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+          }`}
+        >
+          <Mail className="w-4 h-4 text-indigo-700" />
+          <span>Email Gateway (Gmail / Resend)</span>
+          {emailConfig?.isConfigured && (
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
           )}
         </button>
@@ -2256,6 +2400,347 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: EMAIL GATEWAY (GMAIL / RESEND) CONFIGURATION */}
+      {activeTab === 'email' && (
+        <div className="bg-[#FFFFFF] border border-[#E7DDCE] rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#F0E8DC]">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#EEF2FF] text-indigo-700 flex items-center justify-center border border-indigo-200 shrink-0">
+                <Mail className="w-6 h-6 text-indigo-700" />
+              </div>
+              <div>
+                <h3 className="font-serif-royal font-bold text-lg text-[#1C1917]">
+                  Email Verification Gateway
+                </h3>
+                <p className="text-xs text-[#78716C]">
+                  Configure your 16-character Google App Password or Resend API key for real member OTP delivery
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadEmailConfig}
+              disabled={loadingEmailConfig}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#F2ECE1] transition-all cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingEmailConfig ? 'animate-spin' : ''}`} />
+              <span>Refresh Status</span>
+            </button>
+          </div>
+
+          {/* Current Gateway Status Banner */}
+          <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+            emailConfig?.isConfigured
+              ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+              : 'bg-amber-50/80 border-amber-200 text-amber-950'
+          }`}>
+            <div className="flex items-start gap-3">
+              {emailConfig?.isConfigured ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm">
+                    {emailConfig?.isConfigured
+                      ? `Gateway Active (${emailConfig.activeProvider.toUpperCase()})`
+                      : 'Email Gateway Not Configured'}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    emailConfig?.isConfigured
+                      ? 'bg-emerald-200/80 text-emerald-900'
+                      : 'bg-amber-200/80 text-amber-900'
+                  }`}>
+                    {emailConfig?.isConfigured ? 'Live Delivery' : 'Offline'}
+                  </span>
+                </div>
+                <p className="text-xs mt-1 text-[#44403C]">
+                  {emailConfig?.isConfigured
+                    ? `Dispatches real 6-digit OTP verification emails via ${emailConfig.senderEmail}.`
+                    : 'OTP emails cannot be sent until credentials are saved. Configure your 16-character Google App Password or Resend API key below.'}
+                </p>
+              </div>
+            </div>
+
+            {emailConfig?.isConfigured && (
+              <button
+                type="button"
+                onClick={handleResetEmailConfig}
+                disabled={savingEmailConfig}
+                className="px-3.5 py-1.5 rounded-xl border border-red-300 text-red-700 bg-white hover:bg-red-50 text-xs font-semibold transition-all cursor-pointer shrink-0"
+              >
+                Disconnect Gateway
+              </button>
+            )}
+          </div>
+
+          {/* Provider Selection Tabs */}
+          <div className="space-y-4">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C]">
+              Select Email Service Provider
+            </label>
+            <div className="grid grid-cols-2 gap-3 max-w-md">
+              <button
+                type="button"
+                onClick={() => setEmailProvider('gmail')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
+                  emailProvider === 'gmail'
+                    ? 'bg-[#1C1917] text-[#FAF7F2] border-[#D4AF37] shadow-md'
+                    : 'bg-[#FAF7F2] text-[#44403C] border-[#E7DDCE] hover:bg-[#F2ECE1]'
+                }`}
+              >
+                <Mail className={`w-5 h-5 shrink-0 ${emailProvider === 'gmail' ? 'text-[#D4AF37]' : 'text-[#8C6D2B]'}`} />
+                <div>
+                  <div className="font-bold text-xs">Gmail SMTP</div>
+                  <div className={`text-[10px] ${emailProvider === 'gmail' ? 'text-[#D4AF37]' : 'text-[#78716C]'}`}>
+                    16-char App Password
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEmailProvider('resend')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
+                  emailProvider === 'resend'
+                    ? 'bg-[#1C1917] text-[#FAF7F2] border-[#D4AF37] shadow-md'
+                    : 'bg-[#FAF7F2] text-[#44403C] border-[#E7DDCE] hover:bg-[#F2ECE1]'
+                }`}
+              >
+                <Zap className={`w-5 h-5 shrink-0 ${emailProvider === 'resend' ? 'text-[#D4AF37]' : 'text-[#8C6D2B]'}`} />
+                <div>
+                  <div className="font-bold text-xs">Resend API</div>
+                  <div className={`text-[10px] ${emailProvider === 'resend' ? 'text-[#D4AF37]' : 'text-[#78716C]'}`}>
+                    Cloud HTTPS API Key
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* GMAIL CONFIGURATION */}
+          {emailProvider === 'gmail' && (
+            <div className="p-5 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE] space-y-4">
+              <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-950 text-xs space-y-2">
+                <div className="flex items-center gap-2 font-bold text-blue-900">
+                  <KeyRound className="w-4 h-4 text-blue-600" />
+                  <span>How to get your 16-character Google App Password:</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed text-blue-900">
+                  <li>
+                    Ensure 2-Step Verification is active on your Google Account (<code className="font-semibold">{gmailUser}</code>).
+                  </li>
+                  <li>
+                    Open{' '}
+                    <a
+                      href="https://myaccount.google.com/apppasswords"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline font-bold text-blue-700 inline-flex items-center gap-1 hover:text-blue-900"
+                    >
+                      <span>myaccount.google.com/apppasswords</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </li>
+                  <li>Under &quot;App name&quot;, type <strong>JSG Royals</strong> and click <strong>Create</strong>.</li>
+                  <li>Copy the 16-letter password shown on your screen (e.g. <code className="bg-white px-1.5 py-0.5 rounded border border-blue-200 font-mono">abcd efgh ijkl mnop</code>) and paste it below.</li>
+                </ol>
+                <p className="text-[10px] text-blue-800">
+                  Note: Google permanently forbids standard account passwords on SMTP (causing error 535-5.7.8). The 16-character App Password is the only official method.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveEmailConfig} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1.5">
+                      Your Gmail Address
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={gmailUser}
+                      onChange={(e) => setGmailUser(e.target.value)}
+                      placeholder="e.g. subodhjain2007777@gmail.com"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-mono text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1.5">
+                      16-Character Google App Password
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={gmailAppPass}
+                      onChange={(e) => setGmailAppPass(e.target.value)}
+                      placeholder="•••• •••• •••• ••••"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-mono text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingEmailConfig || !gmailAppPass.trim()}
+                  className="py-3 px-6 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {savingEmailConfig ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#D4AF37]" />
+                      <span>Authenticating with Gmail SMTP...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      <span>Verify &amp; Save Gmail Gateway</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* RESEND CONFIGURATION */}
+          {emailProvider === 'resend' && (
+            <div className="p-5 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE] space-y-4">
+              <div className="p-3.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-950 text-xs space-y-2">
+                <div className="flex items-center gap-2 font-bold text-purple-900">
+                  <Zap className="w-4 h-4 text-purple-600" />
+                  <span>Resend (100 Free Emails / Day with Instant Cloud Delivery):</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-purple-900">
+                  Resend operates over HTTPS port 443, ensuring 100% instantaneous delivery without any SMTP security blocks.
+                  Get your free API key at{' '}
+                  <a
+                    href="https://resend.com/api-keys"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-bold text-purple-700 inline-flex items-center gap-1 hover:text-purple-900"
+                  >
+                    <span>resend.com/api-keys</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveEmailConfig} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1.5">
+                    Resend API Key
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={resendApiKey}
+                    onChange={(e) => setResendApiKey(e.target.value)}
+                    placeholder="re_123456789abcdef..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-mono text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingEmailConfig || !resendApiKey.trim()}
+                  className="py-3 px-6 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {savingEmailConfig ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#D4AF37]" />
+                      <span>Verifying Resend API Key...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      <span>Verify &amp; Save Resend Gateway</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Feedback messages */}
+          {emailSaveError && (
+            <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+              <div>
+                <p className="font-bold">Gateway Connection Failed</p>
+                <p className="mt-0.5">{emailSaveError}</p>
+              </div>
+            </div>
+          )}
+
+          {emailSaveSuccess && (
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              <span>{emailSaveSuccess}</span>
+            </div>
+          )}
+
+          {/* LIVE TEST EMAIL DISPATCH SECTION */}
+          <div className="p-5 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE] space-y-4">
+            <div className="flex items-center gap-2">
+              <Send className="w-4 h-4 text-[#8C6D2B]" />
+              <h4 className="font-serif-royal font-bold text-sm text-[#1C1917]">
+                Live Email Dispatch Test
+              </h4>
+            </div>
+            <p className="text-xs text-[#78716C]">
+              Send a live royal verification code directly to your inbox to confirm real delivery.
+            </p>
+
+            <form onSubmit={handleSendTestEmail} className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <input
+                  type="email"
+                  required
+                  value={testEmailAddress}
+                  onChange={(e) => setTestEmailAddress(e.target.value)}
+                  placeholder="Recipient email address"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-mono text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={testingEmail || !emailConfig?.isConfigured || !testEmailAddress.includes('@')}
+                className="py-2.5 px-5 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+              >
+                {testingEmail ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#D4AF37]" />
+                    <span>Dispatching Test Email...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    <span>Send Live Test OTP Email</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            {testEmailError && (
+              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{testEmailError}</span>
+              </div>
+            )}
+
+            {testEmailResult && (
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{testEmailResult}</span>
               </div>
             )}
           </div>

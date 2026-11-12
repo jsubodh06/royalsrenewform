@@ -356,7 +356,10 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
   }
 
   if (!emailSentReal) {
-    console.log(`[Email OTP: Fallback Code] Email: ${email} | Code: ${otp} | Role: ${role}`);
+    const errorDetail = deliveryWarning
+      ? deliveryWarning
+      : 'Email gateway is not configured on the server. Please configure your 16-character Google App Password or Resend API key in the Admin Dashboard to dispatch verification emails.';
+    throw new Error(errorDetail);
   }
 
   return {
@@ -365,20 +368,13 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
     role,
     expiresInSeconds: 600,
     cooldownSeconds: 30,
-    emailSentReal,
+    emailSentReal: true,
     providerUsed,
-    deliveryWarning: deliveryWarning || undefined,
     isAlreadyRegistered,
     spouseName,
     spouseRole,
     filedBySpouse,
-    // Always provide devOtp when real delivery fails or in demo mode so user is never stuck
-    devOtp: emailSentReal ? undefined : otp,
-    message: emailSentReal 
-      ? `A 6-digit verification code has been dispatched to your inbox at ${email}.` 
-      : deliveryWarning 
-        ? `${deliveryWarning} Using fallback code for your session.` 
-        : `Verification code generated for ${email}.`
+    message: `A 6-digit verification code has been dispatched to your email inbox at ${email}. Please check your inbox or spam folder.`
   };
 }
 
@@ -498,4 +494,51 @@ export function verifyEmailOtp(rawEmail: string, rawOtp: string) {
     alreadyRegistered: false,
     message: 'Email address verified successfully!'
   };
+}
+
+// 3. Send live test verification email from Admin Dashboard
+export async function sendTestEmail(toEmail: string) {
+  const email = (toEmail || '').trim().toLowerCase();
+  if (!email || !email.includes('@')) {
+    throw new Error('Please enter a valid email address.');
+  }
+
+  const otp = String(crypto.randomInt(100000, 999999));
+
+  // 1. Try Resend
+  const resendKey = getSetting('resend_api_key') || process.env.RESEND_API_KEY;
+  if (resendKey) {
+    const ok = await sendViaResend(resendKey, email, otp);
+    if (ok) return { success: true, provider: 'Resend', message: `Live test email successfully dispatched to ${email} via Resend!` };
+  }
+
+  // 2. Try Brevo
+  const brevoKey = getSetting('brevo_api_key') || process.env.BREVO_API_KEY;
+  if (brevoKey) {
+    const ok = await sendViaBrevo(brevoKey, email, otp);
+    if (ok) return { success: true, provider: 'Brevo', message: `Live test email successfully dispatched to ${email} via Brevo!` };
+  }
+
+  // 3. Try Gmail / SMTP
+  const transporter = createTransporter();
+  if (transporter) {
+    try {
+      const fromUser = getSetting('gmail_user') || process.env.GMAIL_USER || 'no-reply@jsgroyals.org';
+      const info = await transporter.sendMail({
+        from: `"JSG Royals" <${fromUser}>`,
+        to: email,
+        subject: `👑 JSG Royals Live Gateway Test: ${otp}`,
+        html: generateRoyalEmailHtml(otp)
+      });
+      return { success: true, provider: 'Gmail/SMTP', message: `Live test email successfully dispatched to ${email}! (Message ID: ${info.messageId})` };
+    } catch (mailErr: any) {
+      const errMsg = mailErr?.message || '';
+      if (errMsg.includes('535') || errMsg.includes('Username and Password not accepted') || errMsg.includes('BadCredentials')) {
+        throw new Error('Gmail rejected login (535-5.7.8): You must use a 16-character Google App Password (myaccount.google.com/apppasswords), not your personal account password.');
+      }
+      throw new Error(`SMTP Error: ${errMsg}`);
+    }
+  }
+
+  throw new Error('Email gateway is not configured on the server. Please enter your 16-character Google App Password or Resend API key.');
 }
