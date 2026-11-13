@@ -1,51 +1,71 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import nodemailer from 'nodemailer';
 import { db, getSetting, setSetting } from '../db/database.ts';
 
-const ROYALS_LOGO_ASSET_PATH = '/assets/aistudio/file_00000000679071f5a5e7d2bf243a4828__1__fe221d87.png';
-const PUBLIC_APP_URL_FALLBACK = 'https://ais-pre-t5c2x6fk3je4yhythikayj-923279058412.asia-southeast1.run.app';
+const ROYALS_LOGO_DISK_PATH = path.resolve(
+  process.cwd(),
+  'public/assets/aistudio/file_00000000679071f5a5e7d2bf243a4828__1__fe221d87.png'
+);
 
-function resolveEmailPublicOrigin(baseUrl?: string): string {
-  const candidate = (process.env.APP_URL || baseUrl || '').replace(/\/+$/, '');
-  if (!candidate || candidate.includes('localhost') || candidate.includes('127.0.0.1') || candidate.includes('ais-dev-')) {
-    return PUBLIC_APP_URL_FALLBACK;
-  }
-  return candidate;
+function generateRoyalEmailText(otp: string): string {
+  return [
+    'JSG Royals Year 2 - Member Portal',
+    '',
+    'Hello,',
+    '',
+    `Your verification code is: ${otp}`,
+    '',
+    'This code is valid for 10 minutes.',
+    'Enter this code in the JSG Royals portal to verify your email address and continue your registration.',
+    '',
+    'If you did not request this verification code, please ignore this email.',
+    '',
+    'Warm regards,',
+    'JSG Royals Directory Team'
+  ].join('\n');
 }
 
-// Helper to generate luxury royal HTML email template
-function generateRoyalEmailHtml(otp: string, baseUrl?: string) {
-  const origin = resolveEmailPublicOrigin(baseUrl);
-  const logoHtml = origin
-    ? `<img src="${origin}${ROYALS_LOGO_ASSET_PATH}" alt="The Royals Logo" width="88" height="88" style="width: 88px; height: 88px; border-radius: 18px; border: 2px solid #D4AF37; display: block; margin: 0 auto 12px; background: #122619; object-fit: contain;" />`
-    : `<div style="width: 64px; height: 64px; line-height: 64px; margin: 0 auto 10px; border-radius: 16px; border: 2px solid #D4AF37; background: #122619; color: #D4AF37; font-size: 28px; font-weight: bold;">R</div>`;
+// Helper to generate clean transactional HTML email template (no external .run.app URLs to avoid spam flags)
+function generateRoyalEmailHtml(otp: string, useCidLogo = false) {
+  const logoHtml = useCidLogo
+    ? `<img src="cid:royals-logo" alt="The Royals Logo" width="72" height="72" style="width: 72px; height: 72px; border-radius: 14px; border: 1.5px solid #D4AF37; display: block; margin: 0 auto 12px; background: #122619; object-fit: contain;" />`
+    : `<div style="width: 56px; height: 56px; line-height: 56px; margin: 0 auto 10px; border-radius: 14px; border: 1.5px solid #D4AF37; background: #122619; color: #D4AF37; font-size: 24px; font-weight: bold; text-align: center;">R</div>`;
 
   return `
-    <div style="font-family: 'Georgia', serif; max-width: 580px; margin: 0 auto; background: #FAF6EF; border: 2px solid #C5A869; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
-      <div style="background: linear-gradient(135deg, #122619 0%, #1B3624 100%); padding: 28px; text-align: center; border-bottom: 2px solid #D4AF37;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Georgia, serif; max-width: 540px; margin: 0 auto; background: #FAF6EF; border: 1px solid #C5A869; border-radius: 16px; overflow: hidden;">
+      <div style="background: #122619; padding: 24px; text-align: center; border-bottom: 2px solid #D4AF37;">
         ${logoHtml}
-        <h1 style="color: #FAF7F2; margin: 0; font-size: 22px; letter-spacing: 1.5px; text-transform: uppercase;">JSG Royals Year 2</h1>
-        <p style="color: #C5A869; margin: 6px 0 0; font-size: 12px; letter-spacing: 2px; text-transform: uppercase;">Unified Royal Family Registry</p>
+        <h1 style="color: #FAF7F2; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">JSG Royals Year 2</h1>
+        <p style="color: #C5A869; margin: 4px 0 0; font-size: 12px;">Member Portal Verification</p>
       </div>
-      <div style="padding: 32px 28px; text-align: center; color: #1C1917;">
-        <p style="font-size: 15px; color: #57534E; margin-top: 0; line-height: 1.6;">Welcome to the official JSG Royals Member Portal.<br/>Please use the following 6-digit verification code to confirm your email:</p>
-        
-        <div style="background: #FFFFFF; border: 2px dashed #C5A869; border-radius: 16px; padding: 20px 28px; margin: 24px auto; display: inline-block; box-shadow: 0 4px 12px rgba(197, 168, 105, 0.15);">
-          <span style="font-family: 'Courier New', monospace; font-size: 40px; font-weight: bold; letter-spacing: 10px; color: #8C6D2B;">${otp}</span>
+      <div style="padding: 28px 24px; text-align: center; color: #1C1917; background: #FFFFFF;">
+        <p style="font-size: 15px; color: #44403C; margin-top: 0; line-height: 1.6;">
+          Hello,<br />
+          Use the following 6-digit verification code to verify your email address for the JSG Royals Member Portal:
+        </p>
+
+        <div style="background: #FAF6EF; border: 1px solid #D4AF37; border-radius: 12px; padding: 16px 24px; margin: 20px auto; display: inline-block;">
+          <span style="font-family: 'Courier New', monospace; font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #1C1917;">${otp}</span>
         </div>
-        
-        <p style="font-size: 13px; color: #78716C; margin-bottom: 6px;">This royal verification code is valid for <strong>10 minutes</strong>.</p>
-        <p style="font-size: 11px; color: #A8A29E; margin-top: 0;">If you did not request this code, you can safely ignore this message.</p>
+
+        <p style="font-size: 13px; color: #57534E; margin-bottom: 8px;">
+          This code expires in <strong>10 minutes</strong>.
+        </p>
+        <p style="font-size: 12px; color: #78716C; margin-top: 0;">
+          If you did not request this verification code, you can safely ignore this email.
+        </p>
       </div>
-      <div style="background: #F1ECE1; padding: 16px; text-align: center; font-size: 11px; color: #78716C; border-top: 1px solid #E2D5BE;">
-        JSG Royals • Official Directory &amp; Heritage Dossier • Confidential
+      <div style="background: #F5EFE6; padding: 14px; text-align: center; font-size: 12px; color: #78716C; border-top: 1px solid #E7DDCE;">
+        JSG Royals Directory &amp; Family Registry
       </div>
     </div>
   `;
 }
 
 // 1. Resend API Dispatcher (Uses HTTPS Port 443 — 100% reliable on Cloud Run)
-async function sendViaResend(apiKey: string, toEmail: string, otp: string, baseUrl?: string): Promise<boolean> {
+async function sendViaResend(apiKey: string, toEmail: string, otp: string, _baseUrl?: string): Promise<boolean> {
   try {
     const fromAddress = process.env.RESEND_FROM || 'JSG Royals <onboarding@resend.dev>';
     const res = await fetch('https://api.resend.com/emails', {
@@ -57,8 +77,9 @@ async function sendViaResend(apiKey: string, toEmail: string, otp: string, baseU
       body: JSON.stringify({
         from: fromAddress,
         to: [toEmail],
-        subject: `👑 JSG Royals Verification Code: ${otp}`,
-        html: generateRoyalEmailHtml(otp, baseUrl)
+        subject: 'Your JSG Royals verification code',
+        text: generateRoyalEmailText(otp),
+        html: generateRoyalEmailHtml(otp, false)
       })
     });
 
@@ -78,7 +99,7 @@ async function sendViaResend(apiKey: string, toEmail: string, otp: string, baseU
 }
 
 // 2. Brevo API Dispatcher (Uses HTTPS Port 443)
-async function sendViaBrevo(apiKey: string, toEmail: string, otp: string, baseUrl?: string): Promise<boolean> {
+async function sendViaBrevo(apiKey: string, toEmail: string, otp: string, _baseUrl?: string): Promise<boolean> {
   try {
     const senderEmail = process.env.BREVO_FROM || 'no-reply@jsgroyals.org';
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -90,8 +111,9 @@ async function sendViaBrevo(apiKey: string, toEmail: string, otp: string, baseUr
       body: JSON.stringify({
         sender: { name: 'JSG Royals', email: senderEmail },
         to: [{ email: toEmail }],
-        subject: `👑 JSG Royals Verification Code: ${otp}`,
-        htmlContent: generateRoyalEmailHtml(otp, baseUrl)
+        subject: 'Your JSG Royals verification code',
+        textContent: generateRoyalEmailText(otp),
+        htmlContent: generateRoyalEmailHtml(otp, false)
       })
     });
 
@@ -469,12 +491,28 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
     const transporter = createTransporter();
     if (transporter) {
       try {
-        const fromUser = getSetting('gmail_user') || process.env.GMAIL_USER || 'no-reply@jsgroyals.org';
+        const fromUser = (getSetting('gmail_user') || getSetting('smtp_user') || process.env.GMAIL_USER || process.env.SMTP_USER || 'no-reply@jsgroyals.org').trim().toLowerCase();
+        const hasLocalLogo = fs.existsSync(ROYALS_LOGO_DISK_PATH);
         const info = await transporter.sendMail({
           from: `"JSG Royals" <${fromUser}>`,
+          replyTo: fromUser,
           to: email,
-          subject: `👑 JSG Royals Verification Code: ${otp}`,
-          html: generateRoyalEmailHtml(otp, baseUrl)
+          subject: 'Your JSG Royals verification code',
+          text: generateRoyalEmailText(otp),
+          html: generateRoyalEmailHtml(otp, hasLocalLogo),
+          headers: {
+            'X-Auto-Response-Suppress': 'All'
+          },
+          attachments: hasLocalLogo
+            ? [
+                {
+                  filename: 'royals-logo.png',
+                  path: ROYALS_LOGO_DISK_PATH,
+                  cid: 'royals-logo',
+                  contentDisposition: 'inline'
+                }
+              ]
+            : undefined
         });
         emailSentReal = true;
         providerUsed = 'Gmail/SMTP';
@@ -659,12 +697,28 @@ export async function sendTestEmail(toEmail: string, baseUrl?: string) {
   const transporter = createTransporter();
   if (transporter) {
     try {
-      const fromUser = getSetting('gmail_user') || process.env.GMAIL_USER || 'no-reply@jsgroyals.org';
+      const fromUser = (getSetting('gmail_user') || getSetting('smtp_user') || process.env.GMAIL_USER || process.env.SMTP_USER || 'no-reply@jsgroyals.org').trim().toLowerCase();
+      const hasLocalLogo = fs.existsSync(ROYALS_LOGO_DISK_PATH);
       const info = await transporter.sendMail({
         from: `"JSG Royals" <${fromUser}>`,
+        replyTo: fromUser,
         to: email,
-        subject: `👑 JSG Royals Live Gateway Test: ${otp}`,
-        html: generateRoyalEmailHtml(otp, baseUrl)
+        subject: 'JSG Royals email delivery test',
+        text: generateRoyalEmailText(otp),
+        html: generateRoyalEmailHtml(otp, hasLocalLogo),
+        headers: {
+          'X-Auto-Response-Suppress': 'All'
+        },
+        attachments: hasLocalLogo
+          ? [
+              {
+                filename: 'royals-logo.png',
+                path: ROYALS_LOGO_DISK_PATH,
+                cid: 'royals-logo',
+                contentDisposition: 'inline'
+              }
+            ]
+          : undefined
       });
       return { success: true, provider: 'Gmail/SMTP', message: `Live test email successfully dispatched to ${email}! (Message ID: ${info.messageId})` };
     } catch (mailErr: any) {
