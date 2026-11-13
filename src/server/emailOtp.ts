@@ -111,9 +111,9 @@ async function sendViaBrevo(apiKey: string, toEmail: string, otp: string, baseUr
 
 // 3. Configure Transporter for Gmail / SMTP
 function createTransporter() {
-  const host = getSetting('smtp_host') || process.env.SMTP_HOST;
-  const user = getSetting('gmail_user') || getSetting('smtp_user') || process.env.GMAIL_USER || process.env.SMTP_USER;
-  const pass = getSetting('gmail_pass') || getSetting('smtp_pass') || process.env.GMAIL_APP_PASS || process.env.SMTP_PASS;
+  const host = (getSetting('smtp_host') || process.env.SMTP_HOST || '').trim();
+  const user = (getSetting('gmail_user') || getSetting('smtp_user') || process.env.GMAIL_USER || process.env.SMTP_USER || '').trim();
+  const pass = (getSetting('gmail_pass') || getSetting('smtp_pass') || process.env.GMAIL_APP_PASS || process.env.SMTP_PASS || '').trim();
   const port = parseInt(getSetting('smtp_port') || process.env.SMTP_PORT || '587', 10);
 
   if (host && user && pass) {
@@ -126,10 +126,10 @@ function createTransporter() {
   }
 
   // Gmail configuration via 16-character App Password
-  if (user && pass && user.includes('@gmail.com')) {
+  if (user && pass && user.toLowerCase().includes('@gmail.com')) {
     return nodemailer.createTransport({
       service: 'gmail',
-      auth: { user, pass: pass.replace(/\s+/g, '') }
+      auth: { user: user.toLowerCase(), pass: pass.replace(/\s+/g, '') }
     });
   }
 
@@ -138,34 +138,57 @@ function createTransporter() {
 
 // Get active email service configuration status
 export function getEmailConfigStatus() {
-  const resendKey = getSetting('resend_api_key') || process.env.RESEND_API_KEY;
-  const brevoKey = getSetting('brevo_api_key') || process.env.BREVO_API_KEY;
-  const gmailUser = getSetting('gmail_user') || process.env.GMAIL_USER;
-  const gmailPass = getSetting('gmail_pass') || process.env.GMAIL_APP_PASS;
+  const dbResendKey = getSetting('resend_api_key');
+  const envResendKey = process.env.RESEND_API_KEY;
+  const resendKey = dbResendKey || envResendKey;
+
+  const dbBrevoKey = getSetting('brevo_api_key');
+  const envBrevoKey = process.env.BREVO_API_KEY;
+  const brevoKey = dbBrevoKey || envBrevoKey;
+
+  const dbGmailUser = getSetting('gmail_user');
+  const envGmailUser = process.env.GMAIL_USER;
+  const gmailUser = dbGmailUser || envGmailUser;
+
+  const dbGmailPass = getSetting('gmail_pass');
+  const envGmailPass = process.env.GMAIL_APP_PASS;
+  const gmailPass = (dbGmailPass || envGmailPass || '').replace(/\s+/g, '');
+
   const smtpHost = getSetting('smtp_host') || process.env.SMTP_HOST;
   const smtpUser = getSetting('smtp_user') || process.env.SMTP_USER;
 
   let activeProvider: 'resend' | 'brevo' | 'gmail' | 'smtp' | 'demo' = 'demo';
   let senderEmail = '';
+  let maskedPass: string | null = null;
+  let source: 'env' | 'db' | null = null;
 
   if (resendKey) {
     activeProvider = 'resend';
     senderEmail = 'Resend API (Cloud HTTPS)';
+    maskedPass = `re_••••${resendKey.slice(-4)}`;
+    source = dbResendKey ? 'db' : 'env';
   } else if (brevoKey) {
     activeProvider = 'brevo';
     senderEmail = 'Brevo Transactional API';
+    maskedPass = `••••${brevoKey.slice(-4)}`;
+    source = dbBrevoKey ? 'db' : 'env';
   } else if (gmailUser && gmailPass) {
     activeProvider = 'gmail';
     senderEmail = gmailUser;
+    maskedPass = `•••• •••• •••• ${gmailPass.slice(-4)}`;
+    source = dbGmailPass ? 'db' : 'env';
   } else if (smtpHost && smtpUser) {
     activeProvider = 'smtp';
     senderEmail = `${smtpUser}@${smtpHost}`;
+    source = getSetting('smtp_host') ? 'db' : 'env';
   }
 
   return {
     isConfigured: activeProvider !== 'demo',
     activeProvider,
     senderEmail,
+    maskedPass,
+    source,
     mode: activeProvider !== 'demo' ? 'live' : 'demo'
   };
 }

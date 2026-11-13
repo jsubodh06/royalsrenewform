@@ -411,6 +411,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     isConfigured: boolean;
     activeProvider: string;
     senderEmail: string;
+    maskedPass?: string | null;
+    source?: 'env' | 'db' | null;
     mode: string;
   } | null>(null);
   const [loadingEmailConfig, setLoadingEmailConfig] = useState(false);
@@ -644,6 +646,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       loadFamilyRegistrations();
       loadMembers();
       loadCorrections();
+      loadEmailConfig();
     }
   }, [adminToken, verificationFilter, year2Filter, correctionFilter, pagination.page]);
 
@@ -2809,6 +2812,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ? `Dispatches real 6-digit OTP verification emails via ${emailConfig.senderEmail}.`
                     : 'OTP emails cannot be sent until credentials are saved. Configure your 16-character Google App Password or Resend API key below.'}
                 </p>
+                {emailConfig?.isConfigured && emailConfig.maskedPass && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="font-mono font-semibold bg-white/90 px-2.5 py-0.5 rounded-lg border border-emerald-200 text-emerald-900">
+                      Saved Key: {emailConfig.maskedPass}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-lg bg-white/80 border border-emerald-200 text-emerald-800 font-medium">
+                      {emailConfig.source === 'env'
+                        ? 'Permanent (Environment Secrets)'
+                        : 'Session / Container DB (Add GMAIL_USER & GMAIL_APP_PASS in Secrets to persist across restarts)'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2823,6 +2838,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             )}
           </div>
+
+          {(!emailConfig?.isConfigured || emailConfig?.source !== 'env') && (
+            <div className="p-3.5 rounded-2xl bg-blue-50/80 border border-blue-200 text-blue-950 text-xs space-y-1">
+              <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                <Shield className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>Why does a saved key reset on server restart?</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-blue-900">
+                Saving a key here stores it inside this server&apos;s temporary container database, which resets whenever Cloud Run restarts, updates, or goes idle.
+                To keep your 16-digit Gmail App Password permanently across all restarts &amp; shared deployments, add{' '}
+                <code className="bg-white px-1 py-0.5 rounded border border-blue-200 font-mono font-bold">GMAIL_USER</code> and{' '}
+                <code className="bg-white px-1 py-0.5 rounded border border-blue-200 font-mono font-bold">GMAIL_APP_PASS</code>{' '}
+                in AI Studio <strong>Secrets / Environment Variables</strong>.
+              </p>
+            </div>
+          )}
 
           {/* Provider Selection Tabs */}
           <div className="space-y-4">

@@ -531,6 +531,8 @@ export async function getEmailConfigApi() {
     isConfigured: boolean;
     activeProvider: 'resend' | 'brevo' | 'gmail' | 'smtp' | 'demo';
     senderEmail: string;
+    maskedPass?: string | null;
+    source?: 'env' | 'db' | null;
     mode: 'live' | 'demo';
   }>('/family/email-config');
 }
@@ -541,6 +543,8 @@ export async function saveEmailConfigApi(config: any) {
     isConfigured: boolean;
     activeProvider: string;
     senderEmail: string;
+    maskedPass?: string | null;
+    source?: 'env' | 'db' | null;
     mode: string;
   }>('/family/email-config', {
     method: 'POST',
