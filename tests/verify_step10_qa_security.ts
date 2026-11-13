@@ -449,7 +449,7 @@ async function runStep10QA() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       email: 'subodhjain2007777@gmail.com',
-      password: 'royals2027'
+      password: 'rroyals2027'
     })
   });
   const adminLoginData = await adminLoginRes.json();

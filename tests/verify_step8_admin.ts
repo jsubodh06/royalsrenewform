@@ -32,7 +32,7 @@ async function runTests() {
     const res = await fetch(`${BASE_URL}/auth/admin-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'subodhjain2007777@gmail.com', pin: 'royals2027' })
+      body: JSON.stringify({ email: 'subodhjain2007777@gmail.com', pin: 'rroyals2027' })
     });
     const data = await res.json();
     assert(
@@ -49,7 +49,7 @@ async function runTests() {
     const res = await fetch(`${BASE_URL}/auth/admin-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@jsgroyals.org', pin: 'royals2027' })
+      body: JSON.stringify({ email: 'admin@jsgroyals.org', pin: 'rroyals2027' })
     });
     const data = await res.json();
     adminToken = data.token;

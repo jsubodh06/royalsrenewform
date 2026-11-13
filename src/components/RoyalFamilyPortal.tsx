@@ -29,7 +29,9 @@ import {
   Gem,
   Printer,
   Share2,
-  KeyRound
+  KeyRound,
+  ExternalLink,
+  Link2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -47,6 +49,255 @@ export interface ChildItem {
   dob: string;
   education: string;
   interests?: string;
+  photo_url?: string;
+}
+
+interface PhotoUploadOrDriveLinkProps {
+  label: string;
+  subtitle?: string;
+  value: string | null;
+  onChange: (url: string | null) => void;
+  required?: boolean;
+}
+
+function PhotoUploadOrDriveLink({
+  label,
+  subtitle,
+  value,
+  onChange,
+  required = false
+}: PhotoUploadOrDriveLinkProps) {
+  const [activeTab, setActiveTab] = useState<'upload' | 'drive'>('upload');
+  const [driveInput, setDriveInput] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isDriveLink = Boolean(
+    value &&
+    !value.startsWith('data:') &&
+    (value.includes('drive.google.com') || value.includes('google.com') || value.startsWith('http://') || value.startsWith('https://'))
+  );
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File size must be under 10 MB');
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      const res = await uploadFamilyPhotoApi(file);
+      onChange(res.url);
+    } catch (err: any) {
+      setError(err?.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSaveDriveLink = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!driveInput.trim()) {
+      setError('Please paste a valid Google Drive or cloud link.');
+      return;
+    }
+    setError(null);
+    onChange(driveInput.trim());
+    setDriveInput('');
+  };
+
+  return (
+    <div className="p-3.5 rounded-xl bg-white border border-[#E2D5BE] space-y-2.5">
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-[#44403C]">
+            {label} {required && <span className="text-red-500">*</span>}
+          </label>
+          {subtitle && <p className="text-[10px] text-[#78716C]">{subtitle}</p>}
+        </div>
+
+        {value && (
+          <button
+            type="button"
+            onClick={() => {
+              onChange(null);
+              setDriveInput('');
+              setError(null);
+            }}
+            className="text-[10px] text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 cursor-pointer"
+          >
+            <Trash2 className="w-3 h-3" />
+            <span>Remove</span>
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-[11px] flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {value ? (
+        <div className="p-2.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE] flex items-center gap-3">
+          {isDriveLink ? (
+            <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center shrink-0">
+              <Link2 className="w-6 h-6 text-blue-600" />
+            </div>
+          ) : (
+            <img
+              src={value}
+              alt="Photo preview"
+              className="w-12 h-12 rounded-xl object-cover border border-[#D9CDB8] shrink-0"
+            />
+          )}
+
+          <div className="flex-1 min-w-0">
+            <span className="text-[10px] font-bold uppercase text-[#8C6D2B] block">
+              {isDriveLink ? 'Google Drive / Cloud Link Attached' : 'Photo Attached'}
+            </span>
+            <p className="text-xs text-[#1C1917] truncate font-mono" title={value}>
+              {value}
+            </p>
+          </div>
+
+          {isDriveLink && (
+            <a
+              href={value}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold shrink-0 transition-colors shadow-2xs"
+            >
+              <span>Open Link</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {/* Tabs for Upload vs Drive */}
+          <div className="flex rounded-lg bg-[#FAF7F2] p-0.5 border border-[#E2D5BE]">
+            <button
+              type="button"
+              onClick={() => { setActiveTab('upload'); setError(null); }}
+              className={`flex-1 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTab === 'upload'
+                  ? 'bg-white text-[#1C1917] shadow-2xs'
+                  : 'text-[#78716C] hover:text-[#1C1917]'
+              }`}
+            >
+              <Upload className="w-3 h-3 text-[#8C6D2B]" />
+              <span>Upload Image File</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('drive'); setError(null); }}
+              className={`flex-1 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTab === 'drive'
+                  ? 'bg-white text-[#1C1917] shadow-2xs'
+                  : 'text-[#78716C] hover:text-[#1C1917]'
+              }`}
+            >
+              <Link2 className="w-3 h-3 text-blue-600" />
+              <span>Paste Google Drive URL</span>
+            </button>
+          </div>
+
+          {activeTab === 'upload' ? (
+            <label className="border border-dashed border-[#D9CDB8] hover:border-[#8C6D2B] rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition-all bg-[#FAF7F2] hover:bg-[#F5EFE6]">
+              <ImageIcon className="w-4 h-4 text-[#8C6D2B]" />
+              <span className="text-xs font-semibold text-[#1C1917]">
+                {uploading ? 'Uploading image...' : 'Choose image (JPG/PNG)'}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                disabled={uploading}
+                className="hidden"
+              />
+            </label>
+          ) : (
+            <div className="flex gap-1.5">
+              <input
+                type="url"
+                value={driveInput}
+                onChange={(e) => setDriveInput(e.target.value)}
+                onBlur={() => {
+                  const trimmed = driveInput.trim();
+                  if (trimmed && (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.includes('drive.google.com'))) {
+                    onChange(trimmed);
+                    setDriveInput('');
+                    setError(null);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSaveDriveLink();
+                  }
+                }}
+                placeholder="https://drive.google.com/file/d/... or Photos link"
+                className="flex-1 px-3 py-1.5 rounded-lg border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-1 focus:ring-[#C5A869]"
+              />
+              <button
+                type="button"
+                onClick={() => handleSaveDriveLink()}
+                className="px-3 py-1.5 rounded-lg bg-[#1C1917] text-[#D4AF37] text-xs font-semibold hover:bg-[#2A2623] cursor-pointer shrink-0"
+              >
+                Attach Link
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function isCloudDriveLink(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return !url.startsWith('data:') && !url.startsWith('/api/family/photo/');
+}
+
+function DossierPhotoThumbnail({ url, alt }: { url?: string | null; alt: string }) {
+  if (!url) return null;
+  const isDrive = isCloudDriveLink(url);
+  if (isDrive) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 text-[11px] font-semibold transition-colors mt-1.5 max-w-full"
+      >
+        <Link2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+        <span className="truncate max-w-[200px]">{url}</span>
+        <ExternalLink className="w-3 h-3 shrink-0" />
+      </a>
+    );
+  }
+  return (
+    <div className="mt-2 flex items-center gap-2.5">
+      <img
+        src={url}
+        alt={alt}
+        className="w-14 h-14 rounded-xl object-cover border border-[#D9CDB8] shadow-2xs shrink-0"
+      />
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[11px] font-semibold text-[#8C6D2B] hover:underline inline-flex items-center gap-1"
+      >
+        <span>Open Photo</span>
+        <ExternalLink className="w-3 h-3" />
+      </a>
+    </div>
+  );
 }
 
 interface RoyalFamilyPortalProps {
@@ -147,12 +398,12 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
   const [hasChildren, setHasChildren] = useState<boolean>(true);
   const [children, setChildren] = useState<ChildItem[]>([
-    { id: '1', name: '', gender: 'son', dob: '', education: '', interests: '' }
+    { id: '1', name: '', gender: 'son', dob: '', education: '', interests: '', photo_url: '' }
   ]);
 
+  const [husbandPhotoUrl, setHusbandPhotoUrl] = useState<string | null>(null);
+  const [wifePhotoUrl, setWifePhotoUrl] = useState<string | null>(null);
   const [familyPhotoUrl, setFamilyPhotoUrl] = useState<string | null>(null);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const [contributionAreas, setContributionAreas] = useState<string[]>([
     'Cultural & Stage Programs',
@@ -160,6 +411,54 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   ]);
   const [royalIdea, setRoyalIdea] = useState('');
   const [jsgShouldBeKnownFor, setJsgShouldBeKnownFor] = useState('');
+
+  // Clean Entrance Reset Helper (always lands back on initial Email gate screen)
+  const resetToEntrance = () => {
+    setGateOtpStep('email');
+    setGateOtp('');
+    setGateEmail('');
+    setIsEmailVerified(false);
+    setResendCooldown(0);
+    setGateError(null);
+    setGateSuccessMsg(null);
+    setExistingRecord(null);
+    setFinalRegistration(null);
+    setActiveStep(1);
+
+    setHusbandName('');
+    setHusbandMobile('');
+    setHusbandEmail('');
+    setHusbandDob('');
+    setHusbandQualification('');
+    setHusbandOccupation('');
+    setHusbandOrganization('');
+    setHusbandBloodGroup('O+');
+    setHusbandPhotoUrl(null);
+
+    setWifeName('');
+    setWifeMobile('');
+    setWifeEmail('');
+    setWifeDob('');
+    setWifeQualification('');
+    setWifeOccupation('');
+    setWifeOrganization('');
+    setWifeBloodGroup('O+');
+    setWifePhotoUrl(null);
+
+    setMarriageAnniversary('');
+    setCurrentCity('Indore');
+    setResidentialAddress('');
+    setNativePlace('');
+
+    setHasChildren(true);
+    setChildren([{ id: '1', name: '', gender: 'son', dob: '', education: '', interests: '', photo_url: '' }]);
+    setFamilyPhotoUrl(null);
+    setRoyalIdea('');
+    setJsgShouldBeKnownFor('');
+    setSubmitError(null);
+
+    setCurrentView('gate');
+  };
 
   // Submission State
   const [submitting, setSubmitting] = useState(false);
@@ -333,7 +632,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     const newId = String(Date.now());
     setChildren((prev) => [
       ...prev,
-      { id: newId, name: '', gender: 'son', dob: '', education: '', interests: '' }
+      { id: newId, name: '', gender: 'son', dob: '', education: '', interests: '', photo_url: '' }
     ]);
   };
 
@@ -347,36 +646,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     );
   };
 
-  // 3. Photo Upload Helper
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setPhotoError('Please select a valid image file (JPG, PNG, WEBP).');
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setPhotoError('Photo size must be less than 10 MB.');
-      return;
-    }
-
-    setUploadingPhoto(true);
-    setPhotoError(null);
-
-    try {
-      const res = await uploadFamilyPhotoApi(file);
-      setFamilyPhotoUrl(res.url);
-      triggerConfettiFanfare();
-    } catch (err: any) {
-      setPhotoError(err?.message || 'Failed to upload photo.');
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
-
-  // 4. Contribution areas toggle
+  // 3. Contribution areas toggle
   const toggleContributionArea = (area: string) => {
     setContributionAreas((prev) =>
       prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
@@ -428,6 +698,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       husband_occupation: husbandOccupation.trim() || null,
       husband_organization: husbandOrganization.trim() || null,
       husband_blood_group: husbandBloodGroup,
+      husband_photo_url: husbandPhotoUrl || null,
       wife_name: wifeName.trim(),
       wife_mobile: wifeMobile.trim(),
       wife_email: wifeEmail.trim().toLowerCase(),
@@ -436,13 +707,22 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       wife_occupation: wifeOccupation.trim() || null,
       wife_organization: wifeOrganization.trim() || null,
       wife_blood_group: wifeBloodGroup,
+      wife_photo_url: wifePhotoUrl || null,
       marriage_anniversary: marriageAnniversary,
       current_city: currentCity.trim(),
       residential_address: residentialAddress.trim(),
       native_place: nativePlace.trim() || null,
       has_children: hasChildren,
-      children: hasChildren ? children.filter((c) => c.name.trim().length > 0) : [],
-      family_photo_url: familyPhotoUrl,
+      children: hasChildren ? children.filter((c) => c.name.trim().length > 0).map((c) => ({
+        id: c.id,
+        name: c.name.trim(),
+        gender: c.gender,
+        dob: c.dob || '',
+        education: c.education || '',
+        interests: c.interests || '',
+        photo_url: c.photo_url || null
+      })) : [],
+      family_photo_url: familyPhotoUrl || null,
       contribution_areas: contributionAreas.join(', '),
       royal_idea: royalIdea.trim() || null,
       jsg_should_be_known_for: jsgShouldBeKnownFor.trim() || null
@@ -628,7 +908,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     <input
                       type="email"
                       required
-                      placeholder="e.g. subodhjain2007777@gmail.com"
+                      placeholder="e.g. royalfamily@example.com"
                       value={gateEmail}
                       onChange={(e) => setGateEmail(e.target.value)}
                       className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-[#D9CDB8] text-sm text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869] transition-all shadow-xs"
@@ -852,6 +1132,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     {existingRecord.husband_occupation && (
                       <div>💼 {existingRecord.husband_occupation} {existingRecord.husband_organization ? `at ${existingRecord.husband_organization}` : ''}</div>
                     )}
+                    <DossierPhotoThumbnail url={existingRecord.husband_photo_url} alt={existingRecord.husband_name} />
                   </div>
                 </div>
 
@@ -879,6 +1160,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     {existingRecord.wife_occupation && (
                       <div>💼 {existingRecord.wife_occupation} {existingRecord.wife_organization ? `at ${existingRecord.wife_organization}` : ''}</div>
                     )}
+                    <DossierPhotoThumbnail url={existingRecord.wife_photo_url} alt={existingRecord.wife_name} />
                   </div>
                 </div>
               </div>
@@ -909,14 +1191,17 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {existingRecord.children.map((child: any, idx: number) => (
-                      <div key={idx} className="p-3 rounded-lg bg-white border border-[#E7DDCE] text-xs flex items-center justify-between">
-                        <div>
-                          <div className="font-bold text-[#1C1917]">{child.name}</div>
-                          <div className="text-[11px] text-[#78716C]">{child.education || 'Royal Heir'}</div>
+                      <div key={idx} className="p-3 rounded-lg bg-white border border-[#E7DDCE] text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-[#1C1917]">{child.name}</div>
+                            <div className="text-[11px] text-[#78716C]">{child.education || 'Royal Heir'}</div>
+                          </div>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-[#FAF7F2] text-[#8C6D2B]">
+                            {child.gender}
+                          </span>
                         </div>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-[#FAF7F2] text-[#8C6D2B]">
-                          {child.gender}
-                        </span>
+                        <DossierPhotoThumbnail url={child.photo_url} alt={child.name} />
                       </div>
                     ))}
                   </div>
@@ -929,13 +1214,19 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#8C6D2B] block mb-2">
                     📸 Registered Royal Family Portrait
                   </span>
-                  <div className="inline-block p-2 rounded-2xl bg-white gilded-frame">
-                    <img
-                      src={existingRecord.family_photo_url}
-                      alt="Royal Family"
-                      className="max-h-52 rounded-xl object-contain mx-auto"
-                    />
-                  </div>
+                  {isCloudDriveLink(existingRecord.family_photo_url) ? (
+                    <div className="flex justify-center">
+                      <DossierPhotoThumbnail url={existingRecord.family_photo_url} alt="Royal Family Portrait" />
+                    </div>
+                  ) : (
+                    <div className="inline-block p-2 rounded-2xl bg-white gilded-frame">
+                      <img
+                        src={existingRecord.family_photo_url}
+                        alt="Royal Family"
+                        className="max-h-52 rounded-xl object-contain mx-auto"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -953,11 +1244,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
               <button
                 type="button"
-                onClick={() => {
-                  setExistingRecord(null);
-                  setGateEmail('');
-                  setCurrentView('gate');
-                }}
+                onClick={resetToEntrance}
                 className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white hover:bg-[#FAF7F2] text-[#1C1917] font-semibold text-xs border border-[#D9CDB8] transition-all cursor-pointer"
               >
                 ← Return to Entrance
@@ -1192,6 +1479,14 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       />
                     </div>
                   </div>
+
+                  {/* Husband Portrait Photo / Google Drive Link */}
+                  <PhotoUploadOrDriveLink
+                    label="📸 Husband Photo / Google Drive Link"
+                    subtitle="Upload a portrait of the husband or paste a Google Drive photo URL"
+                    value={husbandPhotoUrl}
+                    onChange={setHusbandPhotoUrl}
+                  />
                 </div>
               )}
 
@@ -1335,6 +1630,14 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       />
                     </div>
                   </div>
+
+                  {/* Wife Portrait Photo / Google Drive Link */}
+                  <PhotoUploadOrDriveLink
+                    label="📸 Wife Photo / Google Drive Link"
+                    subtitle="Upload a portrait of the wife or paste a Google Drive photo URL"
+                    value={wifePhotoUrl}
+                    onChange={setWifePhotoUrl}
+                  />
                 </div>
               )}
 
@@ -1545,6 +1848,14 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                               />
                             </div>
                           </div>
+
+                          {/* Child Photo / Google Drive Link */}
+                          <PhotoUploadOrDriveLink
+                            label={`📸 ${child.name.trim() ? `${child.name.trim()}'s` : `Child #${index + 1}`} Photo / Google Drive Link`}
+                            subtitle="Upload a portrait of this child or paste a Google Drive photo URL"
+                            value={child.photo_url || null}
+                            onChange={(url) => handleUpdateChild(child.id, 'photo_url', url || '')}
+                          />
                         </div>
                       ))}
 
@@ -1571,62 +1882,14 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
               {activeStep === 5 && (
                 <div key={5} className="space-y-6 animate-fade-in-up">
                   
-                  {/* Photo Upload with Gilded Frame */}
+                  {/* Family Portrait Photo or Google Drive Link */}
                   <div className="p-5 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE] space-y-3">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C]">
-                      📸 Royal Family Portrait Photo
-                    </label>
-                    <p className="text-[11px] text-[#78716C]">
-                      Upload a high-resolution photo of your royal family for the 2027 Heritage Directory.
-                    </p>
-
-                    {photoError && (
-                      <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 shrink-0" />
-                        <span>{photoError}</span>
-                      </div>
-                    )}
-
-                    {familyPhotoUrl ? (
-                      <div className="text-center space-y-3">
-                        <div className="inline-block p-2 rounded-2xl bg-white gilded-frame shadow-md">
-                          <img
-                            src={familyPhotoUrl}
-                            alt="Family Preview"
-                            className="max-h-56 rounded-xl object-contain mx-auto"
-                          />
-                        </div>
-                        <div>
-                          <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#FAF7F2] cursor-pointer shadow-xs">
-                            <Upload className="w-3.5 h-3.5 text-[#8C6D2B]" />
-                            <span>Replace Photo</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handlePhotoUpload}
-                              className="hidden"
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="border-2 border-dashed border-[#D9CDB8] hover:border-[#8C6D2B] rounded-2xl p-7 flex flex-col items-center justify-center cursor-pointer transition-all bg-white hover:bg-[#FBF8F3]">
-                        <ImageIcon className="w-10 h-10 text-[#8C6D2B] mb-2 opacity-70" />
-                        <span className="text-xs font-bold text-[#1C1917]">
-                          {uploadingPhoto ? 'Processing Image...' : 'Click to Upload Royal Portrait'}
-                        </span>
-                        <span className="text-[10px] text-[#78716C] mt-1">
-                          Supports JPG, PNG up to 10 MB
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handlePhotoUpload}
-                          disabled={uploadingPhoto}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
+                    <PhotoUploadOrDriveLink
+                      label="📸 Royal Family Group Portrait / Google Drive Link"
+                      subtitle="Upload a high-resolution family photo or paste your Google Drive link for the 2027 Heritage Directory"
+                      value={familyPhotoUrl}
+                      onChange={setFamilyPhotoUrl}
+                    />
                   </div>
 
                   {/* Contribution Areas */}
@@ -1707,6 +1970,9 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         <div className="font-bold text-sm text-white">{husbandName || 'Not entered'}</div>
                         <div className="text-[11px] text-[#D6D3D1]">{husbandMobile}</div>
                         <div className="text-[11px] text-[#A8A29E] truncate">{husbandEmail}</div>
+                        <div className="text-[10px] text-[#D4AF37] pt-1">
+                          {husbandPhotoUrl ? '✓ Photo / Drive Link Attached' : 'No Photo Attached'}
+                        </div>
                       </div>
 
                       <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
@@ -1716,10 +1982,13 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         <div className="font-bold text-sm text-white">{wifeName || 'Not entered'}</div>
                         <div className="text-[11px] text-[#D6D3D1]">{wifeMobile}</div>
                         <div className="text-[11px] text-[#A8A29E] truncate">{wifeEmail}</div>
+                        <div className="text-[10px] text-[#D4AF37] pt-1">
+                          {wifePhotoUrl ? '✓ Photo / Drive Link Attached' : 'No Photo Attached'}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-[#C5A869]/30 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-[#C5A869]/30 text-xs">
                       <div>
                         <span className="text-[10px] text-[#A8A29E] uppercase block">Anniversary</span>
                         <span className="font-semibold text-[#D4AF37]">{marriageAnniversary || 'None'}</span>
@@ -1732,6 +2001,12 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         <span className="text-[10px] text-[#A8A29E] uppercase block">Children</span>
                         <span className="text-white">
                           {hasChildren ? `${children.filter((c) => c.name.trim().length > 0).length} Royal Heir(s)` : 'None'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-[#A8A29E] uppercase block">Family Portrait</span>
+                        <span className="text-[#D4AF37]">
+                          {familyPhotoUrl ? '✓ Attached' : 'Not set'}
                         </span>
                       </div>
                     </div>
@@ -1764,7 +2039,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setCurrentView('gate')}
+                    onClick={resetToEntrance}
                     className="px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#FAF7F2] transition-all cursor-pointer"
                   >
                     Change Email / Exit
@@ -1836,59 +2111,173 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
               </h2>
               <RoyalFlourish />
               <p className="text-xs sm:text-sm text-[#78716C] max-w-md mx-auto">
-                Congratulations! Your royal household has been entered into the JSG Royals Year 2 • 2027 Directory.
+                Congratulations! Your royal household has been officially entered into the JSG Royals Year 2 • 2027 Directory.
               </p>
             </div>
 
             {finalRegistration && (
-              <div className="p-5 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] text-xs space-y-2.5 text-left shadow-2xs">
-                <div className="flex items-center justify-between pb-2 border-b border-[#E2D5BE]">
-                  <span className="font-bold text-[#1C1917] uppercase tracking-wider text-[11px]">Official Registration Code:</span>
-                  <span className="font-mono font-bold text-sm text-[#8C6D2B] bg-white px-2.5 py-0.5 rounded border border-[#E2D5BE]">
-                    {finalRegistration.reg_id}
-                  </span>
+              <div className="space-y-4 text-left">
+                {/* Official Code Header */}
+                <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-[#78716C] uppercase tracking-wider block">Official Registration Code</span>
+                    <span className="font-mono font-black text-lg text-[#8C6D2B]">{finalRegistration.reg_id}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                      Sealed &amp; Verified
+                    </span>
+                    <span className="text-[10px] text-[#78716C] block mt-1">
+                      {new Date(finalRegistration.created_at || Date.now()).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[#57534E]">
-                  <span>Royal Couple:</span>
-                  <span className="font-semibold text-[#1C1917]">
-                    {finalRegistration.husband_name} &amp; {finalRegistration.wife_name}
-                  </span>
+
+                {/* Husband & Wife Profiles */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  {/* Husband */}
+                  <div className="p-4 rounded-xl bg-white border border-[#E2D5BE] space-y-2">
+                    <div className="flex items-center justify-between border-b border-[#F0E8DC] pb-1.5">
+                      <span className="font-bold text-[#8C6D2B] uppercase text-[10px] tracking-wider">🤵 Royal Gentleman</span>
+                      <span className="text-[10px] bg-[#FAF7F2] px-2 py-0.5 rounded text-[#78716C] border border-[#E2D5BE]">Husband</span>
+                    </div>
+                    <div className="font-serif-royal font-bold text-sm text-[#1C1917]">{finalRegistration.husband_name}</div>
+                    <div className="space-y-1 text-[#57534E] text-[11px]">
+                      <div>📱 <span className="font-mono">{finalRegistration.husband_mobile}</span></div>
+                      <div>✉️ {finalRegistration.husband_email}</div>
+                      {finalRegistration.husband_occupation && <div>💼 {finalRegistration.husband_occupation}{finalRegistration.husband_organization ? ` at ${finalRegistration.husband_organization}` : ''}</div>}
+                      {finalRegistration.husband_blood_group && <div>🩸 Blood Group: <strong>{finalRegistration.husband_blood_group}</strong></div>}
+                      <DossierPhotoThumbnail url={finalRegistration.husband_photo_url} alt={finalRegistration.husband_name} />
+                    </div>
+                  </div>
+
+                  {/* Wife */}
+                  <div className="p-4 rounded-xl bg-white border border-[#E2D5BE] space-y-2">
+                    <div className="flex items-center justify-between border-b border-[#F0E8DC] pb-1.5">
+                      <span className="font-bold text-rose-800 uppercase text-[10px] tracking-wider">👰 Royal Lady</span>
+                      <span className="text-[10px] bg-[#FAF7F2] px-2 py-0.5 rounded text-[#78716C] border border-[#E2D5BE]">Wife</span>
+                    </div>
+                    <div className="font-serif-royal font-bold text-sm text-[#1C1917]">{finalRegistration.wife_name}</div>
+                    <div className="space-y-1 text-[#57534E] text-[11px]">
+                      <div>📱 <span className="font-mono">{finalRegistration.wife_mobile}</span></div>
+                      <div>✉️ {finalRegistration.wife_email}</div>
+                      {finalRegistration.wife_occupation && <div>💼 {finalRegistration.wife_occupation}{finalRegistration.wife_organization ? ` at ${finalRegistration.wife_organization}` : ''}</div>}
+                      {finalRegistration.wife_blood_group && <div>🩸 Blood Group: <strong>{finalRegistration.wife_blood_group}</strong></div>}
+                      <DossierPhotoThumbnail url={finalRegistration.wife_photo_url} alt={finalRegistration.wife_name} />
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[#57534E]">
-                  <span>City:</span>
-                  <span className="font-semibold text-[#1C1917]">{finalRegistration.current_city}</span>
+
+                {/* Residence & Anniversary */}
+                <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E2D5BE] text-xs space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#78716C] block">Marriage Anniversary</span>
+                      <span className="font-semibold text-[#1C1917]">{finalRegistration.marriage_anniversary}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#78716C] block">Current City</span>
+                      <span className="font-semibold text-[#1C1917]">{finalRegistration.current_city}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#78716C] block">Residential Address</span>
+                    <span className="text-[#1C1917]">{finalRegistration.residential_address}</span>
+                  </div>
+                  {finalRegistration.native_place && (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#78716C] block">Native Place</span>
+                      <span className="text-[#1C1917]">{finalRegistration.native_place}</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between text-[#57534E]">
-                  <span>Anniversary:</span>
-                  <span className="font-semibold text-[#1C1917]">{finalRegistration.marriage_anniversary}</span>
-                </div>
+
+                {/* Children Details */}
+                {finalRegistration.children && finalRegistration.children.length > 0 && (
+                  <div className="p-4 rounded-xl bg-white border border-[#E2D5BE] text-xs space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-[#78716C] block">
+                      Royal Children ({finalRegistration.children.length})
+                    </span>
+                    <div className="space-y-2">
+                      {finalRegistration.children.map((c: any, idx: number) => (
+                        <div key={idx} className="p-2.5 rounded-lg bg-[#FAF7F2] border border-[#E2D5BE] space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-[#1C1917]">{c.name}</span>
+                            <span className="text-[10px] uppercase font-bold text-[#8C6D2B] bg-white px-2 py-0.5 rounded border border-[#E2D5BE]">
+                              {c.gender} {c.dob ? `• ${c.dob}` : ''}
+                            </span>
+                          </div>
+                          <DossierPhotoThumbnail url={c.photo_url} alt={c.name} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Family Portrait */}
+                {finalRegistration.family_photo_url && (
+                  <div className="p-4 rounded-xl bg-white border border-[#E2D5BE] text-xs space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-[#78716C] block">
+                      📸 Family Portrait Photo / Drive URL
+                    </span>
+                    <DossierPhotoThumbnail url={finalRegistration.family_photo_url} alt="Family Portrait" />
+                  </div>
+                )}
+
+                {/* Contributions / Vision */}
+                {(finalRegistration.contribution_areas || finalRegistration.royal_idea || finalRegistration.jsg_should_be_known_for) && (
+                  <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E2D5BE] text-xs space-y-2">
+                    {finalRegistration.contribution_areas && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#78716C] block">Areas of Contribution</span>
+                        <span className="text-[#1C1917] font-medium">{finalRegistration.contribution_areas}</span>
+                      </div>
+                    )}
+                    {finalRegistration.royal_idea && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#78716C] block">Royal Year 2 Idea</span>
+                        <p className="text-[#57534E] italic font-serif-royal">"{finalRegistration.royal_idea}"</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs text-left flex items-start gap-3">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
               <div>
-                <strong>Spouse Sync is Live:</strong> When your spouse enters with their email, they will automatically be greeted with this verified dossier.
+                <strong>Cross-Spouse Sync Enabled:</strong> Your registration has been securely recorded. When your spouse logs in with their email, they will automatically see this verified family dossier.
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
               <button
                 type="button"
-                onClick={triggerConfettiFanfare}
-                className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-[#1C1917] hover:bg-[#2A2623] text-[#FAF7F2] font-semibold text-xs shadow-md transition-all flex items-center justify-center gap-2 border border-[#C5A869]/40 cursor-pointer"
+                onClick={() => window.print()}
+                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white hover:bg-[#FAF7F2] text-[#1C1917] font-semibold text-xs border border-[#D9CDB8] shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <PartyPopper className="w-4 h-4 text-[#D4AF37]" />
-                <span>Celebrate &amp; Confetti!</span>
+                <Printer className="w-4 h-4 text-[#8C6D2B]" />
+                <span>Print / Save Dossier Slip</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setGateEmail('');
-                  setCurrentView('gate');
-                }}
-                className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white hover:bg-[#FAF7F2] text-[#1C1917] font-semibold text-xs border border-[#D9CDB8] transition-all cursor-pointer"
+                onClick={triggerConfettiFanfare}
+                className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-[#1C1917] hover:bg-[#2A2623] text-[#FAF7F2] font-semibold text-xs shadow-md transition-all flex items-center justify-center gap-2 border border-[#C5A869]/40 cursor-pointer"
+              >
+                <PartyPopper className="w-4 h-4 text-[#D4AF37]" />
+                <span>Celebrate!</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={resetToEntrance}
+                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-white hover:bg-[#FAF7F2] text-[#78716C] hover:text-[#1C1917] font-semibold text-xs border border-[#D9CDB8] transition-all cursor-pointer"
               >
                 ← Return to Entrance
               </button>

@@ -218,7 +218,7 @@ apiRouter.get('/test/sample-accounts', (req, res) => {
       testMode: true,
       fixedTestOtp: '123456',
       adminDefaultEmail: 'subodhjain2007777@gmail.com',
-      adminDefaultPin: 'royals2027',
+      adminDefaultPin: 'rroyals2027',
       samples
     });
   } catch (err: any) {
@@ -1150,6 +1150,8 @@ apiRouter.get('/admin/overview', requireAdmin, (req: AuthenticatedRequest, res: 
 
     const incompleteCount = startedCount;
     const pendingCorrectionsCount = (db.prepare("SELECT COUNT(*) as count FROM correction_requests WHERE status = 'pending'").get() as any).count;
+    const freshFamilyRow = (db.prepare('SELECT COUNT(*) as count FROM family_registrations').get() as any);
+    const freshFamilyCount = freshFamilyRow ? freshFamilyRow.count : 0;
 
     res.json({
       totalMembers,
@@ -1158,7 +1160,8 @@ apiRouter.get('/admin/overview', requireAdmin, (req: AuthenticatedRequest, res: 
       startedCount,
       incompleteCount,
       submittedCount,
-      pendingCorrectionsCount
+      pendingCorrectionsCount,
+      freshFamilyCount
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch admin overview.' });
@@ -2049,6 +2052,8 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       native_place,
       has_children,
       children,
+      husband_photo_url,
+      wife_photo_url,
       family_photo_url,
       contribution_areas,
       royal_idea,
@@ -2121,7 +2126,8 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
         wife_name, wife_mobile, wife_email, wife_dob,
         wife_qualification, wife_occupation, wife_organization, wife_blood_group,
         marriage_anniversary, current_city, residential_address, native_place,
-        has_children, children_json, family_photo_url,
+        has_children, children_json,
+        husband_photo_url, wife_photo_url, family_photo_url,
         contribution_areas, royal_idea, jsg_should_be_known_for,
         status, created_at, updated_at
       ) VALUES (
@@ -2131,6 +2137,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
+        ?, ?,
         ?, ?, ?,
         ?, ?, ?,
         'submitted', ?, ?
@@ -2142,7 +2149,8 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       wife_name.trim(), wife_mobile.trim(), wEmail, wife_dob || null,
       wife_qualification || null, wife_occupation || null, wife_organization || null, wife_blood_group || null,
       marriage_anniversary, current_city.trim(), residential_address.trim(), native_place || null,
-      has_children ? 1 : 0, childrenJson, family_photo_url || null,
+      has_children ? 1 : 0, childrenJson,
+      husband_photo_url || null, wife_photo_url || null, family_photo_url || null,
       contribution_areas || null, royal_idea || null, jsg_should_be_known_for || null,
       now, now
     );
@@ -2189,17 +2197,42 @@ apiRouter.post('/family/upload-photo', handlePhotoUploadMiddleware, (req: any, r
     const filePath = path.resolve(targetDir, filename);
     fs.writeFileSync(filePath, req.file.buffer);
 
-    // Also create data URL for instant resilient preview
-    const base64Data = req.file.buffer.toString('base64');
-    const dataUrl = `data:${validation.detectedMime || 'image/jpeg'};base64,${base64Data}`;
+    const publicUrl = `/api/family/photo/${filename}`;
 
     res.json({
       success: true,
       filename,
-      url: dataUrl
+      url: publicUrl
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to upload photo.' });
+  }
+});
+
+// 3b. Serve uploaded family/individual photos cleanly
+apiRouter.get('/family/photo/:filename', (req: Request, res: Response) => {
+  try {
+    const safeFilename = path.basename(req.params.filename || '');
+    if (!safeFilename || safeFilename.includes('..')) {
+      return res.status(400).json({ error: 'Invalid filename.' });
+    }
+    const targetDir = path.resolve(photosBaseDir, 'family');
+    const filePath = path.resolve(targetDir, safeFilename);
+    if (!filePath.startsWith(targetDir) || !fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Photo not found.' });
+    }
+    const ext = path.extname(safeFilename).toLowerCase();
+    const mime =
+      ext === '.png'
+        ? 'image/png'
+        : ext === '.webp'
+          ? 'image/webp'
+          : 'image/jpeg';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    res.sendFile(filePath);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to serve photo.' });
   }
 });
 

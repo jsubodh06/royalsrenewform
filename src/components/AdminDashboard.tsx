@@ -35,7 +35,10 @@ import {
   Send,
   Mail,
   ExternalLink,
-  KeyRound
+  KeyRound,
+  Printer,
+  Link2,
+  Image as ImageIcon
 } from 'lucide-react';
 import {
   getAdminOverviewApi,
@@ -83,17 +86,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAdminLogout,
 }) => {
   // Login form state
-  const [email, setEmail] = useState('subodhjain2007777@gmail.com');
-  const [pin, setPin] = useState('royals2027');
+  const [email, setEmail] = useState('');
+  const [pin, setPin] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Active Tab: 'members' | 'family' | 'corrections' | 'sms' | 'email' | 'audit' | 'export' | 'import'
-  const [activeTab, setActiveTab] = useState<'members' | 'family' | 'corrections' | 'sms' | 'email' | 'audit' | 'export' | 'import'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'family' | 'corrections' | 'sms' | 'email' | 'audit' | 'export' | 'import'>('family');
 
   // Fresh Family Registrations State
   const [familyRegistrations, setFamilyRegistrations] = useState<any[]>([]);
   const [loadingFamilyRegs, setLoadingFamilyRegs] = useState(false);
+  const [viewingFamilyModal, setViewingFamilyModal] = useState<any | null>(null);
+  const [familyFilterSearch, setFamilyFilterSearch] = useState('');
 
   // Central Authentication Error Handler (Auto-logout if session expired or invalid)
   const handleAuthError = (err: any) => {
@@ -119,6 +124,123 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } finally {
       setLoadingFamilyRegs(false);
     }
+  };
+
+  const resolveFullMediaUrl = (url?: string | null): string => {
+    if (!url) return '';
+    if (url.startsWith('/')) {
+      return `${window.location.origin}${url}`;
+    }
+    return url;
+  };
+
+  const isExternalCloudUrl = (url?: string | null): boolean => {
+    if (!url) return false;
+    return !url.startsWith('data:') && !url.startsWith('/api/family/photo/');
+  };
+
+  const exportFamiliesCsv = () => {
+    if (familyRegistrations.length === 0) return;
+    const headers = [
+      'Reg ID',
+      'Submitted By Role',
+      'Submitter Email',
+      'Husband Name',
+      'Husband Mobile',
+      'Husband Email',
+      'Husband DOB',
+      'Husband Qualification',
+      'Husband Occupation',
+      'Husband Organization',
+      'Husband Blood Group',
+      'Husband Photo / Drive URL',
+      'Wife Name',
+      'Wife Mobile',
+      'Wife Email',
+      'Wife DOB',
+      'Wife Qualification',
+      'Wife Occupation',
+      'Wife Organization',
+      'Wife Blood Group',
+      'Wife Photo / Drive URL',
+      'Family Photo / Drive URL',
+      'Anniversary',
+      'City',
+      'Address',
+      'Native Place',
+      'Children Count',
+      'Children Details',
+      'Children Photo / Drive URLs',
+      'Contribution Areas',
+      'Royal Idea',
+      'JSG Vision',
+      'Status',
+      'Registered At'
+    ];
+
+    const escapeCsv = (str: any) => {
+      if (str === null || str === undefined) return '""';
+      const s = String(str).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
+    const rows = familyRegistrations.map((r) => {
+      const kidsList = Array.isArray(r.children) ? r.children : [];
+      const kids = kidsList
+        .map((c: any) => `${c.name || ''} (${c.gender || ''}${c.dob ? `, DOB: ${c.dob}` : ''}${c.photo_url ? `, Photo: ${resolveFullMediaUrl(c.photo_url)}` : ''})`)
+        .join('; ');
+      const kidsPhotoUrls = kidsList
+        .filter((c: any) => c.photo_url)
+        .map((c: any) => `${c.name || 'Child'}: ${resolveFullMediaUrl(c.photo_url)}`)
+        .join(' | ');
+      return [
+        escapeCsv(r.reg_id),
+        escapeCsv(r.submitted_by_role),
+        escapeCsv(r.submitter_email),
+        escapeCsv(r.husband_name),
+        escapeCsv(r.husband_mobile),
+        escapeCsv(r.husband_email),
+        escapeCsv(r.husband_dob),
+        escapeCsv(r.husband_qualification),
+        escapeCsv(r.husband_occupation),
+        escapeCsv(r.husband_organization),
+        escapeCsv(r.husband_blood_group),
+        escapeCsv(resolveFullMediaUrl(r.husband_photo_url)),
+        escapeCsv(r.wife_name),
+        escapeCsv(r.wife_mobile),
+        escapeCsv(r.wife_email),
+        escapeCsv(r.wife_dob),
+        escapeCsv(r.wife_qualification),
+        escapeCsv(r.wife_occupation),
+        escapeCsv(r.wife_organization),
+        escapeCsv(r.wife_blood_group),
+        escapeCsv(resolveFullMediaUrl(r.wife_photo_url)),
+        escapeCsv(resolveFullMediaUrl(r.family_photo_url)),
+        escapeCsv(r.marriage_anniversary),
+        escapeCsv(r.current_city),
+        escapeCsv(r.residential_address),
+        escapeCsv(r.native_place),
+        escapeCsv(kidsList.length),
+        escapeCsv(kids),
+        escapeCsv(kidsPhotoUrls),
+        escapeCsv(r.contribution_areas),
+        escapeCsv(r.royal_idea),
+        escapeCsv(r.jsg_should_be_known_for),
+        escapeCsv(r.status),
+        escapeCsv(r.created_at)
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `JSG_Royals_Family_Registrations_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Step 9 Master Data Import State
@@ -286,13 +408,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   } | null>(null);
   const [loadingEmailConfig, setLoadingEmailConfig] = useState(false);
   const [emailProvider, setEmailProvider] = useState<'gmail' | 'resend'>('gmail');
-  const [gmailUser, setGmailUser] = useState('subodhjain2007777@gmail.com');
+  const [gmailUser, setGmailUser] = useState('');
   const [gmailAppPass, setGmailAppPass] = useState('');
   const [resendApiKey, setResendApiKey] = useState('');
   const [savingEmailConfig, setSavingEmailConfig] = useState(false);
   const [emailSaveSuccess, setEmailSaveSuccess] = useState<string | null>(null);
   const [emailSaveError, setEmailSaveError] = useState<string | null>(null);
-  const [testEmailAddress, setTestEmailAddress] = useState('subodhjain2007777@gmail.com');
+  const [testEmailAddress, setTestEmailAddress] = useState('');
   const [testingEmail, setTestingEmail] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
   const [testEmailError, setTestEmailError] = useState<string | null>(null);
@@ -512,6 +634,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     if (adminToken) {
       loadOverview();
+      loadFamilyRegistrations();
       loadMembers();
       loadCorrections();
     }
@@ -733,6 +856,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@example.com"
                 required
                 className="w-full px-4 py-3 rounded-xl border border-[#D9CDB8] text-sm text-[#1C1917] outline-hidden focus:ring-2 focus:ring-[#C5A869]"
               />
@@ -746,6 +870,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="password"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
+                placeholder="••••••••"
                 required
                 className="w-full px-4 py-3 rounded-xl border border-[#D9CDB8] text-sm text-[#1C1917] outline-hidden focus:ring-2 focus:ring-[#C5A869]"
               />
@@ -767,9 +892,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
           </form>
 
-          <div className="mt-6 p-3 bg-[#FAF7F2] rounded-xl border border-[#E9DFCE] text-[11px] text-[#78716C] text-center space-y-1">
-            <div>Super Admin: <strong>subodhjain2007777@gmail.com</strong> / <strong>royals2027</strong></div>
-            <div>Admin: <strong>admin@jsgroyals.org</strong> / <strong>royals2027</strong></div>
+          <div className="mt-6 text-center text-[11px] text-[#A8A29E] tracking-wider uppercase">
+            Confidential • JSG Royals Central Secretariat
           </div>
         </div>
       </div>
@@ -839,7 +963,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* KPI Overview Tiles */}
       {overview && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+          <div className="bg-gradient-to-br from-[#1C1917] to-[#2B2623] p-4 rounded-2xl border-2 border-[#D4AF37] shadow-md text-white">
+            <span className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-wider block flex items-center gap-1.5">
+              <Crown className="w-3.5 h-3.5 text-[#D4AF37]" /> Fresh Families
+            </span>
+            <span className="font-serif-royal text-2xl font-black text-white">
+              {familyRegistrations.length}
+            </span>
+            <span className="text-[10px] text-[#C5A869] block mt-0.5">Year 2 Registrations</span>
+          </div>
+
           <div className="bg-[#FFFFFF] p-4 rounded-2xl border border-[#E7DDCE] shadow-xs">
             <span className="text-[10px] font-semibold text-[#78716C] uppercase tracking-wider block">
               Total Members
@@ -905,18 +1039,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Main Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-[#E7DDCE] overflow-x-auto">
         <button
-          onClick={() => setActiveTab('members')}
-          className={`pb-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeTab === 'members'
-              ? 'border-[#1C1917] text-[#1C1917]'
-              : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Overview & Members</span>
-        </button>
-
-        <button
           onClick={() => {
             setActiveTab('family');
             loadFamilyRegistrations();
@@ -929,6 +1051,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <Crown className="w-4 h-4 text-[#D4AF37]" />
           <span>Fresh Family Dossiers ({familyRegistrations.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('members')}
+          className={`pb-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'members'
+              ? 'border-[#1C1917] text-[#1C1917]'
+              : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Overview & Members</span>
         </button>
 
         <button
@@ -1028,15 +1162,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={loadFamilyRegistrations}
-              disabled={loadingFamilyRegs}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#F2ECE1] transition-all cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loadingFamilyRegs ? 'animate-spin' : ''}`} />
-              <span>Refresh Submissions</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {familyRegistrations.length > 0 && (
+                <button
+                  type="button"
+                  onClick={exportFamiliesCsv}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#FAF7F2] transition-all cursor-pointer shadow-2xs"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Export CSV ({familyRegistrations.length})</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={loadFamilyRegistrations}
+                disabled={loadingFamilyRegs}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#F2ECE1] transition-all cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingFamilyRegs ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
 
           {familyRegistrations.length === 0 ? (
@@ -1046,8 +1193,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 No Fresh Family Registrations Yet
               </div>
               <p className="text-xs text-[#78716C] max-w-md mx-auto">
-                Members can now register their complete royal household directly from the new home screen.
-                All submissions will instantly appear here with full husband, wife, and children details.
+                Members can now register their complete royal household directly from the home screen.
+                All submissions will instantly appear here with full husband, wife, children details and instant export.
               </p>
             </div>
           ) : (
@@ -1078,6 +1225,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
+              {/* Search Bar for Families */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={familyFilterSearch}
+                  onChange={(e) => setFamilyFilterSearch(e.target.value)}
+                  placeholder="Search family dossiers by husband name, wife name, phone, email, city, or registration code..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE] text-xs text-[#1C1917] placeholder:text-[#A8A29E] focus:outline-none focus:border-[#C5A869]"
+                />
+              </div>
+
               {/* Registrations Table */}
               <div className="overflow-x-auto rounded-2xl border border-[#E7DDCE]">
                 <table className="w-full text-left text-xs">
@@ -1089,61 +1248,151 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="px-4 py-3">Wife Details</th>
                       <th className="px-4 py-3">Anniversary & City</th>
                       <th className="px-4 py-3">Children</th>
+                      <th className="px-4 py-3">Photos &amp; Drive URLs</th>
                       <th className="px-4 py-3">Submitted At</th>
+                      <th className="px-4 py-3 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F0E8DC] bg-white">
-                    {familyRegistrations.map((reg) => (
-                      <tr key={reg.id} className="hover:bg-[#FAF7F2] transition-colors">
-                        <td className="px-4 py-3 font-mono font-bold text-[#8C6D2B] whitespace-nowrap">
-                          {reg.reg_id}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            reg.submitted_by_role === 'husband' ? 'bg-blue-100 text-blue-900' : 'bg-rose-100 text-rose-900'
-                          }`}>
-                            {reg.submitted_by_role}
-                          </span>
-                          <div className="text-[11px] text-[#78716C] mt-0.5 truncate max-w-[120px]" title={reg.submitter_email}>
-                            {reg.submitter_email}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-[#1C1917]">{reg.husband_name}</div>
-                          <div className="text-[11px] text-[#78716C]">{reg.husband_mobile}</div>
-                          <div className="text-[11px] text-[#78716C] truncate max-w-[140px]">{reg.husband_email}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-[#1C1917]">{reg.wife_name}</div>
-                          <div className="text-[11px] text-[#78716C]">{reg.wife_mobile}</div>
-                          <div className="text-[11px] text-[#78716C] truncate max-w-[140px]">{reg.wife_email}</div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="font-semibold text-[#1C1917]">{reg.marriage_anniversary}</div>
-                          <div className="text-[11px] text-[#78716C]">{reg.current_city}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {reg.children && reg.children.length > 0 ? (
-                            <div className="space-y-0.5">
-                              {reg.children.map((c: any, idx: number) => (
-                                <div key={idx} className="text-[11px] text-[#1C1917]">
-                                  • {c.name} ({c.gender})
-                                </div>
-                              ))}
+                    {familyRegistrations
+                      .filter((reg) => {
+                        if (!familyFilterSearch) return true;
+                        const term = familyFilterSearch.toLowerCase();
+                        return (
+                          (reg.husband_name || '').toLowerCase().includes(term) ||
+                          (reg.wife_name || '').toLowerCase().includes(term) ||
+                          (reg.husband_mobile || '').includes(term) ||
+                          (reg.wife_mobile || '').includes(term) ||
+                          (reg.husband_email || '').toLowerCase().includes(term) ||
+                          (reg.wife_email || '').toLowerCase().includes(term) ||
+                          (reg.current_city || '').toLowerCase().includes(term) ||
+                          (reg.reg_id || '').toLowerCase().includes(term)
+                        );
+                      })
+                      .map((reg) => (
+                        <tr key={reg.id} className="hover:bg-[#FAF7F2] transition-colors">
+                          <td className="px-4 py-3 font-mono font-bold text-[#8C6D2B] whitespace-nowrap">
+                            {reg.reg_id}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              reg.submitted_by_role === 'husband' ? 'bg-blue-100 text-blue-900' : 'bg-rose-100 text-rose-900'
+                            }`}>
+                              {reg.submitted_by_role}
+                            </span>
+                            <div className="text-[11px] text-[#78716C] mt-0.5 truncate max-w-[120px]" title={reg.submitter_email}>
+                              {reg.submitter_email}
                             </div>
-                          ) : (
-                            <span className="text-[#78716C] italic">None</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-[11px] text-[#78716C]">
-                          {new Date(reg.created_at).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          })}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-[#1C1917]">{reg.husband_name}</div>
+                            <div className="text-[11px] text-[#78716C]">{reg.husband_mobile}</div>
+                            <div className="text-[11px] text-[#78716C] truncate max-w-[140px]">{reg.husband_email}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-[#1C1917]">{reg.wife_name}</div>
+                            <div className="text-[11px] text-[#78716C]">{reg.wife_mobile}</div>
+                            <div className="text-[11px] text-[#78716C] truncate max-w-[140px]">{reg.wife_email}</div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="font-semibold text-[#1C1917]">{reg.marriage_anniversary}</div>
+                            <div className="text-[11px] text-[#78716C]">{reg.current_city}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {reg.children && reg.children.length > 0 ? (
+                              <div className="space-y-0.5">
+                                {reg.children.map((c: any, idx: number) => (
+                                  <div key={idx} className="text-[11px] text-[#1C1917]">
+                                    • {c.name} ({c.gender})
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-[#78716C] italic">None</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-1 max-w-[200px]">
+                              {reg.husband_photo_url && (
+                                <a
+                                  href={resolveFullMediaUrl(reg.husband_photo_url)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={resolveFullMediaUrl(reg.husband_photo_url)}
+                                  className="flex items-center gap-1 text-[10px] font-semibold text-blue-700 hover:underline truncate"
+                                >
+                                  <Link2 className="w-3 h-3 shrink-0" />
+                                  <span className="truncate">Husband: {resolveFullMediaUrl(reg.husband_photo_url)}</span>
+                                </a>
+                              )}
+                              {reg.wife_photo_url && (
+                                <a
+                                  href={resolveFullMediaUrl(reg.wife_photo_url)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={resolveFullMediaUrl(reg.wife_photo_url)}
+                                  className="flex items-center gap-1 text-[10px] font-semibold text-rose-700 hover:underline truncate"
+                                >
+                                  <Link2 className="w-3 h-3 shrink-0" />
+                                  <span className="truncate">Wife: {resolveFullMediaUrl(reg.wife_photo_url)}</span>
+                                </a>
+                              )}
+                              {reg.family_photo_url && (
+                                <a
+                                  href={resolveFullMediaUrl(reg.family_photo_url)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={resolveFullMediaUrl(reg.family_photo_url)}
+                                  className="flex items-center gap-1 text-[10px] font-semibold text-[#8C6D2B] hover:underline truncate"
+                                >
+                                  <ImageIcon className="w-3 h-3 shrink-0" />
+                                  <span className="truncate">Family: {resolveFullMediaUrl(reg.family_photo_url)}</span>
+                                </a>
+                              )}
+                              {Array.isArray(reg.children) && reg.children.some((c: any) => c.photo_url) && (
+                                reg.children.map((c: any, idx: number) =>
+                                  c.photo_url ? (
+                                    <a
+                                      key={idx}
+                                      href={resolveFullMediaUrl(c.photo_url)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title={resolveFullMediaUrl(c.photo_url)}
+                                      className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 hover:underline truncate"
+                                    >
+                                      <Link2 className="w-3 h-3 shrink-0" />
+                                      <span className="truncate">{c.name || `Child #${idx + 1}`}: {resolveFullMediaUrl(c.photo_url)}</span>
+                                    </a>
+                                  ) : null
+                                )
+                              )}
+                              {!reg.husband_photo_url &&
+                                !reg.wife_photo_url &&
+                                !reg.family_photo_url &&
+                                !(Array.isArray(reg.children) && reg.children.some((c: any) => c.photo_url)) && (
+                                  <span className="text-[11px] text-[#A8A29E] italic">No photos</span>
+                                )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-[11px] text-[#78716C]">
+                            {new Date(reg.created_at).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right">
+                            <button
+                              type="button"
+                              onClick={() => setViewingFamilyModal(reg)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] border border-[#D9CDB8] font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
+                            >
+                              <Eye className="w-3 h-3 text-[#8C6D2B]" />
+                              <span>View Dossier</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -2536,7 +2785,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed text-blue-900">
                   <li>
-                    Ensure 2-Step Verification is active on your Google Account (<code className="font-semibold">{gmailUser}</code>).
+                    Ensure 2-Step Verification is active on your Google Account.
                   </li>
                   <li>
                     Open{' '}
@@ -2569,7 +2818,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       required
                       value={gmailUser}
                       onChange={(e) => setGmailUser(e.target.value)}
-                      placeholder="e.g. subodhjain2007777@gmail.com"
+                      placeholder="e.g. admin@gmail.com"
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-mono text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
                     />
                   </div>
@@ -2994,6 +3243,281 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* FRESH FAMILY DOSSIER INSPECTION MODAL                                     */}
+      {/* ========================================================================= */}
+      {viewingFamilyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#FFFFFF] border-2 border-[#D4AF37] rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-6 p-6 sm:p-8 animate-in zoom-in-95 relative">
+            
+            {/* Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-[#F0E8DC]">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-[#1C1917] text-[#D4AF37] flex items-center justify-center border border-[#C5A869]/40 shadow-xs">
+                  <Crown className="w-6 h-6 text-[#D4AF37]" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-serif-royal font-bold text-xl text-[#1C1917]">
+                      {viewingFamilyModal.husband_name} &amp; {viewingFamilyModal.wife_name}
+                    </h3>
+                    <span className="font-mono text-xs font-bold text-[#8C6D2B] bg-[#FAF7F2] border border-[#E2D5BE] px-2.5 py-0.5 rounded">
+                      {viewingFamilyModal.reg_id}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#78716C] mt-0.5">
+                    Submitted by <strong className="capitalize">{viewingFamilyModal.submitted_by_role}</strong> ({viewingFamilyModal.submitter_email}) on {new Date(viewingFamilyModal.created_at).toLocaleString('en-IN')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="p-2 rounded-xl bg-[#FAF7F2] hover:bg-[#F0E8DC] text-[#1C1917] border border-[#E7DDCE] transition-all cursor-pointer"
+                  title="Print Dossier"
+                >
+                  <Printer className="w-4 h-4 text-[#8C6D2B]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewingFamilyModal(null)}
+                  className="p-2 rounded-xl bg-[#FAF7F2] hover:bg-rose-50 text-[#78716C] hover:text-rose-700 border border-[#E7DDCE] transition-all cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Husband & Wife Profiles */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              
+              {/* Husband */}
+              <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2.5 text-xs">
+                <div className="flex items-center justify-between border-b border-[#E2D5BE] pb-2">
+                  <span className="font-bold uppercase tracking-wider text-[#8C6D2B] text-[11px]">
+                    🤵 Royal Gentleman
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-900">
+                    Husband
+                  </span>
+                </div>
+                <div className="font-serif-royal font-bold text-base text-[#1C1917]">
+                  {viewingFamilyModal.husband_name}
+                </div>
+                <div className="space-y-1.5 text-[#57534E]">
+                  <div>📱 Mobile: <strong className="font-mono text-[#1C1917]">{viewingFamilyModal.husband_mobile}</strong></div>
+                  <div>✉️ Email: <span className="text-[#1C1917]">{viewingFamilyModal.husband_email}</span></div>
+                  {viewingFamilyModal.husband_dob && <div>🎂 DOB: <span className="text-[#1C1917]">{viewingFamilyModal.husband_dob}</span></div>}
+                  {viewingFamilyModal.husband_qualification && <div>🎓 Education: <span className="text-[#1C1917]">{viewingFamilyModal.husband_qualification}</span></div>}
+                  {viewingFamilyModal.husband_occupation && <div>💼 Profession: <span className="text-[#1C1917]">{viewingFamilyModal.husband_occupation}</span></div>}
+                  {viewingFamilyModal.husband_organization && <div>🏢 Organization: <span className="text-[#1C1917]">{viewingFamilyModal.husband_organization}</span></div>}
+                  {viewingFamilyModal.husband_blood_group && <div>🩸 Blood Group: <strong className="text-rose-700">{viewingFamilyModal.husband_blood_group}</strong></div>}
+                  {viewingFamilyModal.husband_photo_url && (
+                    <div className="pt-2 border-t border-[#E2D5BE] space-y-1.5">
+                      <span className="text-[10px] font-bold uppercase text-[#8C6D2B] block">Husband Photo / Drive URL</span>
+                      {!isExternalCloudUrl(viewingFamilyModal.husband_photo_url) && (
+                        <img
+                          src={viewingFamilyModal.husband_photo_url}
+                          alt={viewingFamilyModal.husband_name}
+                          className="w-20 h-20 rounded-xl object-cover border border-[#D9CDB8]"
+                        />
+                      )}
+                      <a
+                        href={resolveFullMediaUrl(viewingFamilyModal.husband_photo_url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline break-all"
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <span>{resolveFullMediaUrl(viewingFamilyModal.husband_photo_url)}</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Wife */}
+              <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2.5 text-xs">
+                <div className="flex items-center justify-between border-b border-[#E2D5BE] pb-2">
+                  <span className="font-bold uppercase tracking-wider text-rose-800 text-[11px]">
+                    👰 Royal Lady
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-100 text-rose-900">
+                    Wife
+                  </span>
+                </div>
+                <div className="font-serif-royal font-bold text-base text-[#1C1917]">
+                  {viewingFamilyModal.wife_name}
+                </div>
+                <div className="space-y-1.5 text-[#57534E]">
+                  <div>📱 Mobile: <strong className="font-mono text-[#1C1917]">{viewingFamilyModal.wife_mobile}</strong></div>
+                  <div>✉️ Email: <span className="text-[#1C1917]">{viewingFamilyModal.wife_email}</span></div>
+                  {viewingFamilyModal.wife_dob && <div>🎂 DOB: <span className="text-[#1C1917]">{viewingFamilyModal.wife_dob}</span></div>}
+                  {viewingFamilyModal.wife_qualification && <div>🎓 Education: <span className="text-[#1C1917]">{viewingFamilyModal.wife_qualification}</span></div>}
+                  {viewingFamilyModal.wife_occupation && <div>💼 Profession: <span className="text-[#1C1917]">{viewingFamilyModal.wife_occupation}</span></div>}
+                  {viewingFamilyModal.wife_organization && <div>🏢 Organization: <span className="text-[#1C1917]">{viewingFamilyModal.wife_organization}</span></div>}
+                  {viewingFamilyModal.wife_blood_group && <div>🩸 Blood Group: <strong className="text-rose-700">{viewingFamilyModal.wife_blood_group}</strong></div>}
+                  {viewingFamilyModal.wife_photo_url && (
+                    <div className="pt-2 border-t border-[#E2D5BE] space-y-1.5">
+                      <span className="text-[10px] font-bold uppercase text-rose-800 block">Wife Photo / Drive URL</span>
+                      {!isExternalCloudUrl(viewingFamilyModal.wife_photo_url) && (
+                        <img
+                          src={viewingFamilyModal.wife_photo_url}
+                          alt={viewingFamilyModal.wife_name}
+                          className="w-20 h-20 rounded-xl object-cover border border-[#D9CDB8]"
+                        />
+                      )}
+                      <a
+                        href={resolveFullMediaUrl(viewingFamilyModal.wife_photo_url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline break-all"
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <span>{resolveFullMediaUrl(viewingFamilyModal.wife_photo_url)}</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Family Portrait Section */}
+            {viewingFamilyModal.family_photo_url && (
+              <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C6D2B] block">
+                  📸 Royal Family Portrait / Drive URL
+                </span>
+                {!isExternalCloudUrl(viewingFamilyModal.family_photo_url) && (
+                  <img
+                    src={viewingFamilyModal.family_photo_url}
+                    alt="Royal Family Portrait"
+                    className="max-h-56 rounded-xl object-contain border border-[#D9CDB8]"
+                  />
+                )}
+                <a
+                  href={resolveFullMediaUrl(viewingFamilyModal.family_photo_url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline break-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                  <span>{resolveFullMediaUrl(viewingFamilyModal.family_photo_url)}</span>
+                </a>
+              </div>
+            )}
+
+            {/* Marriage & Residence */}
+            <div className="p-4 rounded-2xl bg-white border border-[#E7DDCE] space-y-2 text-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#78716C] block">
+                Household &amp; Matrimonial Info
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[#57534E]">
+                <div>💍 Marriage Anniversary: <strong className="text-[#1C1917]">{viewingFamilyModal.marriage_anniversary}</strong></div>
+                <div>📍 Current City: <strong className="text-[#1C1917]">{viewingFamilyModal.current_city}</strong></div>
+                <div className="sm:col-span-2">🏠 Residential Address: <span className="text-[#1C1917]">{viewingFamilyModal.residential_address}</span></div>
+                {viewingFamilyModal.native_place && (
+                  <div className="sm:col-span-2">🏛️ Native Place / Origin: <span className="text-[#1C1917]">{viewingFamilyModal.native_place}</span></div>
+                )}
+              </div>
+            </div>
+
+            {/* Children Section */}
+            <div className="p-4 rounded-2xl bg-white border border-[#E7DDCE] space-y-2 text-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#78716C] block">
+                Children ({viewingFamilyModal.children ? viewingFamilyModal.children.length : 0})
+              </span>
+              {viewingFamilyModal.children && viewingFamilyModal.children.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {viewingFamilyModal.children.map((child: any, idx: number) => (
+                    <div key={idx} className="p-3 rounded-xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <strong className="text-[#1C1917]">{child.name}</strong>
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white border border-[#E2D5BE] text-[#8C6D2B]">
+                          {child.gender}
+                        </span>
+                      </div>
+                      {child.dob && <div className="text-[11px] text-[#78716C]">DOB: {child.dob}</div>}
+                      {child.education && <div className="text-[11px] text-[#78716C]">Education: {child.education}</div>}
+                      {child.interests && <div className="text-[11px] text-[#78716C]">Hobbies: {child.interests}</div>}
+                      {child.photo_url && (
+                        <div className="pt-1.5 border-t border-[#E2D5BE] space-y-1">
+                          {!isExternalCloudUrl(child.photo_url) && (
+                            <img
+                              src={child.photo_url}
+                              alt={child.name}
+                              className="w-16 h-16 rounded-lg object-cover border border-[#D9CDB8]"
+                            />
+                          )}
+                          <a
+                            href={resolveFullMediaUrl(child.photo_url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline break-all"
+                          >
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                            <span>{resolveFullMediaUrl(child.photo_url)}</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[#A8A29E] italic">No children listed in this household registration.</p>
+              )}
+            </div>
+
+            {/* Vision & Contributions */}
+            {(viewingFamilyModal.contribution_areas || viewingFamilyModal.royal_idea || viewingFamilyModal.jsg_should_be_known_for) && (
+              <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#E7DDCE] space-y-2.5 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C6D2B] block">
+                  Contributions &amp; Year 2 Vision
+                </span>
+                {viewingFamilyModal.contribution_areas && (
+                  <div>
+                    <span className="text-[10px] text-[#78716C] block">Contribution Areas:</span>
+                    <strong className="text-[#1C1917]">{viewingFamilyModal.contribution_areas}</strong>
+                  </div>
+                )}
+                {viewingFamilyModal.royal_idea && (
+                  <div>
+                    <span className="text-[10px] text-[#78716C] block">Royal Year 2 Idea:</span>
+                    <p className="italic bg-white p-2.5 rounded-xl border border-[#E2D5BE] mt-0.5 text-[#1C1917]">
+                      &ldquo;{viewingFamilyModal.royal_idea}&rdquo;
+                    </p>
+                  </div>
+                )}
+                {viewingFamilyModal.jsg_should_be_known_for && (
+                  <div>
+                    <span className="text-[10px] text-[#78716C] block">JSG Should Be Known For:</span>
+                    <p className="italic bg-white p-2.5 rounded-xl border border-[#E2D5BE] mt-0.5 text-[#1C1917]">
+                      &ldquo;{viewingFamilyModal.jsg_should_be_known_for}&rdquo;
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-[#F0E8DC]">
+              <button
+                type="button"
+                onClick={() => setViewingFamilyModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] font-semibold text-xs border border-[#D9CDB8] transition-all cursor-pointer"
+              >
+                Close Dossier
+              </button>
+            </div>
+
           </div>
         </div>
       )}

@@ -147,24 +147,6 @@ export default function App() {
     localStorage.removeItem('jsg_admin_token');
   };
 
-  // Quick Admin fill from test toolbar
-  const handleQuickAdmin = async () => {
-    try {
-      const res = await adminLoginApi('subodhjain2007777@gmail.com', 'royals2027');
-      handleAdminLoginSuccess(res.token, res.admin);
-    } catch (e) {
-      setActiveView('admin');
-    }
-  };
-
-  // Quick Mobile fill from test toolbar
-  const handleSelectTestMobile = (mobile: string) => {
-    setPrefilledMobile(mobile);
-    if (activeView !== 'verify') {
-      setActiveView('verify');
-    }
-  };
-
   if (loadingInitial) {
     return (
       <div className="min-h-screen bg-[#F8F5EE] flex items-center justify-center">

@@ -285,6 +285,8 @@ export function initDatabase() {
       has_children INTEGER DEFAULT 0,
       children_json TEXT,
 
+      husband_photo_url TEXT,
+      wife_photo_url TEXT,
       family_photo_url TEXT,
       contribution_areas TEXT,
       royal_idea TEXT,
@@ -301,15 +303,35 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_fr_wife_mobile ON family_registrations(wife_mobile);
   `);
 
-  // Seed default admin users
+  // Admin users are seeded/maintained with subodhjain2007777@gmail.com and PIN rroyals2027
   seedAdminUsers();
 
   // Add migration columns if they do not exist
   ensureYear2Columns();
   ensureMemberColumns();
+  ensureFamilyRegistrationColumns();
 
-  // Ensure members are seeded: if fewer than 110 members exist, auto-seed from CSV
-  ensureMasterMembersSeeded();
+  // Master member auto-seeding disabled per user request for fresh database start
+  // ensureMasterMembersSeeded();
+}
+
+function ensureFamilyRegistrationColumns() {
+  try {
+    const tableInfo = db.pragma('table_info(family_registrations)') as any[];
+    const columnNames = (tableInfo || []).map((c) => c.name);
+
+    if (!columnNames.includes('husband_photo_url')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN husband_photo_url TEXT');
+    }
+    if (!columnNames.includes('wife_photo_url')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN wife_photo_url TEXT');
+    }
+    if (!columnNames.includes('family_photo_url')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN family_photo_url TEXT');
+    }
+  } catch (e) {
+    console.error('ensureFamilyRegistrationColumns error:', e);
+  }
 }
 
 function parseRFC4180(text: string): string[][] {
@@ -820,17 +842,15 @@ export function getMembersImportStatus() {
 }
 
 function seedAdminUsers() {
-  const count = db.prepare('SELECT COUNT(*) as count FROM admin_users').get() as { count: number };
-  if (count.count === 0) {
-    const insertAdmin = db.prepare(`
-      INSERT INTO admin_users (email, role, password_hash, created_at)
-      VALUES (?, ?, ?, ?)
-    `);
-    const now = new Date().toISOString();
-    insertAdmin.run('subodhjain2007777@gmail.com', 'super_admin', 'royals2027', now);
-    insertAdmin.run('admin@jsgroyals.org', 'admin', 'royals2027', now);
-    console.log('Seeded default admin users');
-  }
+  const insertOrUpdateAdmin = db.prepare(`
+    INSERT INTO admin_users (email, role, password_hash, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash
+  `);
+  const now = new Date().toISOString();
+  insertOrUpdateAdmin.run('subodhjain2007777@gmail.com', 'super_admin', 'rroyals2027', now);
+  insertOrUpdateAdmin.run('admin@jsgroyals.org', 'admin', 'rroyals2027', now);
+  console.log('Seeded and updated admin PIN to rroyals2027');
 }
 
 // STEP 2 REQUIREMENT: Create ONLY 3 clearly marked test members with obviously fictional test information
