@@ -18,6 +18,7 @@ import {
 } from './lib/types.ts';
 import { getMemberMeApi, adminLoginApi, getAdminMeApi } from './lib/api.ts';
 import { Loader2 } from 'lucide-react';
+import { RoyalLogo } from './components/RoyalLogo.tsx';
 
 export default function App() {
   // Session State
@@ -151,7 +152,8 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#F8F5EE] flex items-center justify-center">
         <div className="text-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#8C6D2B] mx-auto" />
+          <RoyalLogo className="w-20 h-20 rounded-2xl mx-auto shadow-lg border-2 border-[#D4AF37] p-0.5" />
+          <Loader2 className="w-6 h-6 animate-spin text-[#8C6D2B] mx-auto" />
           <p className="font-serif-royal text-sm font-semibold text-[#1C1917] tracking-wider">
             JSG ROYALS • 2027
           </p>

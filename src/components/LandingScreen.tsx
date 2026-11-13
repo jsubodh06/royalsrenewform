@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Crown, ShieldCheck, ArrowRight, Sparkles, HeartHandshake, Lock } from 'lucide-react';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal.tsx';
+import { RoyalLogo } from './RoyalLogo.tsx';
 
 interface LandingScreenProps {
   onBegin: () => void;
@@ -15,10 +16,8 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onBegin, onOpenAdm
         
         {/* Royal Crest Emblem */}
         <div className="relative mb-6">
-          <div className="w-24 h-24 rounded-full bg-[#1C1917] border-2 border-[#C5A869] shadow-xl flex items-center justify-center p-3 relative z-10">
-            <Crown className="w-12 h-12 text-[#D4AF37]" />
-          </div>
-          <div className="absolute -inset-2 rounded-full border border-[#D4AF37]/30 animate-pulse pointer-events-none"></div>
+          <RoyalLogo className="w-28 h-28 rounded-3xl border-2 border-[#D4AF37] shadow-xl p-1 relative z-10" />
+          <div className="absolute -inset-2 rounded-3xl border border-[#D4AF37]/30 animate-pulse pointer-events-none"></div>
         </div>
 
         {/* Brand Typography */}

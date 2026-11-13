@@ -303,6 +303,17 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_fr_wife_mobile ON family_registrations(wife_mobile);
   `);
 
+  // 14. family_photos — Persistent binary storage for uploaded family/individual photos
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS family_photos (
+      filename TEXT PRIMARY KEY,
+      mime_type TEXT NOT NULL,
+      data BLOB NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+
   // Admin users are seeded/maintained with subodhjain2007777@gmail.com and PIN rroyals2027
   seedAdminUsers();
 
@@ -310,9 +321,37 @@ export function initDatabase() {
   ensureYear2Columns();
   ensureMemberColumns();
   ensureFamilyRegistrationColumns();
+  syncExistingFamilyPhotosToDb();
 
   // Master member auto-seeding disabled per user request for fresh database start
   // ensureMasterMembersSeeded();
+}
+
+function syncExistingFamilyPhotosToDb() {
+  try {
+    const familyDir = path.resolve(dataDir, 'year2-photos', 'family');
+    if (!fs.existsSync(familyDir)) return;
+    const files = fs.readdirSync(familyDir);
+    const checkStmt = db.prepare('SELECT 1 FROM family_photos WHERE filename = ?');
+    const insertStmt = db.prepare(`
+      INSERT OR IGNORE INTO family_photos (filename, mime_type, data, size_bytes, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    for (const file of files) {
+      if (!/\.(jpe?g|png|webp|gif)$/i.test(file)) continue;
+      const exists = checkStmt.get(file);
+      if (exists) continue;
+      const fullPath = path.join(familyDir, file);
+      const stat = fs.statSync(fullPath);
+      if (!stat.isFile()) continue;
+      const buf = fs.readFileSync(fullPath);
+      const ext = path.extname(file).toLowerCase();
+      const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+      insertStmt.run(file, mime, buf, buf.length, new Date().toISOString());
+    }
+  } catch (e) {
+    console.warn('syncExistingFamilyPhotosToDb warning:', e);
+  }
 }
 
 function ensureFamilyRegistrationColumns() {

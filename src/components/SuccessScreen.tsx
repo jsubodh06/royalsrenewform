@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Crown, CheckCircle2, Lock, Eye, Calendar, MapPin, Heart, Sparkles } from 'lucide-react';
+import { CheckCircle2, Lock, Eye } from 'lucide-react';
 import { MemberYear1, Year2ProfileData, Year2PreferenceData, SubmissionData } from '../lib/types.ts';
+import { RoyalLogo } from './RoyalLogo.tsx';
 
 interface SuccessScreenProps {
   member: MemberYear1;
@@ -28,9 +29,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
 
         {/* Crest */}
         <div className="relative z-10">
-          <div className="w-20 h-20 rounded-full bg-[#1C1917] border-2 border-[#D4AF37] flex items-center justify-center mx-auto shadow-md mb-6">
-            <Crown className="w-10 h-10 text-[#D4AF37]" />
-          </div>
+          <RoyalLogo className="w-24 h-24 rounded-3xl border-2 border-[#D4AF37] mx-auto shadow-md mb-6 p-1" />
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold mb-4">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />

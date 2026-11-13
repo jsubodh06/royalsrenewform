@@ -16,6 +16,7 @@ import {
 import { MemberYear1, MemberSession, CorrectionRequest } from '../lib/types.ts';
 import { CorrectionModal } from './CorrectionModal.tsx';
 import { apiRequest } from '../lib/api.ts';
+import { RoyalLogo } from './RoyalLogo.tsx';
 
 interface Year1ProfileCardProps {
   member: MemberYear1 & { parsedData?: any };
@@ -68,8 +69,8 @@ export const Year1ProfileCard: React.FC<Year1ProfileCardProps> = ({
       
       {/* 1. Header Greeting */}
       <div className="text-center space-y-1.5">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EFE6D5] border border-[#DFCFAE] text-[#8C6D2B] text-xs font-semibold uppercase tracking-wider">
-          <Crown className="w-3.5 h-3.5 text-[#D4AF37]" />
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#EFE6D5] border border-[#DFCFAE] text-[#8C6D2B] text-xs font-semibold uppercase tracking-wider">
+          <RoyalLogo className="w-5 h-5 rounded-md border border-[#C5A869]" />
           <span>Authenticated Member Profile</span>
         </div>
         <h1 className="font-serif-royal text-2xl sm:text-3xl font-extrabold text-[#1C1917] pt-1">

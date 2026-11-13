@@ -28,8 +28,8 @@ app.use((req, res, next) => {
 });
 
 // Body parsers with sufficient capacity for photo uploads
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use(express.json({ limit: '30mb' }));
+app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
 // Mount API routes
 app.use('/api', apiRouter);

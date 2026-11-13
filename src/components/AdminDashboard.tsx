@@ -40,6 +40,14 @@ import {
   Link2,
   Image as ImageIcon
 } from 'lucide-react';
+import { RoyalLogo } from './RoyalLogo.tsx';
+import { PhotoLightboxModal, PreviewPhotoState } from './PhotoLightboxModal.tsx';
+import {
+  getDisplayImageSrc,
+  isExternalCloudUrl,
+  resolveFullMediaUrl,
+  downloadMediaImage
+} from '../lib/media.ts';
 import {
   getAdminOverviewApi,
   getAdminMembersApi,
@@ -98,6 +106,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [familyRegistrations, setFamilyRegistrations] = useState<any[]>([]);
   const [loadingFamilyRegs, setLoadingFamilyRegs] = useState(false);
   const [viewingFamilyModal, setViewingFamilyModal] = useState<any | null>(null);
+  const [previewPhotoModal, setPreviewPhotoModal] = useState<PreviewPhotoState | null>(null);
   const [familyFilterSearch, setFamilyFilterSearch] = useState('');
 
   // Central Authentication Error Handler (Auto-logout if session expired or invalid)
@@ -126,21 +135,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const resolveFullMediaUrl = (url?: string | null): string => {
-    if (!url) return '';
-    if (url.startsWith('/')) {
-      return `${window.location.origin}${url}`;
-    }
-    return url;
-  };
-
-  const isExternalCloudUrl = (url?: string | null): boolean => {
-    if (!url) return false;
-    return !url.startsWith('data:') && !url.startsWith('/api/family/photo/');
-  };
-
   const exportFamiliesCsv = () => {
     if (familyRegistrations.length === 0) return;
+    const maxKidsCount = familyRegistrations.reduce((max, r) => {
+      const len = Array.isArray(r.children) ? r.children.length : 0;
+      return len > max ? len : max;
+    }, 0);
+    const childPhotoHeaders = Array.from({ length: Math.max(maxKidsCount, 2) }, (_, i) => `Child ${i + 1} Photo URL`);
+
     const headers = [
       'Reg ID',
       'Submitted By Role',
@@ -170,6 +172,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'Native Place',
       'Children Count',
       'Children Details',
+      ...childPhotoHeaders,
       'Children Photo / Drive URLs',
       'Contribution Areas',
       'Royal Idea',
@@ -187,8 +190,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const rows = familyRegistrations.map((r) => {
       const kidsList = Array.isArray(r.children) ? r.children : [];
       const kids = kidsList
-        .map((c: any) => `${c.name || ''} (${c.gender || ''}${c.dob ? `, DOB: ${c.dob}` : ''}${c.photo_url ? `, Photo: ${resolveFullMediaUrl(c.photo_url)}` : ''})`)
+        .map((c: any) => `${c.name || ''} (${c.gender || ''}${c.dob ? `, DOB: ${c.dob}` : ''}${c.education ? `, Edu: ${c.education}` : ''}${c.photo_url ? `, Photo: ${resolveFullMediaUrl(c.photo_url)}` : ''})`)
         .join('; ');
+      const individualKidPhotoCells = Array.from({ length: Math.max(maxKidsCount, 2) }, (_, i) =>
+        escapeCsv(resolveFullMediaUrl(kidsList[i]?.photo_url))
+      );
       const kidsPhotoUrls = kidsList
         .filter((c: any) => c.photo_url)
         .map((c: any) => `${c.name || 'Child'}: ${resolveFullMediaUrl(c.photo_url)}`)
@@ -222,6 +228,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         escapeCsv(r.native_place),
         escapeCsv(kidsList.length),
         escapeCsv(kids),
+        ...individualKidPhotoCells,
         escapeCsv(kidsPhotoUrls),
         escapeCsv(r.contribution_areas),
         escapeCsv(r.royal_idea),
@@ -828,9 +835,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return (
       <div className="min-h-[calc(100vh-80px)] flex flex-col justify-center items-center py-12 px-4">
         <div className="max-w-md w-full bg-[#FFFFFF] border border-[#E7DDCE] rounded-3xl p-6 sm:p-8 shadow-lg">
-          <div className="w-14 h-14 rounded-2xl bg-[#1C1917] text-[#D4AF37] border border-[#C5A869]/50 flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-7 h-7 text-[#D4AF37]" />
-          </div>
+          <RoyalLogo className="w-20 h-20 rounded-2xl border-2 border-[#D4AF37] mx-auto mb-4 shadow-md p-0.5" />
 
           <div className="text-center mb-6">
             <h2 className="font-serif-royal text-2xl font-bold text-[#1C1917]">
@@ -911,11 +916,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       
       {/* Top Banner & Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E7DDCE]">
-        <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="font-serif-royal font-bold text-2xl text-[#1C1917]">
-              JSG Royals Administration
-            </span>
+        <div className="flex items-center gap-3">
+          <RoyalLogo className="w-12 h-12 rounded-2xl border border-[#D4AF37]/80 shadow-sm p-0.5 hidden sm:flex" />
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="font-serif-royal font-bold text-2xl text-[#1C1917]">
+                JSG Royals Administration
+              </span>
             <span className="px-2.5 py-0.5 rounded-full bg-[#1C1917] text-[#D4AF37] text-[10px] font-bold uppercase tracking-wider border border-[#C5A869]/30">
               Year 2 • 2027
             </span>
@@ -928,6 +935,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <p className="text-xs text-[#78716C] mt-0.5">
             Signed in as: <strong className="text-[#1C1917]">{adminSession?.email || 'Authorized Administrator'}</strong> • Strict database oversight: 110 Royal Couples
           </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -1149,9 +1157,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="bg-[#FFFFFF] border border-[#E7DDCE] rounded-3xl p-6 shadow-sm space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#F0E8DC]">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-[#1C1917] text-[#D4AF37] flex items-center justify-center border border-[#C5A869]/40 shadow-xs">
-                <Crown className="w-6 h-6 text-[#D4AF37]" />
-              </div>
+              <RoyalLogo className="w-12 h-12 rounded-2xl border border-[#C5A869]/70 shadow-xs p-0.5" />
               <div>
                 <h3 className="font-serif-royal font-bold text-lg text-[#1C1917]">
                   Fresh Family Registrations (Email-Based)
@@ -1187,8 +1193,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {familyRegistrations.length === 0 ? (
-            <div className="p-12 text-center bg-[#FAF7F2] rounded-2xl border border-[#E7DDCE] space-y-2">
-              <Crown className="w-10 h-10 text-[#8C6D2B] mx-auto opacity-50" />
+            <div className="p-12 text-center bg-[#FAF7F2] rounded-2xl border border-[#E7DDCE] space-y-2.5">
+              <RoyalLogo className="w-16 h-16 rounded-2xl mx-auto border border-[#C5A869]/70 shadow-sm p-0.5 opacity-90" />
               <div className="font-serif-royal font-bold text-base text-[#1C1917]">
                 No Fresh Family Registrations Yet
               </div>
@@ -1312,57 +1318,144 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="space-y-1 max-w-[200px]">
+                            <div className="space-y-1.5 max-w-[220px]">
                               {reg.husband_photo_url && (
-                                <a
-                                  href={resolveFullMediaUrl(reg.husband_photo_url)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title={resolveFullMediaUrl(reg.husband_photo_url)}
-                                  className="flex items-center gap-1 text-[10px] font-semibold text-blue-700 hover:underline truncate"
-                                >
-                                  <Link2 className="w-3 h-3 shrink-0" />
-                                  <span className="truncate">Husband: {resolveFullMediaUrl(reg.husband_photo_url)}</span>
-                                </a>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewPhotoModal({
+                                      title: `Husband Photo — ${reg.husband_name}`,
+                                      url: reg.husband_photo_url,
+                                      downloadName: `${reg.reg_id}_husband.jpg`
+                                    })}
+                                    className="flex items-center gap-1.5 text-[10px] font-semibold text-blue-700 hover:underline truncate cursor-pointer text-left"
+                                  >
+                                    {getDisplayImageSrc(reg.husband_photo_url) && (
+                                      <img
+                                        src={getDisplayImageSrc(reg.husband_photo_url)!}
+                                        alt={reg.husband_name}
+                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                        className="w-6 h-6 rounded object-cover border border-[#D9CDB8] shrink-0"
+                                      />
+                                    )}
+                                    <span className="truncate">Husband Photo</span>
+                                  </button>
+                                  {isExternalCloudUrl(reg.husband_photo_url) && (
+                                    <a
+                                      href={resolveFullMediaUrl(reg.husband_photo_url)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Open Drive Link"
+                                      className="text-blue-600 hover:text-blue-800 shrink-0"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                </div>
                               )}
                               {reg.wife_photo_url && (
-                                <a
-                                  href={resolveFullMediaUrl(reg.wife_photo_url)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title={resolveFullMediaUrl(reg.wife_photo_url)}
-                                  className="flex items-center gap-1 text-[10px] font-semibold text-rose-700 hover:underline truncate"
-                                >
-                                  <Link2 className="w-3 h-3 shrink-0" />
-                                  <span className="truncate">Wife: {resolveFullMediaUrl(reg.wife_photo_url)}</span>
-                                </a>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewPhotoModal({
+                                      title: `Wife Photo — ${reg.wife_name}`,
+                                      url: reg.wife_photo_url,
+                                      downloadName: `${reg.reg_id}_wife.jpg`
+                                    })}
+                                    className="flex items-center gap-1.5 text-[10px] font-semibold text-rose-700 hover:underline truncate cursor-pointer text-left"
+                                  >
+                                    {getDisplayImageSrc(reg.wife_photo_url) && (
+                                      <img
+                                        src={getDisplayImageSrc(reg.wife_photo_url)!}
+                                        alt={reg.wife_name}
+                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                        className="w-6 h-6 rounded object-cover border border-[#D9CDB8] shrink-0"
+                                      />
+                                    )}
+                                    <span className="truncate">Wife Photo</span>
+                                  </button>
+                                  {isExternalCloudUrl(reg.wife_photo_url) && (
+                                    <a
+                                      href={resolveFullMediaUrl(reg.wife_photo_url)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Open Drive Link"
+                                      className="text-rose-600 hover:text-rose-800 shrink-0"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                </div>
                               )}
                               {reg.family_photo_url && (
-                                <a
-                                  href={resolveFullMediaUrl(reg.family_photo_url)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title={resolveFullMediaUrl(reg.family_photo_url)}
-                                  className="flex items-center gap-1 text-[10px] font-semibold text-[#8C6D2B] hover:underline truncate"
-                                >
-                                  <ImageIcon className="w-3 h-3 shrink-0" />
-                                  <span className="truncate">Family: {resolveFullMediaUrl(reg.family_photo_url)}</span>
-                                </a>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewPhotoModal({
+                                      title: `Family Portrait — ${reg.husband_name} & ${reg.wife_name}`,
+                                      url: reg.family_photo_url,
+                                      downloadName: `${reg.reg_id}_family.jpg`
+                                    })}
+                                    className="flex items-center gap-1.5 text-[10px] font-semibold text-[#8C6D2B] hover:underline truncate cursor-pointer text-left"
+                                  >
+                                    {getDisplayImageSrc(reg.family_photo_url) && (
+                                      <img
+                                        src={getDisplayImageSrc(reg.family_photo_url)!}
+                                        alt="Family"
+                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                        className="w-6 h-6 rounded object-cover border border-[#D9CDB8] shrink-0"
+                                      />
+                                    )}
+                                    <span className="truncate">Family Portrait</span>
+                                  </button>
+                                  {isExternalCloudUrl(reg.family_photo_url) && (
+                                    <a
+                                      href={resolveFullMediaUrl(reg.family_photo_url)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Open Drive Link"
+                                      className="text-[#8C6D2B] hover:text-[#6D531E] shrink-0"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                </div>
                               )}
                               {Array.isArray(reg.children) && reg.children.some((c: any) => c.photo_url) && (
                                 reg.children.map((c: any, idx: number) =>
                                   c.photo_url ? (
-                                    <a
-                                      key={idx}
-                                      href={resolveFullMediaUrl(c.photo_url)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title={resolveFullMediaUrl(c.photo_url)}
-                                      className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 hover:underline truncate"
-                                    >
-                                      <Link2 className="w-3 h-3 shrink-0" />
-                                      <span className="truncate">{c.name || `Child #${idx + 1}`}: {resolveFullMediaUrl(c.photo_url)}</span>
-                                    </a>
+                                    <div key={idx} className="flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewPhotoModal({
+                                          title: `Child Photo — ${c.name || `Child #${idx + 1}`}`,
+                                          url: c.photo_url,
+                                          downloadName: `${reg.reg_id}_child_${idx + 1}.jpg`
+                                        })}
+                                        className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 hover:underline truncate cursor-pointer text-left"
+                                      >
+                                        {getDisplayImageSrc(c.photo_url) && (
+                                          <img
+                                            src={getDisplayImageSrc(c.photo_url)!}
+                                            alt={c.name}
+                                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                            className="w-6 h-6 rounded object-cover border border-[#D9CDB8] shrink-0"
+                                          />
+                                        )}
+                                        <span className="truncate">{c.name || `Child #${idx + 1}`}</span>
+                                      </button>
+                                      {isExternalCloudUrl(c.photo_url) && (
+                                        <a
+                                          href={resolveFullMediaUrl(c.photo_url)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Open Drive Link"
+                                          className="text-emerald-600 hover:text-emerald-800 shrink-0"
+                                        >
+                                          <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                      )}
+                                    </div>
                                   ) : null
                                 )
                               )}
@@ -3257,9 +3350,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* Header */}
             <div className="flex items-start justify-between pb-4 border-b border-[#F0E8DC]">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-[#1C1917] text-[#D4AF37] flex items-center justify-center border border-[#C5A869]/40 shadow-xs">
-                  <Crown className="w-6 h-6 text-[#D4AF37]" />
-                </div>
+                <RoyalLogo className="w-12 h-12 rounded-2xl border border-[#C5A869]/70 shadow-xs p-0.5" />
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-serif-royal font-bold text-xl text-[#1C1917]">
@@ -3320,24 +3411,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {viewingFamilyModal.husband_organization && <div>🏢 Organization: <span className="text-[#1C1917]">{viewingFamilyModal.husband_organization}</span></div>}
                   {viewingFamilyModal.husband_blood_group && <div>🩸 Blood Group: <strong className="text-rose-700">{viewingFamilyModal.husband_blood_group}</strong></div>}
                   {viewingFamilyModal.husband_photo_url && (
-                    <div className="pt-2 border-t border-[#E2D5BE] space-y-1.5">
+                    <div className="pt-2 border-t border-[#E2D5BE] space-y-2">
                       <span className="text-[10px] font-bold uppercase text-[#8C6D2B] block">Husband Photo / Drive URL</span>
-                      {!isExternalCloudUrl(viewingFamilyModal.husband_photo_url) && (
-                        <img
-                          src={viewingFamilyModal.husband_photo_url}
-                          alt={viewingFamilyModal.husband_name}
-                          className="w-20 h-20 rounded-xl object-cover border border-[#D9CDB8]"
-                        />
-                      )}
-                      <a
-                        href={resolveFullMediaUrl(viewingFamilyModal.husband_photo_url)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline break-all"
-                      >
-                        <ExternalLink className="w-3 h-3 shrink-0" />
-                        <span>{resolveFullMediaUrl(viewingFamilyModal.husband_photo_url)}</span>
-                      </a>
+                      <div className="flex items-center gap-3">
+                        {getDisplayImageSrc(viewingFamilyModal.husband_photo_url) && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPhotoModal({
+                              title: `Husband Photo — ${viewingFamilyModal.husband_name}`,
+                              url: viewingFamilyModal.husband_photo_url,
+                              downloadName: `${viewingFamilyModal.reg_id}_husband.jpg`
+                            })}
+                            className="cursor-pointer shrink-0"
+                          >
+                            <img
+                              src={getDisplayImageSrc(viewingFamilyModal.husband_photo_url)!}
+                              alt={viewingFamilyModal.husband_name}
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                              className="w-20 h-20 rounded-xl object-cover border border-[#D9CDB8] hover:scale-105 transition-transform"
+                            />
+                          </button>
+                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPhotoModal({
+                              title: `Husband Photo — ${viewingFamilyModal.husband_name}`,
+                              url: viewingFamilyModal.husband_photo_url,
+                              downloadName: `${viewingFamilyModal.reg_id}_husband.jpg`
+                            })}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#EFE6D5] border border-[#DFCFAE] text-[#8C6D2B] text-[11px] font-semibold cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>View Full</span>
+                          </button>
+                          {!isExternalCloudUrl(viewingFamilyModal.husband_photo_url) ? (
+                            <button
+                              type="button"
+                              onClick={() => downloadMediaImage(viewingFamilyModal.husband_photo_url, `${viewingFamilyModal.reg_id}_husband.jpg`)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1C1917] text-[#D4AF37] text-[11px] font-semibold cursor-pointer"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>Download</span>
+                            </button>
+                          ) : (
+                            <a
+                              href={resolveFullMediaUrl(viewingFamilyModal.husband_photo_url)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[11px] font-semibold"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>Open Drive</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[10px] font-mono text-[#78716C] break-all">
+                        {resolveFullMediaUrl(viewingFamilyModal.husband_photo_url)}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -3365,24 +3497,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {viewingFamilyModal.wife_organization && <div>🏢 Organization: <span className="text-[#1C1917]">{viewingFamilyModal.wife_organization}</span></div>}
                   {viewingFamilyModal.wife_blood_group && <div>🩸 Blood Group: <strong className="text-rose-700">{viewingFamilyModal.wife_blood_group}</strong></div>}
                   {viewingFamilyModal.wife_photo_url && (
-                    <div className="pt-2 border-t border-[#E2D5BE] space-y-1.5">
+                    <div className="pt-2 border-t border-[#E2D5BE] space-y-2">
                       <span className="text-[10px] font-bold uppercase text-rose-800 block">Wife Photo / Drive URL</span>
-                      {!isExternalCloudUrl(viewingFamilyModal.wife_photo_url) && (
-                        <img
-                          src={viewingFamilyModal.wife_photo_url}
-                          alt={viewingFamilyModal.wife_name}
-                          className="w-20 h-20 rounded-xl object-cover border border-[#D9CDB8]"
-                        />
-                      )}
-                      <a
-                        href={resolveFullMediaUrl(viewingFamilyModal.wife_photo_url)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline break-all"
-                      >
-                        <ExternalLink className="w-3 h-3 shrink-0" />
-                        <span>{resolveFullMediaUrl(viewingFamilyModal.wife_photo_url)}</span>
-                      </a>
+                      <div className="flex items-center gap-3">
+                        {getDisplayImageSrc(viewingFamilyModal.wife_photo_url) && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPhotoModal({
+                              title: `Wife Photo — ${viewingFamilyModal.wife_name}`,
+                              url: viewingFamilyModal.wife_photo_url,
+                              downloadName: `${viewingFamilyModal.reg_id}_wife.jpg`
+                            })}
+                            className="cursor-pointer shrink-0"
+                          >
+                            <img
+                              src={getDisplayImageSrc(viewingFamilyModal.wife_photo_url)!}
+                              alt={viewingFamilyModal.wife_name}
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                              className="w-20 h-20 rounded-xl object-cover border border-[#D9CDB8] hover:scale-105 transition-transform"
+                            />
+                          </button>
+                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPhotoModal({
+                              title: `Wife Photo — ${viewingFamilyModal.wife_name}`,
+                              url: viewingFamilyModal.wife_photo_url,
+                              downloadName: `${viewingFamilyModal.reg_id}_wife.jpg`
+                            })}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#EFE6D5] border border-[#DFCFAE] text-[#8C6D2B] text-[11px] font-semibold cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>View Full</span>
+                          </button>
+                          {!isExternalCloudUrl(viewingFamilyModal.wife_photo_url) ? (
+                            <button
+                              type="button"
+                              onClick={() => downloadMediaImage(viewingFamilyModal.wife_photo_url, `${viewingFamilyModal.reg_id}_wife.jpg`)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1C1917] text-[#D4AF37] text-[11px] font-semibold cursor-pointer"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>Download</span>
+                            </button>
+                          ) : (
+                            <a
+                              href={resolveFullMediaUrl(viewingFamilyModal.wife_photo_url)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[11px] font-semibold"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>Open Drive</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[10px] font-mono text-[#78716C] break-all">
+                        {resolveFullMediaUrl(viewingFamilyModal.wife_photo_url)}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -3392,26 +3565,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {/* Family Portrait Section */}
             {viewingFamilyModal.family_photo_url && (
-              <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2 text-xs">
+              <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2.5 text-xs">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C6D2B] block">
                   📸 Royal Family Portrait / Drive URL
                 </span>
-                {!isExternalCloudUrl(viewingFamilyModal.family_photo_url) && (
-                  <img
-                    src={viewingFamilyModal.family_photo_url}
-                    alt="Royal Family Portrait"
-                    className="max-h-56 rounded-xl object-contain border border-[#D9CDB8]"
-                  />
-                )}
-                <a
-                  href={resolveFullMediaUrl(viewingFamilyModal.family_photo_url)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline break-all"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                  <span>{resolveFullMediaUrl(viewingFamilyModal.family_photo_url)}</span>
-                </a>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  {getDisplayImageSrc(viewingFamilyModal.family_photo_url) && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPhotoModal({
+                        title: `Family Portrait — ${viewingFamilyModal.husband_name} & ${viewingFamilyModal.wife_name}`,
+                        url: viewingFamilyModal.family_photo_url,
+                        downloadName: `${viewingFamilyModal.reg_id}_family.jpg`
+                      })}
+                      className="cursor-pointer text-left"
+                    >
+                      <img
+                        src={getDisplayImageSrc(viewingFamilyModal.family_photo_url)!}
+                        alt="Royal Family Portrait"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                        className="max-h-52 rounded-xl object-contain border border-[#D9CDB8] hover:opacity-95 transition-opacity"
+                      />
+                    </button>
+                  )}
+                  <div className="space-y-2 flex-1 min-w-0">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewPhotoModal({
+                          title: `Family Portrait — ${viewingFamilyModal.husband_name} & ${viewingFamilyModal.wife_name}`,
+                          url: viewingFamilyModal.family_photo_url,
+                          downloadName: `${viewingFamilyModal.reg_id}_family.jpg`
+                        })}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-[#EFE6D5] border border-[#DFCFAE] text-[#8C6D2B] text-xs font-semibold cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View Full Size</span>
+                      </button>
+                      {!isExternalCloudUrl(viewingFamilyModal.family_photo_url) ? (
+                        <button
+                          type="button"
+                          onClick={() => downloadMediaImage(viewingFamilyModal.family_photo_url, `${viewingFamilyModal.reg_id}_family.jpg`)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1C1917] text-[#D4AF37] text-xs font-semibold cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </button>
+                      ) : (
+                        <a
+                          href={resolveFullMediaUrl(viewingFamilyModal.family_photo_url)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Open Drive Link</span>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-mono text-[#78716C] break-all">
+                      {resolveFullMediaUrl(viewingFamilyModal.family_photo_url)}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -3449,23 +3665,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {child.education && <div className="text-[11px] text-[#78716C]">Education: {child.education}</div>}
                       {child.interests && <div className="text-[11px] text-[#78716C]">Hobbies: {child.interests}</div>}
                       {child.photo_url && (
-                        <div className="pt-1.5 border-t border-[#E2D5BE] space-y-1">
-                          {!isExternalCloudUrl(child.photo_url) && (
-                            <img
-                              src={child.photo_url}
-                              alt={child.name}
-                              className="w-16 h-16 rounded-lg object-cover border border-[#D9CDB8]"
-                            />
-                          )}
-                          <a
-                            href={resolveFullMediaUrl(child.photo_url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline break-all"
-                          >
-                            <ExternalLink className="w-3 h-3 shrink-0" />
-                            <span>{resolveFullMediaUrl(child.photo_url)}</span>
-                          </a>
+                        <div className="pt-1.5 border-t border-[#E2D5BE] space-y-1.5">
+                          <div className="flex items-center gap-2.5">
+                            {getDisplayImageSrc(child.photo_url) && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewPhotoModal({
+                                  title: `Child Photo — ${child.name}`,
+                                  url: child.photo_url,
+                                  downloadName: `${viewingFamilyModal.reg_id}_child_${idx + 1}.jpg`
+                                })}
+                                className="cursor-pointer shrink-0"
+                              >
+                                <img
+                                  src={getDisplayImageSrc(child.photo_url)!}
+                                  alt={child.name}
+                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                  className="w-16 h-16 rounded-lg object-cover border border-[#D9CDB8]"
+                                />
+                              </button>
+                            )}
+                            <div className="flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewPhotoModal({
+                                  title: `Child Photo — ${child.name}`,
+                                  url: child.photo_url,
+                                  downloadName: `${viewingFamilyModal.reg_id}_child_${idx + 1}.jpg`
+                                })}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white hover:bg-[#EFE6D5] border border-[#DFCFAE] text-[#8C6D2B] text-[10px] font-semibold cursor-pointer"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>View</span>
+                              </button>
+                              {!isExternalCloudUrl(child.photo_url) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => downloadMediaImage(child.photo_url, `${viewingFamilyModal.reg_id}_child_${idx + 1}.jpg`)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#1C1917] text-[#D4AF37] text-[10px] font-semibold cursor-pointer"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>Download</span>
+                                </button>
+                              ) : (
+                                <a
+                                  href={resolveFullMediaUrl(child.photo_url)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-semibold"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>Open Drive</span>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[10px] font-mono text-[#78716C] break-all">
+                            {resolveFullMediaUrl(child.photo_url)}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -3520,6 +3777,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           </div>
         </div>
+      )}
+
+      {/* In-App Photo Lightbox Modal */}
+      {previewPhotoModal && (
+        <PhotoLightboxModal
+          photo={previewPhotoModal}
+          onClose={() => setPreviewPhotoModal(null)}
+        />
       )}
 
     </div>

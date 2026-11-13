@@ -31,7 +31,9 @@ import {
   Share2,
   KeyRound,
   ExternalLink,
-  Link2
+  Link2,
+  Eye,
+  Download
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -41,6 +43,9 @@ import {
   requestFamilyEmailOtpApi,
   verifyFamilyEmailOtpApi
 } from '../lib/api.ts';
+import { RoyalLogo } from './RoyalLogo.tsx';
+import { PhotoLightboxModal } from './PhotoLightboxModal.tsx';
+import { getDisplayImageSrc, isExternalCloudUrl, downloadMediaImage } from '../lib/media.ts';
 
 export interface ChildItem {
   id: string;
@@ -71,18 +76,23 @@ function PhotoUploadOrDriveLink({
   const [driveInput, setDriveInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
-  const isDriveLink = Boolean(
-    value &&
-    !value.startsWith('data:') &&
-    (value.includes('drive.google.com') || value.includes('google.com') || value.startsWith('http://') || value.startsWith('https://'))
-  );
+  useEffect(() => {
+    setThumbFailed(false);
+  }, [value]);
+
+  const isDriveLink = isExternalCloudUrl(value);
+  const displaySrc = getDisplayImageSrc(value);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset input value so re-selecting or retrying the same file always triggers onChange
+    e.target.value = '';
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setError('File size must be under 10 MB');
+    if (file.size > 25 * 1024 * 1024) {
+      setError('File size must be under 25 MB');
       return;
     }
     setUploading(true);
@@ -91,7 +101,7 @@ function PhotoUploadOrDriveLink({
       const res = await uploadFamilyPhotoApi(file);
       onChange(res.url);
     } catch (err: any) {
-      setError(err?.message || 'Upload failed');
+      setError(err?.message || 'Upload failed. Please try again or paste a Google Drive link.');
     } finally {
       setUploading(false);
     }
@@ -143,38 +153,55 @@ function PhotoUploadOrDriveLink({
 
       {value ? (
         <div className="p-2.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE] flex items-center gap-3">
-          {isDriveLink ? (
+          {displaySrc && !thumbFailed ? (
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              className="relative group shrink-0 cursor-pointer"
+              title="Click to preview full photo"
+            >
+              <img
+                src={displaySrc}
+                alt={label}
+                onError={() => setThumbFailed(true)}
+                className="w-12 h-12 rounded-xl object-cover border border-[#D9CDB8]"
+              />
+            </button>
+          ) : (
             <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center shrink-0">
               <Link2 className="w-6 h-6 text-blue-600" />
             </div>
-          ) : (
-            <img
-              src={value}
-              alt="Photo preview"
-              className="w-12 h-12 rounded-xl object-cover border border-[#D9CDB8] shrink-0"
-            />
           )}
 
           <div className="flex-1 min-w-0">
             <span className="text-[10px] font-bold uppercase text-[#8C6D2B] block">
-              {isDriveLink ? 'Google Drive / Cloud Link Attached' : 'Photo Attached'}
+              {isDriveLink ? 'Google Drive / Cloud Link Attached' : 'Photo Uploaded & Saved'}
             </span>
             <p className="text-xs text-[#1C1917] truncate font-mono" title={value}>
               {value}
             </p>
           </div>
 
-          {isDriveLink && (
-            <a
-              href={value}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold shrink-0 transition-colors shadow-2xs"
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1C1917] hover:bg-[#2A2623] text-[#D4AF37] text-[11px] font-semibold cursor-pointer transition-colors"
             >
-              <span>Open Link</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          )}
+              <Eye className="w-3 h-3" />
+              <span>View</span>
+            </button>
+            {isDriveLink && (
+              <a
+                href={value}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold transition-colors shadow-2xs"
+              >
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-2">
@@ -210,7 +237,7 @@ function PhotoUploadOrDriveLink({
             <label className="border border-dashed border-[#D9CDB8] hover:border-[#8C6D2B] rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition-all bg-[#FAF7F2] hover:bg-[#F5EFE6]">
               <ImageIcon className="w-4 h-4 text-[#8C6D2B]" />
               <span className="text-xs font-semibold text-[#1C1917]">
-                {uploading ? 'Uploading image...' : 'Choose image (JPG/PNG)'}
+                {uploading ? 'Optimizing & uploading photo...' : 'Choose image (JPG/PNG)'}
               </span>
               <input
                 type="file"
@@ -254,48 +281,86 @@ function PhotoUploadOrDriveLink({
           )}
         </div>
       )}
+
+      {previewOpen && value && (
+        <PhotoLightboxModal
+          photo={{ title: label, url: value }}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
 function isCloudDriveLink(url: string | null | undefined): boolean {
-  if (!url) return false;
-  return !url.startsWith('data:') && !url.startsWith('/api/family/photo/');
+  return isExternalCloudUrl(url);
 }
 
 function DossierPhotoThumbnail({ url, alt }: { url?: string | null; alt: string }) {
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
   if (!url) return null;
   const isDrive = isCloudDriveLink(url);
-  if (isDrive) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 text-[11px] font-semibold transition-colors mt-1.5 max-w-full"
-      >
-        <Link2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-        <span className="truncate max-w-[200px]">{url}</span>
-        <ExternalLink className="w-3 h-3 shrink-0" />
-      </a>
-    );
-  }
+  const displaySrc = getDisplayImageSrc(url);
+
   return (
-    <div className="mt-2 flex items-center gap-2.5">
-      <img
-        src={url}
-        alt={alt}
-        className="w-14 h-14 rounded-xl object-cover border border-[#D9CDB8] shadow-2xs shrink-0"
-      />
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-[11px] font-semibold text-[#8C6D2B] hover:underline inline-flex items-center gap-1"
-      >
-        <span>Open Photo</span>
-        <ExternalLink className="w-3 h-3" />
-      </a>
+    <div className="mt-2 flex flex-wrap items-center gap-2.5">
+      {displaySrc && !thumbFailed ? (
+        <button
+          type="button"
+          onClick={() => setPreviewOpen(true)}
+          className="cursor-pointer group"
+          title="Click to enlarge"
+        >
+          <img
+            src={displaySrc}
+            alt={alt}
+            onError={() => setThumbFailed(true)}
+            className="w-14 h-14 rounded-xl object-cover border border-[#D9CDB8] shadow-2xs shrink-0 group-hover:scale-105 transition-transform"
+          />
+        </button>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setPreviewOpen(true)}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FAF7F2] hover:bg-[#EFE6D5] border border-[#DFCFAE] text-[#8C6D2B] text-[11px] font-semibold cursor-pointer transition-colors"
+        >
+          <Eye className="w-3 h-3" />
+          <span>View Photo</span>
+        </button>
+
+        {!isDrive ? (
+          <button
+            type="button"
+            onClick={() => downloadMediaImage(url, `${alt.replace(/\s+/g, '_')}.jpg`)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1C1917] hover:bg-[#2A2623] border border-[#C5A869]/50 text-[#D4AF37] text-[11px] font-semibold cursor-pointer transition-colors"
+          >
+            <Download className="w-3 h-3" />
+            <span>Download</span>
+          </button>
+        ) : (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 text-[11px] font-semibold transition-colors max-w-[210px]"
+          >
+            <Link2 className="w-3 h-3 text-blue-600 shrink-0" />
+            <span className="truncate">Open Drive Link</span>
+            <ExternalLink className="w-3 h-3 shrink-0" />
+          </a>
+        )}
+      </div>
+
+      {previewOpen && (
+        <PhotoLightboxModal
+          photo={{ title: alt, url, downloadName: `${alt.replace(/\s+/g, '_')}.jpg` }}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -713,15 +778,26 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       residential_address: residentialAddress.trim(),
       native_place: nativePlace.trim() || null,
       has_children: hasChildren,
-      children: hasChildren ? children.filter((c) => c.name.trim().length > 0).map((c) => ({
-        id: c.id,
-        name: c.name.trim(),
-        gender: c.gender,
-        dob: c.dob || '',
-        education: c.education || '',
-        interests: c.interests || '',
-        photo_url: c.photo_url || null
-      })) : [],
+      children: hasChildren
+        ? children
+            .filter(
+              (c) =>
+                c.name.trim().length > 0 ||
+                Boolean(c.dob) ||
+                c.education.trim().length > 0 ||
+                Boolean(c.interests?.trim()) ||
+                Boolean(c.photo_url)
+            )
+            .map((c, idx) => ({
+              id: c.id,
+              name: c.name.trim() || `Royal Heir #${idx + 1}`,
+              gender: c.gender,
+              dob: c.dob || '',
+              education: c.education.trim() || '',
+              interests: c.interests?.trim() || '',
+              photo_url: c.photo_url || null
+            }))
+        : [],
       family_photo_url: familyPhotoUrl || null,
       contribution_areas: contributionAreas.join(', '),
       royal_idea: royalIdea.trim() || null,
@@ -777,7 +853,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       {/* Royal Ribbon Announcement Header */}
       <div className="bg-[#1C1917] text-[#FAF7F2] py-2.5 px-4 text-center text-xs tracking-wider border-b border-[#C5A869]/40 shadow-xs flex items-center justify-between relative z-10">
         <div className="flex items-center gap-2.5 mx-auto">
-          <Crown className="w-4 h-4 text-[#D4AF37] animate-pulse-gold shrink-0" />
+          <RoyalLogo className="w-6 h-6 rounded-md border border-[#D4AF37]/70 p-0.5" />
           <span className="font-serif-royal font-bold tracking-widest text-[#D4AF37]">
             JSG ROYALS • YEAR 2 • 2027
           </span>
@@ -801,9 +877,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
             {/* Regal Heraldic Crest Icon */}
             <div className="text-center mb-6">
-              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#1C1917] via-[#2A2623] to-[#12100E] border-2 border-[#D4AF37] text-[#D4AF37] flex items-center justify-center mx-auto shadow-xl animate-float-slow group">
-                <Crown className="w-10 h-10 text-[#D4AF37] group-hover:scale-110 transition-transform" />
-              </div>
+              <RoyalLogo className="w-28 h-28 rounded-3xl border-2 border-[#D4AF37] mx-auto shadow-xl animate-float-slow p-1 hover:scale-105 transition-transform" />
             </div>
 
             {/* Title & Introduction */}
@@ -1066,9 +1140,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
             {/* Royal Decree Seal */}
             <div className="text-center space-y-3">
-              <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-[#1C1917] via-[#2A2623] to-[#141210] border-2 border-[#D4AF37] text-[#D4AF37] flex items-center justify-center mx-auto shadow-xl animate-ring-float">
-                <Heart className="w-10 h-10 text-[#D4AF37] fill-[#D4AF37]/20" />
-              </div>
+              <RoyalLogo className="w-24 h-24 rounded-3xl border-2 border-[#D4AF37] mx-auto shadow-xl animate-ring-float p-1" />
 
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold uppercase tracking-wider">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -1092,7 +1164,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
             <div className="bg-[#FAF7F2] border border-[#E2D5BE] rounded-2xl p-5 sm:p-6 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E2D5BE]">
                 <div className="flex items-center gap-2">
-                  <Crown className="w-4 h-4 text-[#8C6D2B]" />
+                  <RoyalLogo className="w-6 h-6 rounded-md border border-[#C5A869]/70 p-0.5" />
                   <span className="font-serif-royal font-bold text-sm text-[#1C1917]">
                     Royal Household Dossier Breakdown
                   </span>
@@ -1126,6 +1198,8 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   <div className="text-xs text-[#57534E] space-y-1 pt-2 border-t border-[#F0E8DC]">
                     <div>📱 <span className="font-mono">{existingRecord.husband_mobile}</span></div>
                     <div>✉️ {existingRecord.husband_email}</div>
+                    {existingRecord.husband_dob && <div>🎂 DOB: <strong>{existingRecord.husband_dob}</strong></div>}
+                    {existingRecord.husband_qualification && <div>🎓 {existingRecord.husband_qualification}</div>}
                     {existingRecord.husband_blood_group && (
                       <div>🩸 Blood Group: <strong>{existingRecord.husband_blood_group}</strong></div>
                     )}
@@ -1154,6 +1228,8 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   <div className="text-xs text-[#57534E] space-y-1 pt-2 border-t border-[#F0E8DC]">
                     <div>📱 <span className="font-mono">{existingRecord.wife_mobile}</span></div>
                     <div>✉️ {existingRecord.wife_email}</div>
+                    {existingRecord.wife_dob && <div>🎂 DOB: <strong>{existingRecord.wife_dob}</strong></div>}
+                    {existingRecord.wife_qualification && <div>🎓 {existingRecord.wife_qualification}</div>}
                     {existingRecord.wife_blood_group && (
                       <div>🩸 Blood Group: <strong>{existingRecord.wife_blood_group}</strong></div>
                     )}
@@ -1166,20 +1242,21 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
               </div>
 
               {/* Union & Residence */}
-              <div className="p-4 rounded-xl bg-white border border-[#E7DDCE] grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-4 rounded-xl bg-white border border-[#E7DDCE] grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
                   <span className="text-[10px] font-bold uppercase text-[#78716C] block">Marriage Anniversary</span>
                   <span className="font-semibold text-[#1C1917]">{existingRecord.marriage_anniversary}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-[#78716C] block">City</span>
-                  <span className="font-semibold text-[#1C1917]">{existingRecord.current_city}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold uppercase text-[#78716C] block">Residence</span>
-                  <span className="text-[#57534E] truncate block" title={existingRecord.residential_address}>
-                    {existingRecord.residential_address}
+                  <span className="text-[10px] font-bold uppercase text-[#78716C] block">City {existingRecord.native_place ? '• Native Place' : ''}</span>
+                  <span className="font-semibold text-[#1C1917]">
+                    {existingRecord.current_city}
+                    {existingRecord.native_place ? ` • ${existingRecord.native_place}` : ''}
                   </span>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-[10px] font-bold uppercase text-[#78716C] block">Residential Address</span>
+                  <span className="text-[#57534E] block">{existingRecord.residential_address}</span>
                 </div>
               </div>
 
@@ -1192,16 +1269,18 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {existingRecord.children.map((child: any, idx: number) => (
                       <div key={idx} className="p-3 rounded-lg bg-white border border-[#E7DDCE] text-xs space-y-1">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="font-bold text-[#1C1917]">{child.name}</div>
-                            <div className="text-[11px] text-[#78716C]">{child.education || 'Royal Heir'}</div>
+                            <div className="font-bold text-[#1C1917]">{child.name || `Royal Heir #${idx + 1}`}</div>
+                            {child.dob && <div className="text-[11px] text-[#57534E]">🎂 DOB: {child.dob}</div>}
+                            {child.education && <div className="text-[11px] text-[#78716C]">🎓 {child.education}</div>}
+                            {child.interests && <div className="text-[11px] text-[#78716C]">✨ {child.interests}</div>}
                           </div>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-[#FAF7F2] text-[#8C6D2B]">
-                            {child.gender}
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-[#FAF7F2] text-[#8C6D2B] shrink-0">
+                            {child.gender === 'daughter' ? 'Daughter' : 'Son'}
                           </span>
                         </div>
-                        <DossierPhotoThumbnail url={child.photo_url} alt={child.name} />
+                        <DossierPhotoThumbnail url={child.photo_url} alt={child.name || `Child ${idx + 1}`} />
                       </div>
                     ))}
                   </div>
@@ -1214,17 +1293,24 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#8C6D2B] block mb-2">
                     📸 Registered Royal Family Portrait
                   </span>
-                  {isCloudDriveLink(existingRecord.family_photo_url) ? (
-                    <div className="flex justify-center">
-                      <DossierPhotoThumbnail url={existingRecord.family_photo_url} alt="Royal Family Portrait" />
+                  <div className="flex justify-center">
+                    <DossierPhotoThumbnail url={existingRecord.family_photo_url} alt="Royal Family Portrait" />
+                  </div>
+                </div>
+              )}
+
+              {(existingRecord.contribution_areas || existingRecord.royal_idea) && (
+                <div className="p-4 rounded-xl bg-white border border-[#E7DDCE] text-xs space-y-1.5">
+                  {existingRecord.contribution_areas && (
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-[#78716C] block">Contribution Areas</span>
+                      <span className="text-[#1C1917] font-medium">{existingRecord.contribution_areas}</span>
                     </div>
-                  ) : (
-                    <div className="inline-block p-2 rounded-2xl bg-white gilded-frame">
-                      <img
-                        src={existingRecord.family_photo_url}
-                        alt="Royal Family"
-                        className="max-h-52 rounded-xl object-contain mx-auto"
-                      />
+                  )}
+                  {existingRecord.royal_idea && (
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-[#78716C] block">Royal Year 2 Idea</span>
+                      <span className="text-[#57534E] italic">"{existingRecord.royal_idea}"</span>
                     </div>
                   )}
                 </div>
@@ -1943,87 +2029,245 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
               )}
 
               {/* STEP 6: REVIEW & ROYAL SEAL */}
-              {activeStep === 6 && (
-                <div key={6} className="space-y-6 animate-fade-in-up">
-                  
-                  {/* Parchment Certificate Review Card */}
-                  <div className="p-6 rounded-3xl bg-gradient-to-br from-[#1C1917] via-[#24201D] to-[#12100E] text-[#FAF7F2] border-2 border-[#D4AF37] space-y-5 shadow-2xl relative overflow-hidden">
-                    <RoyalCornerBrackets />
-                    
-                    <div className="flex items-center justify-between pb-3 border-b border-[#C5A869]/30">
-                      <div className="flex items-center gap-2">
-                        <Crown className="w-5 h-5 text-[#D4AF37] animate-pulse-gold" />
-                        <span className="font-serif-royal font-bold text-sm text-[#D4AF37] tracking-wider">
-                          Royal Family Seal of Authenticity
+              {activeStep === 6 && (() => {
+                const filledChildren = hasChildren
+                  ? children.filter(
+                      (c) =>
+                        c.name.trim().length > 0 ||
+                        Boolean(c.dob) ||
+                        c.education.trim().length > 0 ||
+                        Boolean(c.interests?.trim()) ||
+                        Boolean(c.photo_url)
+                    )
+                  : [];
+
+                return (
+                  <div key={6} className="space-y-6 animate-fade-in-up">
+                    {/* Complete Royal Dossier Review Card */}
+                    <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#1C1917] via-[#24201D] to-[#12100E] text-[#FAF7F2] border-2 border-[#D4AF37] space-y-5 shadow-2xl relative overflow-hidden">
+                      <RoyalCornerBrackets />
+
+                      <div className="flex items-center justify-between pb-3 border-b border-[#C5A869]/30">
+                        <div className="flex items-center gap-2.5">
+                          <RoyalLogo className="w-8 h-8 rounded-lg border border-[#D4AF37]/70 p-0.5" />
+                          <span className="font-serif-royal font-bold text-sm text-[#D4AF37] tracking-wider">
+                            Royal Family Seal of Authenticity
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-[#A8A29E] uppercase tracking-wider">
+                          Complete Record Summary
                         </span>
                       </div>
-                      <span className="text-[10px] text-[#A8A29E] uppercase tracking-wider">
-                        Master Record Review
-                      </span>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                      <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-                        <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-bold block">
-                          🤵 Royal Gentleman
-                        </span>
-                        <div className="font-bold text-sm text-white">{husbandName || 'Not entered'}</div>
-                        <div className="text-[11px] text-[#D6D3D1]">{husbandMobile}</div>
-                        <div className="text-[11px] text-[#A8A29E] truncate">{husbandEmail}</div>
-                        <div className="text-[10px] text-[#D4AF37] pt-1">
-                          {husbandPhotoUrl ? '✓ Photo / Drive Link Attached' : 'No Photo Attached'}
+                      {/* Husband & Wife Full Details */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        {/* Husband Card */}
+                        <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-bold">
+                              🤵 Royal Gentleman
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setActiveStep(1)}
+                              className="text-[10px] text-[#D4AF37] hover:underline cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                          <div className="font-bold text-sm text-white">{husbandName || 'Not entered'}</div>
+                          <div className="space-y-0.5 text-[11px] text-[#D6D3D1]">
+                            <div>📱 {husbandMobile || '—'}</div>
+                            <div className="truncate text-[#A8A29E]">✉️ {husbandEmail || '—'}</div>
+                            {husbandDob && <div>🎂 DOB: {husbandDob}</div>}
+                            {husbandBloodGroup && <div>🩸 Blood Group: {husbandBloodGroup}</div>}
+                            {husbandQualification && <div>🎓 {husbandQualification}</div>}
+                            {(husbandOccupation || husbandOrganization) && (
+                              <div>
+                                💼 {husbandOccupation}
+                                {husbandOrganization ? ` • ${husbandOrganization}` : ''}
+                              </div>
+                            )}
+                          </div>
+                          {husbandPhotoUrl ? (
+                            <div className="pt-1.5">
+                              <DossierPhotoThumbnail url={husbandPhotoUrl} alt={husbandName || 'Husband Photo'} />
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-[#A8A29E] pt-1">No Photo Attached</div>
+                          )}
+                        </div>
+
+                        {/* Wife Card */}
+                        <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-bold">
+                              👰 Royal Lady
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setActiveStep(2)}
+                              className="text-[10px] text-[#D4AF37] hover:underline cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                          <div className="font-bold text-sm text-white">{wifeName || 'Not entered'}</div>
+                          <div className="space-y-0.5 text-[11px] text-[#D6D3D1]">
+                            <div>📱 {wifeMobile || '—'}</div>
+                            <div className="truncate text-[#A8A29E]">✉️ {wifeEmail || '—'}</div>
+                            {wifeDob && <div>🎂 DOB: {wifeDob}</div>}
+                            {wifeBloodGroup && <div>🩸 Blood Group: {wifeBloodGroup}</div>}
+                            {wifeQualification && <div>🎓 {wifeQualification}</div>}
+                            {(wifeOccupation || wifeOrganization) && (
+                              <div>
+                                💼 {wifeOccupation}
+                                {wifeOrganization ? ` • ${wifeOrganization}` : ''}
+                              </div>
+                            )}
+                          </div>
+                          {wifePhotoUrl ? (
+                            <div className="pt-1.5">
+                              <DossierPhotoThumbnail url={wifePhotoUrl} alt={wifeName || 'Wife Photo'} />
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-[#A8A29E] pt-1">No Photo Attached</div>
+                          )}
                         </div>
                       </div>
 
-                      <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-                        <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-bold block">
-                          👰 Royal Lady
-                        </span>
-                        <div className="font-bold text-sm text-white">{wifeName || 'Not entered'}</div>
-                        <div className="text-[11px] text-[#D6D3D1]">{wifeMobile}</div>
-                        <div className="text-[11px] text-[#A8A29E] truncate">{wifeEmail}</div>
-                        <div className="text-[10px] text-[#D4AF37] pt-1">
-                          {wifePhotoUrl ? '✓ Photo / Drive Link Attached' : 'No Photo Attached'}
+                      {/* Union & Residence */}
+                      <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-bold">
+                            💍 Royal Union &amp; Residence
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveStep(3)}
+                            className="text-[10px] text-[#D4AF37] hover:underline cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px]">
+                          <div>
+                            <span className="text-[10px] text-[#A8A29E] uppercase block">Anniversary</span>
+                            <span className="font-semibold text-[#D4AF37]">
+                              {marriageAnniversary || 'Not entered'}
+                              {yearsTogether !== null ? ` (${yearsTogether} yrs)` : ''}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-[#A8A29E] uppercase block">Current City</span>
+                            <span className="text-white">{currentCity || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-[#A8A29E] uppercase block">Native Place</span>
+                            <span className="text-white">{nativePlace || '—'}</span>
+                          </div>
+                        </div>
+                        <div className="text-[11px]">
+                          <span className="text-[10px] text-[#A8A29E] uppercase block">Residential Address</span>
+                          <span className="text-[#D6D3D1]">{residentialAddress || 'Not entered'}</span>
                         </div>
                       </div>
+
+                      {/* Children / Royal Heirs Full Details */}
+                      <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-bold">
+                            👶 Royal Heirs &amp; Children ({hasChildren ? filledChildren.length : 0})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveStep(4)}
+                            className="text-[10px] text-[#D4AF37] hover:underline cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                        </div>
+
+                        {hasChildren && filledChildren.length > 0 ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {filledChildren.map((c, idx) => (
+                              <div key={c.id || idx} className="p-3 rounded-xl bg-black/25 border border-white/10 space-y-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="font-bold text-white text-xs">
+                                    {c.name.trim() || `Royal Heir #${idx + 1}`}
+                                  </div>
+                                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-[#D4AF37]/20 text-[#D4AF37] shrink-0">
+                                    {c.gender === 'daughter' ? 'Daughter' : 'Son'}
+                                  </span>
+                                </div>
+                                {c.dob && <div className="text-[11px] text-[#D6D3D1]">🎂 DOB: {c.dob}</div>}
+                                {c.education && <div className="text-[11px] text-[#D6D3D1]">🎓 {c.education}</div>}
+                                {c.interests && <div className="text-[11px] text-[#A8A29E]">✨ {c.interests}</div>}
+                                {c.photo_url ? (
+                                  <DossierPhotoThumbnail url={c.photo_url} alt={c.name || `Child ${idx + 1}`} />
+                                ) : (
+                                  <div className="text-[10px] text-[#A8A29E]">No Child Photo Attached</div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-[#A8A29E]">
+                            {hasChildren ? 'No child details entered yet.' : 'No children registered.'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Family Portrait & Vision */}
+                      <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-bold">
+                            📸 Family Portrait &amp; Royal Vision
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveStep(5)}
+                            className="text-[10px] text-[#D4AF37] hover:underline cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                        </div>
+
+                        {familyPhotoUrl ? (
+                          <DossierPhotoThumbnail url={familyPhotoUrl} alt="Royal Family Group Portrait" />
+                        ) : (
+                          <div className="text-[11px] text-[#A8A29E]">No Family Group Portrait attached</div>
+                        )}
+
+                        {contributionAreas.length > 0 && (
+                          <div className="text-[11px] pt-1">
+                            <span className="text-[10px] text-[#A8A29E] uppercase block">Contribution Areas</span>
+                            <span className="text-[#FAF7F2]">{contributionAreas.join(', ')}</span>
+                          </div>
+                        )}
+
+                        {royalIdea.trim() && (
+                          <div className="text-[11px]">
+                            <span className="text-[10px] text-[#A8A29E] uppercase block">Year 2 Grand Idea</span>
+                            <span className="text-[#D6D3D1] italic">"{royalIdea.trim()}"</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-[#C5A869]/30 text-xs">
-                      <div>
-                        <span className="text-[10px] text-[#A8A29E] uppercase block">Anniversary</span>
-                        <span className="font-semibold text-[#D4AF37]">{marriageAnniversary || 'None'}</span>
+                    <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                        <Sparkles className="w-4 h-4 text-[#8C6D2B]" />
+                        <span>Automated Cross-Spouse Sync:</span>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-[#A8A29E] uppercase block">Residence</span>
-                        <span className="text-white truncate block">{currentCity}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-[#A8A29E] uppercase block">Children</span>
-                        <span className="text-white">
-                          {hasChildren ? `${children.filter((c) => c.name.trim().length > 0).length} Royal Heir(s)` : 'None'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-[#A8A29E] uppercase block">Family Portrait</span>
-                        <span className="text-[#D4AF37]">
-                          {familyPhotoUrl ? '✓ Attached' : 'Not set'}
-                        </span>
-                      </div>
+                      <p className="text-[11px]">
+                        Upon sealing, if your spouse visits the portal with their email ({gateRole === 'husband' ? wifeEmail || 'Wife' : husbandEmail || 'Husband'}),
+                        they will immediately be presented with this completed dossier!
+                      </p>
                     </div>
                   </div>
-
-                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-1">
-                    <div className="font-bold flex items-center gap-1.5 text-amber-900">
-                      <Sparkles className="w-4 h-4 text-[#8C6D2B]" />
-                      <span>Automated Cross-Spouse Sync:</span>
-                    </div>
-                    <p className="text-[11px]">
-                      Upon sealing, if your spouse visits the portal with their email ({gateRole === 'husband' ? wifeEmail || 'Wife' : husbandEmail || 'Husband'}),
-                      they will immediately be presented with this completed dossier!
-                    </p>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Step Navigation Controls */}
               <div className="flex items-center justify-between pt-6 border-t border-[#F0E8DC]">
@@ -2098,9 +2342,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
             <div className="absolute top-0 left-0 right-0 h-2 shimmer-gold-bg" />
             <RoyalCornerBrackets />
 
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#1C1917] to-[#25221F] border-2 border-[#D4AF37] text-[#D4AF37] flex items-center justify-center mx-auto shadow-2xl animate-bounce">
-              <Crown className="w-10 h-10 text-[#D4AF37]" />
-            </div>
+            <RoyalLogo className="w-28 h-28 rounded-3xl border-2 border-[#D4AF37] mx-auto shadow-2xl p-1" />
 
             <div className="space-y-2">
               <span className="text-xs font-bold uppercase tracking-widest text-[#8C6D2B]">
@@ -2149,7 +2391,11 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     <div className="space-y-1 text-[#57534E] text-[11px]">
                       <div>📱 <span className="font-mono">{finalRegistration.husband_mobile}</span></div>
                       <div>✉️ {finalRegistration.husband_email}</div>
-                      {finalRegistration.husband_occupation && <div>💼 {finalRegistration.husband_occupation}{finalRegistration.husband_organization ? ` at ${finalRegistration.husband_organization}` : ''}</div>}
+                      {finalRegistration.husband_dob && <div>🎂 DOB: <strong>{finalRegistration.husband_dob}</strong></div>}
+                      {finalRegistration.husband_qualification && <div>🎓 {finalRegistration.husband_qualification}</div>}
+                      {(finalRegistration.husband_occupation || finalRegistration.husband_organization) && (
+                        <div>💼 {finalRegistration.husband_occupation}{finalRegistration.husband_organization ? ` at ${finalRegistration.husband_organization}` : ''}</div>
+                      )}
                       {finalRegistration.husband_blood_group && <div>🩸 Blood Group: <strong>{finalRegistration.husband_blood_group}</strong></div>}
                       <DossierPhotoThumbnail url={finalRegistration.husband_photo_url} alt={finalRegistration.husband_name} />
                     </div>
@@ -2165,7 +2411,11 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     <div className="space-y-1 text-[#57534E] text-[11px]">
                       <div>📱 <span className="font-mono">{finalRegistration.wife_mobile}</span></div>
                       <div>✉️ {finalRegistration.wife_email}</div>
-                      {finalRegistration.wife_occupation && <div>💼 {finalRegistration.wife_occupation}{finalRegistration.wife_organization ? ` at ${finalRegistration.wife_organization}` : ''}</div>}
+                      {finalRegistration.wife_dob && <div>🎂 DOB: <strong>{finalRegistration.wife_dob}</strong></div>}
+                      {finalRegistration.wife_qualification && <div>🎓 {finalRegistration.wife_qualification}</div>}
+                      {(finalRegistration.wife_occupation || finalRegistration.wife_organization) && (
+                        <div>💼 {finalRegistration.wife_occupation}{finalRegistration.wife_organization ? ` at ${finalRegistration.wife_organization}` : ''}</div>
+                      )}
                       {finalRegistration.wife_blood_group && <div>🩸 Blood Group: <strong>{finalRegistration.wife_blood_group}</strong></div>}
                       <DossierPhotoThumbnail url={finalRegistration.wife_photo_url} alt={finalRegistration.wife_name} />
                     </div>
@@ -2206,12 +2456,18 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       {finalRegistration.children.map((c: any, idx: number) => (
                         <div key={idx} className="p-2.5 rounded-lg bg-[#FAF7F2] border border-[#E2D5BE] space-y-1">
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-[#1C1917]">{c.name}</span>
+                            <span className="font-semibold text-[#1C1917]">{c.name || `Royal Heir #${idx + 1}`}</span>
                             <span className="text-[10px] uppercase font-bold text-[#8C6D2B] bg-white px-2 py-0.5 rounded border border-[#E2D5BE]">
-                              {c.gender} {c.dob ? `• ${c.dob}` : ''}
+                              {c.gender === 'daughter' ? 'Daughter' : 'Son'} {c.dob ? `• ${c.dob}` : ''}
                             </span>
                           </div>
-                          <DossierPhotoThumbnail url={c.photo_url} alt={c.name} />
+                          {c.education && (
+                            <div className="text-[11px] text-[#57534E]">🎓 {c.education}</div>
+                          )}
+                          {c.interests && (
+                            <div className="text-[11px] text-[#78716C]">✨ {c.interests}</div>
+                          )}
+                          <DossierPhotoThumbnail url={c.photo_url} alt={c.name || `Child ${idx + 1}`} />
                         </div>
                       ))}
                     </div>

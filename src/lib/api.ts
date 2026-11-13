@@ -593,24 +593,156 @@ export async function registerFamilyApi(data: any) {
   });
 }
 
-export async function uploadFamilyPhotoApi(file: File) {
-  const formData = new FormData();
-  formData.append('photo', file);
-
-  const response = await fetch('/api/family/upload-photo', {
-    method: 'POST',
-    body: formData,
+function fileToDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read selected image file.'));
+    reader.readAsDataURL(file);
   });
+}
 
-  const resData = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(resData.error || `Upload failed with status ${response.status}`);
+async function optimizeImageFileForUpload(file: File): Promise<File> {
+  // Compress & normalize any large or non-standard image via canvas so mobile camera
+  // portraits upload reliably under proxy size/timeout limits.
+  if (typeof document === 'undefined' || !file.type.startsWith('image/')) {
+    return file;
   }
-  return resData as {
-    success: boolean;
-    filename: string;
-    url: string;
-  };
+
+  const isStandardFastSmall =
+    file.size <= 550 * 1024 &&
+    (file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp');
+  if (isStandardFastSmall) {
+    return file;
+  }
+
+  try {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('Image decode failed'));
+        el.src = objectUrl;
+      });
+
+      const maxDim = 1600;
+      let { width, height } = img;
+      if (!width || !height) return file;
+
+      if (width > maxDim || height > maxDim) {
+        const ratio = Math.min(maxDim / width, maxDim / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+
+      // White background ensures transparent PNGs look crisp when encoded as JPEG
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/jpeg', 0.85)
+      );
+      if (!blob || blob.size === 0) return file;
+
+      // Keep original if it was already small standard format and smaller than canvas result
+      if (
+        blob.size > file.size &&
+        (file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp') &&
+        file.size <= 2 * 1024 * 1024
+      ) {
+        return file;
+      }
+
+      const baseName = file.name.replace(/\.[^/.]+$/, '') || 'photo';
+      return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch {
+    return file;
+  }
+}
+
+export async function uploadFamilyPhotoApi(file: File) {
+  const preparedFile = await optimizeImageFileForUpload(file);
+  const uploadUrl = `${API_BASE}/family/upload-photo`;
+  const base64Url = `${API_BASE}/family/upload-photo-base64`;
+
+  let lastNetworkErr: any = null;
+
+  // Attempt 1 & 2: Standard Multipart FormData upload with retry
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const formData = new FormData();
+      formData.append('photo', preparedFile);
+
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+      });
+
+      const resData = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(resData.error || `Upload failed with status ${response.status}`);
+      }
+      return resData as {
+        success: boolean;
+        filename: string;
+        url: string;
+      };
+    } catch (err: any) {
+      const msg = (err?.message || '').toLowerCase();
+      const isNetworkFailure =
+        err?.name === 'TypeError' ||
+        msg.includes('failed to fetch') ||
+        msg.includes('network') ||
+        msg.includes('load failed');
+
+      if (!isNetworkFailure) {
+        throw err;
+      }
+      lastNetworkErr = err;
+      await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+    }
+  }
+
+  // Attempt 3: JSON Base64 fallback (bypasses proxy multipart restrictions if any)
+  try {
+    const dataUrl = await fileToDataUrl(preparedFile);
+    const response = await fetch(base64Url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: dataUrl, filename: preparedFile.name }),
+      credentials: 'same-origin',
+    });
+
+    const resData = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(resData.error || `Upload failed with status ${response.status}`);
+    }
+    return resData as {
+      success: boolean;
+      filename: string;
+      url: string;
+    };
+  } catch (fallbackErr: any) {
+    const msg = fallbackErr?.message || lastNetworkErr?.message || 'Network error while uploading photo';
+    if (msg.toLowerCase().includes('failed to fetch')) {
+      throw new Error(
+        'Connection interrupted while uploading photo. Please check your internet or paste a Google Drive photo link.'
+      );
+    }
+    throw new Error(msg);
+  }
 }
 
 export async function getAdminFamilyRegistrationsApi(adminToken: string) {

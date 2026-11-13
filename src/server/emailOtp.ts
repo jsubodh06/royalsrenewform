@@ -2,12 +2,28 @@ import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { db, getSetting, setSetting } from '../db/database.ts';
 
+const ROYALS_LOGO_ASSET_PATH = '/assets/aistudio/file_00000000679071f5a5e7d2bf243a4828__1__fe221d87.png';
+const PUBLIC_APP_URL_FALLBACK = 'https://ais-pre-t5c2x6fk3je4yhythikayj-923279058412.asia-southeast1.run.app';
+
+function resolveEmailPublicOrigin(baseUrl?: string): string {
+  const candidate = (process.env.APP_URL || baseUrl || '').replace(/\/+$/, '');
+  if (!candidate || candidate.includes('localhost') || candidate.includes('127.0.0.1') || candidate.includes('ais-dev-')) {
+    return PUBLIC_APP_URL_FALLBACK;
+  }
+  return candidate;
+}
+
 // Helper to generate luxury royal HTML email template
-function generateRoyalEmailHtml(otp: string) {
+function generateRoyalEmailHtml(otp: string, baseUrl?: string) {
+  const origin = resolveEmailPublicOrigin(baseUrl);
+  const logoHtml = origin
+    ? `<img src="${origin}${ROYALS_LOGO_ASSET_PATH}" alt="The Royals Logo" width="88" height="88" style="width: 88px; height: 88px; border-radius: 18px; border: 2px solid #D4AF37; display: block; margin: 0 auto 12px; background: #122619; object-fit: contain;" />`
+    : `<div style="width: 64px; height: 64px; line-height: 64px; margin: 0 auto 10px; border-radius: 16px; border: 2px solid #D4AF37; background: #122619; color: #D4AF37; font-size: 28px; font-weight: bold;">R</div>`;
+
   return `
     <div style="font-family: 'Georgia', serif; max-width: 580px; margin: 0 auto; background: #FAF6EF; border: 2px solid #C5A869; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
-      <div style="background: linear-gradient(135deg, #1C1917 0%, #2A2623 100%); padding: 28px; text-align: center; border-bottom: 2px solid #D4AF37;">
-        <div style="font-size: 32px; color: #D4AF37; margin-bottom: 6px;">👑</div>
+      <div style="background: linear-gradient(135deg, #122619 0%, #1B3624 100%); padding: 28px; text-align: center; border-bottom: 2px solid #D4AF37;">
+        ${logoHtml}
         <h1 style="color: #FAF7F2; margin: 0; font-size: 22px; letter-spacing: 1.5px; text-transform: uppercase;">JSG Royals Year 2</h1>
         <p style="color: #C5A869; margin: 6px 0 0; font-size: 12px; letter-spacing: 2px; text-transform: uppercase;">Unified Royal Family Registry</p>
       </div>
@@ -29,7 +45,7 @@ function generateRoyalEmailHtml(otp: string) {
 }
 
 // 1. Resend API Dispatcher (Uses HTTPS Port 443 — 100% reliable on Cloud Run)
-async function sendViaResend(apiKey: string, toEmail: string, otp: string): Promise<boolean> {
+async function sendViaResend(apiKey: string, toEmail: string, otp: string, baseUrl?: string): Promise<boolean> {
   try {
     const fromAddress = process.env.RESEND_FROM || 'JSG Royals <onboarding@resend.dev>';
     const res = await fetch('https://api.resend.com/emails', {
@@ -42,7 +58,7 @@ async function sendViaResend(apiKey: string, toEmail: string, otp: string): Prom
         from: fromAddress,
         to: [toEmail],
         subject: `👑 JSG Royals Verification Code: ${otp}`,
-        html: generateRoyalEmailHtml(otp)
+        html: generateRoyalEmailHtml(otp, baseUrl)
       })
     });
 
@@ -62,7 +78,7 @@ async function sendViaResend(apiKey: string, toEmail: string, otp: string): Prom
 }
 
 // 2. Brevo API Dispatcher (Uses HTTPS Port 443)
-async function sendViaBrevo(apiKey: string, toEmail: string, otp: string): Promise<boolean> {
+async function sendViaBrevo(apiKey: string, toEmail: string, otp: string, baseUrl?: string): Promise<boolean> {
   try {
     const senderEmail = process.env.BREVO_FROM || 'no-reply@jsgroyals.org';
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -75,7 +91,7 @@ async function sendViaBrevo(apiKey: string, toEmail: string, otp: string): Promi
         sender: { name: 'JSG Royals', email: senderEmail },
         to: [{ email: toEmail }],
         subject: `👑 JSG Royals Verification Code: ${otp}`,
-        htmlContent: generateRoyalEmailHtml(otp)
+        htmlContent: generateRoyalEmailHtml(otp, baseUrl)
       })
     });
 
@@ -242,7 +258,7 @@ export async function saveEmailConfig(config: {
 }
 
 // 1. Request 6-digit Email OTP
-export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife' = 'husband') {
+export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife' = 'husband', baseUrl?: string) {
   const email = (rawEmail || '').trim().toLowerCase();
   if (!email || !email.includes('@')) {
     throw new Error('Please enter a valid email address.');
@@ -315,7 +331,7 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
   // 1. Try Resend
   const resendKey = getSetting('resend_api_key') || process.env.RESEND_API_KEY;
   if (resendKey) {
-    emailSentReal = await sendViaResend(resendKey, email, otp);
+    emailSentReal = await sendViaResend(resendKey, email, otp, baseUrl);
     if (emailSentReal) providerUsed = 'Resend';
   }
 
@@ -323,7 +339,7 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
   if (!emailSentReal) {
     const brevoKey = getSetting('brevo_api_key') || process.env.BREVO_API_KEY;
     if (brevoKey) {
-      emailSentReal = await sendViaBrevo(brevoKey, email, otp);
+      emailSentReal = await sendViaBrevo(brevoKey, email, otp, baseUrl);
       if (emailSentReal) providerUsed = 'Brevo';
     }
   }
@@ -338,7 +354,7 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
           from: `"JSG Royals" <${fromUser}>`,
           to: email,
           subject: `👑 JSG Royals Verification Code: ${otp}`,
-          html: generateRoyalEmailHtml(otp)
+          html: generateRoyalEmailHtml(otp, baseUrl)
         });
         emailSentReal = true;
         providerUsed = 'Gmail/SMTP';
@@ -497,7 +513,7 @@ export function verifyEmailOtp(rawEmail: string, rawOtp: string) {
 }
 
 // 3. Send live test verification email from Admin Dashboard
-export async function sendTestEmail(toEmail: string) {
+export async function sendTestEmail(toEmail: string, baseUrl?: string) {
   const email = (toEmail || '').trim().toLowerCase();
   if (!email || !email.includes('@')) {
     throw new Error('Please enter a valid email address.');
@@ -508,14 +524,14 @@ export async function sendTestEmail(toEmail: string) {
   // 1. Try Resend
   const resendKey = getSetting('resend_api_key') || process.env.RESEND_API_KEY;
   if (resendKey) {
-    const ok = await sendViaResend(resendKey, email, otp);
+    const ok = await sendViaResend(resendKey, email, otp, baseUrl);
     if (ok) return { success: true, provider: 'Resend', message: `Live test email successfully dispatched to ${email} via Resend!` };
   }
 
   // 2. Try Brevo
   const brevoKey = getSetting('brevo_api_key') || process.env.BREVO_API_KEY;
   if (brevoKey) {
-    const ok = await sendViaBrevo(brevoKey, email, otp);
+    const ok = await sendViaBrevo(brevoKey, email, otp, baseUrl);
     if (ok) return { success: true, provider: 'Brevo', message: `Live test email successfully dispatched to ${email} via Brevo!` };
   }
 
@@ -528,7 +544,7 @@ export async function sendTestEmail(toEmail: string) {
         from: `"JSG Royals" <${fromUser}>`,
         to: email,
         subject: `👑 JSG Royals Live Gateway Test: ${otp}`,
-        html: generateRoyalEmailHtml(otp)
+        html: generateRoyalEmailHtml(otp, baseUrl)
       });
       return { success: true, provider: 'Gmail/SMTP', message: `Live test email successfully dispatched to ${email}! (Message ID: ${info.messageId})` };
     } catch (mailErr: any) {

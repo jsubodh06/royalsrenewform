@@ -44,7 +44,7 @@ if (!fs.existsSync(photosBaseDir)) {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB maximum
+    fileSize: 25 * 1024 * 1024, // 25 MB maximum
   },
 });
 
@@ -52,7 +52,7 @@ function handlePhotoUploadMiddleware(req: any, res: any, next: any) {
   upload.single('photo')(req, res, (err: any) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE' || err.message?.includes('File too large')) {
-        return res.status(400).json({ error: 'Photo exceeds maximum allowed size of 10 MB.' });
+        return res.status(400).json({ error: 'Photo exceeds maximum allowed size of 25 MB.' });
       }
       return res.status(400).json({ error: err.message || 'File upload error.' });
     }
@@ -1882,7 +1882,10 @@ apiRouter.post('/family/request-email-otp', async (req: Request, res: Response) 
   try {
     const email = req.body?.email;
     const role = req.body?.role || 'husband';
-    const result = await requestEmailOtp(email, role);
+    const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0] || req.protocol || 'https';
+    const host = req.get('host');
+    const baseUrl = host ? `${proto}://${host}` : undefined;
+    const result = await requestEmailOtp(email, role, baseUrl);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to send email verification code.' });
@@ -1908,7 +1911,10 @@ apiRouter.post('/family/email-config', async (req: Request, res: Response) => {
 apiRouter.post('/admin/test-email', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const targetEmail = req.body?.email || req.admin?.email;
-    const result = await sendTestEmail(targetEmail);
+    const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0] || req.protocol || 'https';
+    const host = req.get('host');
+    const baseUrl = host ? `${proto}://${host}` : undefined;
+    const result = await sendTestEmail(targetEmail, baseUrl);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to dispatch test email.' });
@@ -1925,6 +1931,62 @@ apiRouter.post('/family/verify-email-otp', (req: Request, res: Response) => {
     res.status(400).json({ error: err.message || 'Verification failed.' });
   }
 });
+
+const PUBLIC_APP_URL_FALLBACK =
+  'https://ais-pre-t5c2x6fk3je4yhythikayj-923279058412.asia-southeast1.run.app';
+
+function isPrivateDevUrl(url: string): boolean {
+  return !url || url.includes('localhost') || url.includes('127.0.0.1') || url.includes('ais-dev-');
+}
+
+function resolvePublicAppOrigin(req: Request): string {
+  const envUrl = (process.env.PUBLIC_APP_URL || process.env.APP_URL || '').trim().replace(/\/+$/, '');
+  if (envUrl && !isPrivateDevUrl(envUrl)) {
+    return envUrl;
+  }
+  const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || req.protocol || 'https';
+  const host = (req.headers['x-forwarded-host'] as string)?.split(',')[0]?.trim() || req.get('host') || '';
+  const candidate = host ? `${proto}://${host}` : '';
+  if (!isPrivateDevUrl(candidate)) {
+    return candidate;
+  }
+  return PUBLIC_APP_URL_FALLBACK;
+}
+
+function toPublicPhotoUrl(url: string | null | undefined, req: Request): string | null {
+  if (!url) return null;
+  const trimmed = String(url).trim();
+  if (!trimmed) return null;
+
+  const marker = '/api/family/photo/';
+  const idx = trimmed.indexOf(marker);
+  if (idx !== -1) {
+    const isPrivateOrRelative =
+      trimmed.startsWith('/') ||
+      trimmed.includes('localhost') ||
+      trimmed.includes('127.0.0.1') ||
+      trimmed.includes('ais-dev-');
+    if (isPrivateOrRelative) {
+      const filenamePart = trimmed.slice(idx + marker.length).split('?')[0];
+      return `${resolvePublicAppOrigin(req)}${marker}${filenamePart}`;
+    }
+  }
+  return trimmed;
+}
+
+function normalizeFamilyRecordPhotos(record: any, childrenList: any[], req: Request) {
+  const normalizedChildren = (Array.isArray(childrenList) ? childrenList : []).map((c: any) => ({
+    ...c,
+    photo_url: toPublicPhotoUrl(c?.photo_url, req)
+  }));
+  return {
+    ...record,
+    husband_photo_url: toPublicPhotoUrl(record.husband_photo_url, req),
+    wife_photo_url: toPublicPhotoUrl(record.wife_photo_url, req),
+    family_photo_url: toPublicPhotoUrl(record.family_photo_url, req),
+    children: normalizedChildren
+  };
+}
 
 // 1. Check if email (or spouse's email) has already been submitted
 apiRouter.post('/family/check-email', (req: Request, res: Response) => {
@@ -2014,10 +2076,7 @@ apiRouter.post('/family/check-email', (req: Request, res: Response) => {
       submitterEmail: record.submitter_email,
       submittedAt: record.created_at,
       message,
-      registration: {
-        ...record,
-        children: parsedChildren
-      }
+      registration: normalizeFamilyRecordPhotos(record, parsedChildren, req)
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to check email registration.' });
@@ -2116,7 +2175,29 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
 
     const regId = `ROYAL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const now = new Date().toISOString();
-    const childrenJson = Array.isArray(children) ? JSON.stringify(children) : (typeof children === 'string' ? children : '[]');
+
+    const normalizedHusbandPhoto = toPublicPhotoUrl(husband_photo_url, req);
+    const normalizedWifePhoto = toPublicPhotoUrl(wife_photo_url, req);
+    const normalizedFamilyPhoto = toPublicPhotoUrl(family_photo_url, req);
+
+    let normalizedChildrenArray: any[] = [];
+    if (Array.isArray(children)) {
+      normalizedChildrenArray = children.map((c: any) => ({
+        ...c,
+        photo_url: toPublicPhotoUrl(c?.photo_url, req)
+      }));
+    } else if (typeof children === 'string') {
+      try {
+        const parsed = JSON.parse(children);
+        if (Array.isArray(parsed)) {
+          normalizedChildrenArray = parsed.map((c: any) => ({
+            ...c,
+            photo_url: toPublicPhotoUrl(c?.photo_url, req)
+          }));
+        }
+      } catch (e) {}
+    }
+    const childrenJson = JSON.stringify(normalizedChildrenArray);
 
     db.prepare(`
       INSERT INTO family_registrations (
@@ -2150,7 +2231,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       wife_qualification || null, wife_occupation || null, wife_organization || null, wife_blood_group || null,
       marriage_anniversary, current_city.trim(), residential_address.trim(), native_place || null,
       has_children ? 1 : 0, childrenJson,
-      husband_photo_url || null, wife_photo_url || null, family_photo_url || null,
+      normalizedHusbandPhoto, normalizedWifePhoto, normalizedFamilyPhoto,
       contribution_areas || null, royal_idea || null, jsg_should_be_known_for || null,
       now, now
     );
@@ -2165,72 +2246,140 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       success: true,
       regId,
       message: 'Family dossier registered successfully!',
-      registration: {
-        ...created,
-        children: parsedCreatedChildren
-      }
+      registration: normalizeFamilyRecordPhotos(created, parsedCreatedChildren, req)
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to submit family registration.' });
   }
 });
 
-// 3. Upload family photo
+// Helper to save validated image buffer to disk + SQLite
+function persistUploadedFamilyPhoto(buffer: Buffer, req: Request) {
+  const validation = validateImageMagicBytes(buffer);
+  if (!validation.valid) {
+    return { error: validation.error || 'Invalid image file format.' };
+  }
+
+  const ext = validation.ext || 'jpg';
+  const mime = validation.detectedMime || (ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg');
+  const filename = `family_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+  const targetDir = path.resolve(photosBaseDir, 'family');
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  const filePath = path.resolve(targetDir, filename);
+  fs.writeFileSync(filePath, buffer);
+
+  // Also persist in SQLite so images remain accessible across restarts / serverless cold starts
+  db.prepare(`
+    INSERT OR REPLACE INTO family_photos (filename, mime_type, data, size_bytes, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(filename, mime, buffer, buffer.length, new Date().toISOString());
+
+  const relativeUrl = `/api/family/photo/${filename}`;
+  const publicUrl = `${resolvePublicAppOrigin(req)}${relativeUrl}`;
+
+  return {
+    success: true,
+    filename,
+    url: publicUrl,
+    relativeUrl
+  };
+}
+
+// 3. Upload family photo (persists to both disk and SQLite for zero-loss serving)
 apiRouter.post('/family/upload-photo', handlePhotoUploadMiddleware, (req: any, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Please choose an image file to upload.' });
     }
 
-    const validation = validateImageMagicBytes(req.file.buffer);
-    if (!validation.valid) {
-      return res.status(400).json({ error: validation.error || 'Invalid image file format.' });
+    const result = persistUploadedFamilyPhoto(req.file.buffer, req);
+    if ('error' in result) {
+      return res.status(400).json({ error: result.error });
     }
 
-    const ext = validation.ext || 'jpg';
-    const filename = `family_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
-    const targetDir = path.resolve(photosBaseDir, 'family');
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
-
-    const filePath = path.resolve(targetDir, filename);
-    fs.writeFileSync(filePath, req.file.buffer);
-
-    const publicUrl = `/api/family/photo/${filename}`;
-
-    res.json({
-      success: true,
-      filename,
-      url: publicUrl
-    });
+    res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to upload photo.' });
   }
 });
 
-// 3b. Serve uploaded family/individual photos cleanly
+// 3a. JSON Base64 fallback upload endpoint (handles proxies/browsers where multipart upload drops)
+apiRouter.post('/family/upload-photo-base64', (req: Request, res: Response) => {
+  try {
+    const rawData = typeof req.body?.data === 'string' ? req.body.data : '';
+    if (!rawData) {
+      return res.status(400).json({ error: 'No image data received.' });
+    }
+
+    const base64Payload = rawData.includes(',') ? rawData.split(',').pop() || '' : rawData;
+    const buffer = Buffer.from(base64Payload, 'base64');
+    if (buffer.length > 25 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Photo exceeds maximum allowed size of 25 MB.' });
+    }
+
+    const result = persistUploadedFamilyPhoto(buffer, req);
+    if ('error' in result) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to upload photo.' });
+  }
+});
+
+// 3b. Serve uploaded family/individual photos cleanly — completely open/public (no auth required)
 apiRouter.get('/family/photo/:filename', (req: Request, res: Response) => {
   try {
     const safeFilename = path.basename(req.params.filename || '');
     if (!safeFilename || safeFilename.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename.' });
     }
+
     const targetDir = path.resolve(photosBaseDir, 'family');
     const filePath = path.resolve(targetDir, safeFilename);
-    if (!filePath.startsWith(targetDir) || !fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Photo not found.' });
-    }
     const ext = path.extname(safeFilename).toLowerCase();
-    const mime =
+    const fallbackMime =
       ext === '.png'
         ? 'image/png'
         : ext === '.webp'
           ? 'image/webp'
           : 'image/jpeg';
-    res.setHeader('Content-Type', mime);
-    res.setHeader('Cache-Control', 'public, max-age=31536000');
-    res.sendFile(filePath);
+
+    const isDownload = req.query.download === '1' || req.query.download === 'true';
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader(
+      'Content-Disposition',
+      `${isDownload ? 'attachment' : 'inline'}; filename="${safeFilename}"`
+    );
+
+    if (filePath.startsWith(targetDir) && fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', fallbackMime);
+      return res.sendFile(filePath);
+    }
+
+    // Fallback to SQLite binary storage
+    const row = db
+      .prepare('SELECT mime_type, data FROM family_photos WHERE filename = ?')
+      .get(safeFilename) as { mime_type: string; data: Buffer } | undefined;
+
+    if (!row || !row.data) {
+      return res.status(404).json({ error: 'Photo not found.' });
+    }
+
+    // Rehydrate disk cache silently
+    try {
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+      fs.writeFileSync(filePath, row.data);
+    } catch (e) {}
+
+    res.setHeader('Content-Type', row.mime_type || fallbackMime);
+    return res.send(row.data);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to serve photo.' });
   }
@@ -2245,10 +2394,7 @@ apiRouter.get('/admin/family-registrations', requireAdmin, (req: AuthenticatedRe
       try {
         children = r.children_json ? JSON.parse(r.children_json) : [];
       } catch (e) {}
-      return {
-        ...r,
-        children
-      };
+      return normalizeFamilyRecordPhotos(r, children, req);
     });
     res.json({ success: true, count: formatted.length, registrations: formatted });
   } catch (err: any) {

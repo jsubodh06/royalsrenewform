@@ -1,6 +1,7 @@
 import React from 'react';
-import { Crown, LogOut, Shield } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { MemberSession } from '../lib/types.ts';
+import { RoyalLogo } from './RoyalLogo.tsx';
 
 interface RoyalHeaderProps {
   memberSession: MemberSession | null;
@@ -27,9 +28,7 @@ export const RoyalHeader: React.FC<RoyalHeaderProps> = ({
           onClick={onBackToPortal}
           className="flex items-center gap-3.5 cursor-pointer group select-none"
         >
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#1C1917] via-[#2A2623] to-[#141210] text-[#D4AF37] flex items-center justify-center border border-[#C5A869]/60 shadow-md transition-all group-hover:scale-105 group-hover:border-[#D4AF37]">
-            <Crown className="w-5 h-5 text-[#D4AF37] animate-pulse-gold" />
-          </div>
+          <RoyalLogo className="w-12 h-12 rounded-2xl border border-[#C5A869]/80 shadow-md p-0.5 transition-all group-hover:scale-105 group-hover:border-[#D4AF37]" />
           <div>
             <div className="flex items-center gap-2">
               <span className="font-serif-royal font-bold text-lg sm:text-xl tracking-wider text-[#1C1917]">
