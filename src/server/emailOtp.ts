@@ -193,12 +193,102 @@ export function getEmailConfigStatus() {
   };
 }
 
+let cachedVerifyState: {
+  fingerprint: string;
+  checkedAt: number;
+  connectionOk: boolean;
+  connectionError: string | null;
+} | null = null;
+
+function getConfigFingerprint(): string {
+  const resendKey = getSetting('resend_api_key') || process.env.RESEND_API_KEY || '';
+  const brevoKey = getSetting('brevo_api_key') || process.env.BREVO_API_KEY || '';
+  const gmailUser = (getSetting('gmail_user') || process.env.GMAIL_USER || '').trim().toLowerCase();
+  const gmailPass = (getSetting('gmail_pass') || process.env.GMAIL_APP_PASS || '').replace(/\s+/g, '');
+  const smtpHost = getSetting('smtp_host') || process.env.SMTP_HOST || '';
+  const smtpUser = getSetting('smtp_user') || process.env.SMTP_USER || '';
+  const smtpPass = getSetting('smtp_pass') || process.env.SMTP_PASS || '';
+  return `${resendKey.slice(-6)}|${brevoKey.slice(-6)}|${gmailUser}|${gmailPass.slice(-6)}|${gmailPass.length}|${smtpHost}|${smtpUser}|${smtpPass.slice(-4)}`;
+}
+
+export async function getVerifiedEmailConfigStatus(forceCheck = false) {
+  const base = getEmailConfigStatus();
+  if (!base.isConfigured) {
+    cachedVerifyState = null;
+    return { ...base, connectionOk: null as boolean | null, connectionError: null as string | null };
+  }
+
+  const fingerprint = getConfigFingerprint();
+  const now = Date.now();
+  if (
+    !forceCheck &&
+    cachedVerifyState &&
+    cachedVerifyState.fingerprint === fingerprint &&
+    now - cachedVerifyState.checkedAt < 60_000
+  ) {
+    return {
+      ...base,
+      connectionOk: cachedVerifyState.connectionOk,
+      connectionError: cachedVerifyState.connectionError
+    };
+  }
+
+  let connectionOk = true;
+  let connectionError: string | null = null;
+
+  if (base.activeProvider === 'gmail' || base.activeProvider === 'smtp') {
+    const transporter = createTransporter();
+    if (!transporter) {
+      connectionOk = false;
+      connectionError = 'Missing SMTP credentials.';
+    } else {
+      try {
+        await transporter.verify();
+        connectionOk = true;
+      } catch (err: any) {
+        connectionOk = false;
+        const msg = err?.message || '';
+        if (msg.includes('535') || msg.includes('Username and Password not accepted') || msg.includes('BadCredentials')) {
+          connectionError =
+            'Gmail rejected the stored credentials (535-5.7.8 Username and Password not accepted). The active App Password is expired, revoked, or invalid.';
+        } else {
+          connectionError = `SMTP connection check failed: ${msg}`;
+        }
+      }
+    }
+  } else if (base.activeProvider === 'resend') {
+    const key = (getSetting('resend_api_key') || process.env.RESEND_API_KEY || '').trim();
+    try {
+      const r = await fetch('https://api.resend.com/api-keys', {
+        headers: { Authorization: `Bearer ${key}` }
+      });
+      if (r.status === 401 || r.status === 403) {
+        connectionOk = false;
+        connectionError = 'Resend API key was rejected (401/403 Unauthorized).';
+      }
+    } catch (err: any) {
+      connectionOk = false;
+      connectionError = `Resend connectivity check failed: ${err?.message || 'Network error'}`;
+    }
+  }
+
+  cachedVerifyState = {
+    fingerprint,
+    checkedAt: now,
+    connectionOk,
+    connectionError
+  };
+
+  return { ...base, connectionOk, connectionError };
+}
+
 // Reset / Clear email configuration
 export function resetEmailConfig() {
   db.prepare(`
     DELETE FROM app_settings 
     WHERE key IN ('gmail_user', 'gmail_pass', 'resend_api_key', 'brevo_api_key', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass')
   `).run();
+  cachedVerifyState = null;
   return getEmailConfigStatus();
 }
 
@@ -277,7 +367,14 @@ export async function saveEmailConfig(config: {
     if (config.smtpPass) setSetting('smtp_pass', config.smtpPass.trim());
   }
 
-  return getEmailConfigStatus();
+  const status = getEmailConfigStatus();
+  cachedVerifyState = {
+    fingerprint: getConfigFingerprint(),
+    checkedAt: Date.now(),
+    connectionOk: true,
+    connectionError: null
+  };
+  return { ...status, connectionOk: true, connectionError: null };
 }
 
 // 1. Request 6-digit Email OTP

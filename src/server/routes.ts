@@ -28,7 +28,7 @@ import {
   getFast2SmsApiKey,
   checkFast2SmsWallet,
 } from './sms.ts';
-import { requestEmailOtp, verifyEmailOtp, getEmailConfigStatus, saveEmailConfig, resetEmailConfig, sendTestEmail } from './emailOtp.ts';
+import { requestEmailOtp, verifyEmailOtp, getEmailConfigStatus, getVerifiedEmailConfigStatus, saveEmailConfig, resetEmailConfig, sendTestEmail } from './emailOtp.ts';
 
 export const apiRouter = Router();
 
@@ -1895,7 +1895,12 @@ apiRouter.post('/family/request-email-otp', async (req: Request, res: Response) 
 });
 
 // Get Email Delivery Configuration Status
-apiRouter.get('/family/email-config', (_req: Request, res: Response) => {
+apiRouter.get('/family/email-config', async (req: Request, res: Response) => {
+  if (req.query.verify === '1' || req.query.verify === 'true') {
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const verifiedStatus = await getVerifiedEmailConfigStatus(force);
+    return res.json(verifiedStatus);
+  }
   res.json(getEmailConfigStatus());
 });
 

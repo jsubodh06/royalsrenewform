@@ -34,13 +34,16 @@ export const EmailConfigModal: React.FC<EmailConfigModalProps> = ({ isOpen, onCl
 
   const loadStatus = async () => {
     try {
-      const res = await getEmailConfigApi();
+      const res = await getEmailConfigApi({ verify: true });
       setCurrentConfig(res);
       if (res.activeProvider === 'resend') setProvider('resend');
       else if (res.activeProvider === 'brevo') setProvider('brevo');
       else if (res.activeProvider === 'gmail') {
         setProvider('gmail');
         if (res.senderEmail) setGmailUser(res.senderEmail);
+      }
+      if (res.isConfigured && res.connectionOk === false && res.connectionError) {
+        setErrorMessage(res.connectionError);
       }
     } catch (e) {}
   };
@@ -75,7 +78,9 @@ export const EmailConfigModal: React.FC<EmailConfigModalProps> = ({ isOpen, onCl
 
       const res = await saveEmailConfigApi(payload);
       setCurrentConfig(res);
-      setStatusMessage('✨ Email configuration saved! Real emails will now be sent to your inbox.');
+      setStatusMessage(
+        'Email configuration verified for this session. Note: to keep your 16-character App Password permanently across restarts and shared links, also update GMAIL_APP_PASS in AI Studio Secrets.'
+      );
       if (onConfigSaved) onConfigSaved();
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to save email configuration.');
@@ -134,7 +139,12 @@ export const EmailConfigModal: React.FC<EmailConfigModalProps> = ({ isOpen, onCl
         <div className="px-6 pt-4 pb-2">
           <div className="p-3 rounded-2xl bg-white border border-[#E7DDCE] flex items-center justify-between text-xs">
             <span className="text-[#78716C] font-medium">Delivery Mode:</span>
-            {currentConfig?.isConfigured ? (
+            {currentConfig?.isConfigured && currentConfig?.connectionOk === false ? (
+              <span className="font-bold text-red-800 bg-red-100 px-2.5 py-1 rounded-lg flex items-center gap-1.5 border border-red-200">
+                <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+                Credentials Rejected ({currentConfig.activeProvider.toUpperCase()})
+              </span>
+            ) : currentConfig?.isConfigured ? (
               <span className="font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg flex items-center gap-1.5 border border-emerald-200">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                 Real Delivery Active ({currentConfig.activeProvider.toUpperCase()})

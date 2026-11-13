@@ -526,7 +526,11 @@ export async function verifyFamilyEmailOtpApi(email: string, otp: string) {
   });
 }
 
-export async function getEmailConfigApi() {
+export async function getEmailConfigApi(options?: { verify?: boolean; force?: boolean }) {
+  const params = new URLSearchParams();
+  if (options?.verify) params.set('verify', '1');
+  if (options?.force) params.set('force', '1');
+  const qs = params.toString();
   return apiRequest<{
     isConfigured: boolean;
     activeProvider: 'resend' | 'brevo' | 'gmail' | 'smtp' | 'demo';
@@ -534,7 +538,9 @@ export async function getEmailConfigApi() {
     maskedPass?: string | null;
     source?: 'env' | 'db' | null;
     mode: 'live' | 'demo';
-  }>('/family/email-config');
+    connectionOk?: boolean | null;
+    connectionError?: string | null;
+  }>(`/family/email-config${qs ? `?${qs}` : ''}`);
 }
 
 export async function saveEmailConfigApi(config: any) {
@@ -546,6 +552,8 @@ export async function saveEmailConfigApi(config: any) {
     maskedPass?: string | null;
     source?: 'env' | 'db' | null;
     mode: string;
+    connectionOk?: boolean | null;
+    connectionError?: string | null;
   }>('/family/email-config', {
     method: 'POST',
     body: JSON.stringify(config),

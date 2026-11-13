@@ -414,6 +414,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     maskedPass?: string | null;
     source?: 'env' | 'db' | null;
     mode: string;
+    connectionOk?: boolean | null;
+    connectionError?: string | null;
   } | null>(null);
   const [loadingEmailConfig, setLoadingEmailConfig] = useState(false);
   const [emailProvider, setEmailProvider] = useState<'gmail' | 'resend'>('gmail');
@@ -428,10 +430,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
   const [testEmailError, setTestEmailError] = useState<string | null>(null);
 
-  const loadEmailConfig = async () => {
+  const loadEmailConfig = async (force = false) => {
     setLoadingEmailConfig(true);
     try {
-      const data = await getEmailConfigApi();
+      const data = await getEmailConfigApi({ verify: true, force });
       setEmailConfig(data);
       if (data?.activeProvider === 'resend') {
         setEmailProvider('resend');
@@ -665,7 +667,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       loadFamilyRegistrations();
     }
     if (adminToken && activeTab === 'email') {
-      loadEmailConfig();
+      loadEmailConfig(true);
     }
   }, [adminToken, activeTab, auditPagination.page]);
 
@@ -2776,7 +2778,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <button
               type="button"
-              onClick={loadEmailConfig}
+              onClick={() => loadEmailConfig(true)}
               disabled={loadingEmailConfig}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#F2ECE1] transition-all cursor-pointer"
             >
@@ -2786,76 +2788,101 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {/* Current Gateway Status Banner */}
-          <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-            emailConfig?.isConfigured
-              ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
-              : 'bg-amber-50/80 border-amber-200 text-amber-950'
-          }`}>
-            <div className="flex items-start gap-3">
-              {emailConfig?.isConfigured ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-              ) : (
-                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              )}
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm">
-                    {emailConfig?.isConfigured
-                      ? `Gateway Active (${emailConfig.activeProvider.toUpperCase()})`
-                      : 'Email Gateway Not Configured'}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                    emailConfig?.isConfigured
-                      ? 'bg-emerald-200/80 text-emerald-900'
-                      : 'bg-amber-200/80 text-amber-900'
-                  }`}>
-                    {emailConfig?.isConfigured ? 'Live Delivery' : 'Offline'}
-                  </span>
-                </div>
-                <p className="text-xs mt-1 text-[#44403C]">
-                  {emailConfig?.isConfigured
-                    ? `Dispatches real 6-digit OTP verification emails via ${emailConfig.senderEmail}.`
-                    : 'OTP emails cannot be sent until credentials are saved. Configure your 16-character Google App Password or Resend API key below.'}
-                </p>
-                {emailConfig?.isConfigured && emailConfig.maskedPass && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-                    <span className="font-mono font-semibold bg-white/90 px-2.5 py-0.5 rounded-lg border border-emerald-200 text-emerald-900">
-                      Saved Key: {emailConfig.maskedPass}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-lg bg-white/80 border border-emerald-200 text-emerald-800 font-medium">
-                      {emailConfig.source === 'env'
-                        ? 'Permanent (Environment Secrets)'
-                        : 'Session / Container DB (Add GMAIL_USER & GMAIL_APP_PASS in Secrets to persist across restarts)'}
-                    </span>
+          {(() => {
+            const hasAuthFailure = Boolean(emailConfig?.isConfigured && emailConfig?.connectionOk === false);
+            const isHealthy = Boolean(emailConfig?.isConfigured && emailConfig?.connectionOk !== false);
+            return (
+              <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                hasAuthFailure
+                  ? 'bg-red-50/90 border-red-300 text-red-950'
+                  : isHealthy
+                  ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                  : 'bg-amber-50/80 border-amber-200 text-amber-950'
+              }`}>
+                <div className="flex items-start gap-3">
+                  {hasAuthFailure ? (
+                    <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                  ) : isHealthy ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm">
+                        {hasAuthFailure
+                          ? `Gateway Credentials Rejected (${emailConfig?.activeProvider?.toUpperCase()})`
+                          : isHealthy
+                          ? `Gateway Active (${emailConfig?.activeProvider?.toUpperCase()})`
+                          : 'Email Gateway Not Configured'}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        hasAuthFailure
+                          ? 'bg-red-200 text-red-900'
+                          : isHealthy
+                          ? 'bg-emerald-200/80 text-emerald-900'
+                          : 'bg-amber-200/80 text-amber-900'
+                      }`}>
+                        {hasAuthFailure ? 'Auth Failed' : isHealthy ? 'Live Delivery' : 'Offline'}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-1 text-[#44403C]">
+                      {hasAuthFailure
+                        ? emailConfig?.connectionError || 'Stored credentials were rejected by the mail server.'
+                        : isHealthy
+                        ? `Dispatches real 6-digit OTP verification emails via ${emailConfig?.senderEmail}.`
+                        : 'OTP emails cannot be sent until credentials are saved. Configure your 16-character Google App Password or Resend API key below.'}
+                    </p>
+                    {emailConfig?.isConfigured && emailConfig.maskedPass && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className={`font-mono font-semibold bg-white/90 px-2.5 py-0.5 rounded-lg border ${
+                          hasAuthFailure ? 'border-red-300 text-red-900' : 'border-emerald-200 text-emerald-900'
+                        }`}>
+                          Active Key: {emailConfig.maskedPass}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-lg bg-white/80 border font-medium ${
+                          hasAuthFailure ? 'border-red-300 text-red-900' : 'border-emerald-200 text-emerald-800'
+                        }`}>
+                          {emailConfig.source === 'env'
+                            ? 'Source: Environment Secrets (GMAIL_APP_PASS)'
+                            : 'Source: Current Container Session DB (Resets on server restart / new deploy)'}
+                        </span>
+                      </div>
+                    )}
                   </div>
+                </div>
+
+                {emailConfig?.isConfigured && emailConfig.source === 'db' && (
+                  <button
+                    type="button"
+                    onClick={handleResetEmailConfig}
+                    disabled={savingEmailConfig}
+                    className="px-3.5 py-1.5 rounded-xl border border-red-300 text-red-700 bg-white hover:bg-red-50 text-xs font-semibold transition-all cursor-pointer shrink-0"
+                  >
+                    Clear Session Key
+                  </button>
                 )}
               </div>
-            </div>
+            );
+          })()}
 
-            {emailConfig?.isConfigured && (
-              <button
-                type="button"
-                onClick={handleResetEmailConfig}
-                disabled={savingEmailConfig}
-                className="px-3.5 py-1.5 rounded-xl border border-red-300 text-red-700 bg-white hover:bg-red-50 text-xs font-semibold transition-all cursor-pointer shrink-0"
-              >
-                Disconnect Gateway
-              </button>
-            )}
-          </div>
-
-          {(!emailConfig?.isConfigured || emailConfig?.source !== 'env') && (
-            <div className="p-3.5 rounded-2xl bg-blue-50/80 border border-blue-200 text-blue-950 text-xs space-y-1">
+          {(!emailConfig?.isConfigured || emailConfig?.source !== 'env' || emailConfig?.connectionOk === false) && (
+            <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200 text-blue-950 text-xs space-y-1.5">
               <div className="font-bold text-blue-900 flex items-center gap-1.5">
                 <Shield className="w-4 h-4 text-blue-600 shrink-0" />
-                <span>Why does a saved key reset on server restart?</span>
+                <span>Why does saving the 16-character App Password work in one session and fail later?</span>
               </div>
               <p className="text-[11px] leading-relaxed text-blue-900">
-                Saving a key here stores it inside this server&apos;s temporary container database, which resets whenever Cloud Run restarts, updates, or goes idle.
-                To keep your 16-digit Gmail App Password permanently across all restarts &amp; shared deployments, add{' '}
+                Entering your 16-character App Password in the form below saves it only inside this container&apos;s temporary database for the active session.
+                Whenever the server restarts, scales, or opens on the Shared URL, that temporary database resets and reverts to the{' '}
+                <code className="bg-white px-1 py-0.5 rounded border border-blue-200 font-mono font-bold">GMAIL_APP_PASS</code> value in{' '}
+                <strong>AI Studio Secrets</strong>{emailConfig?.source === 'env' && emailConfig?.maskedPass ? ` (currently ${emailConfig.maskedPass})` : ''}.
+              </p>
+              <p className="text-[11px] leading-relaxed text-blue-900 font-medium">
+                To fix it permanently across all future sessions and shared links: update{' '}
                 <code className="bg-white px-1 py-0.5 rounded border border-blue-200 font-mono font-bold">GMAIL_USER</code> and{' '}
-                <code className="bg-white px-1 py-0.5 rounded border border-blue-200 font-mono font-bold">GMAIL_APP_PASS</code>{' '}
-                in AI Studio <strong>Secrets / Environment Variables</strong>.
+                <code className="bg-white px-1 py-0.5 rounded border border-blue-200 font-mono font-bold">GMAIL_APP_PASS</code> in{' '}
+                AI Studio <strong>Secrets / Environment Variables</strong> with your latest valid 16-character App Password (no spaces).
               </p>
             </div>
           )}
