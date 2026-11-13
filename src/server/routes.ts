@@ -1164,6 +1164,7 @@ apiRouter.get('/admin/overview', requireAdmin, (req: AuthenticatedRequest, res: 
       freshFamilyCount
     });
   } catch (err: any) {
+    console.error('/api/admin/overview error:', err);
     res.status(500).json({ error: 'Failed to fetch admin overview.' });
   }
 });
@@ -1293,6 +1294,7 @@ apiRouter.get('/admin/members', requireAdmin, (req: AuthenticatedRequest, res: R
       }
     });
   } catch (err: any) {
+    console.error('/api/admin/members error:', err);
     res.status(500).json({ error: 'Failed to query members.' });
   }
 });

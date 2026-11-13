@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Shield,
   Crown,
@@ -669,8 +669,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, [adminToken, activeTab, auditPagination.page]);
 
-  // Debounced search
+  // Debounced search (skip initial mount since the filter/page effect above already fetches)
+  const didMountSearchRef = useRef(false);
   useEffect(() => {
+    if (!didMountSearchRef.current) {
+      didMountSearchRef.current = true;
+      return;
+    }
     if (!adminToken) return;
     const timer = setTimeout(() => {
       setPagination((prev) => ({ ...prev, page: 1 }));

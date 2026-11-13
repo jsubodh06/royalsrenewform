@@ -32,9 +32,12 @@ if (isVercel && !fs.existsSync(dbPath)) {
 
 export const db = new Database(dbPath);
 
-// Enable foreign key constraints and journaling mode
+// Enable busy timeout, foreign key constraints, and safe WAL journaling mode
+db.pragma('busy_timeout = 5000');
 try {
   db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
+  db.pragma('wal_checkpoint(TRUNCATE)');
 } catch (e) {
   try {
     db.pragma('journal_mode = DELETE');
