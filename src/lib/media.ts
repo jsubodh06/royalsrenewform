@@ -1,3 +1,5 @@
+import { resolvePhotoFromFirestore } from './firestoreStore.ts';
+
 export function isUploadedServerPhoto(url?: string | null): boolean {
   if (!url) return false;
   return url.startsWith('/api/family/photo/') || url.includes('/api/family/photo/');
@@ -98,6 +100,16 @@ export async function downloadMediaImage(url: string, suggestedName = 'royal-pho
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
   } catch {
+    const cloudDataUrl = await resolvePhotoFromFirestore(url).catch(() => null);
+    if (cloudDataUrl) {
+      const link = document.createElement('a');
+      link.href = cloudDataUrl;
+      link.download = suggestedName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
     const link = document.createElement('a');
     link.href = url.includes('?') ? `${url}&download=1` : `${url}?download=1`;
     link.download = suggestedName;

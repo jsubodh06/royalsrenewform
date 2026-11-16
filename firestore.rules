@@ -1,51 +1,315 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.email == 'subodhjain2007777@gmail.com' ||
-        request.auth.token.email == 'admin@jsgroyals.org' ||
-        (request.auth.token.role != null && (request.auth.token.role == 'admin' || request.auth.token.role == 'super_admin'))
-      );
+
+    // 1. Default-Deny Global Catch-All Safety Net
+    match /{document=**} {
+      allow read, write: if false;
     }
 
-    function isCoupleOwner(coupleId) {
-      return isAuthenticated() && (
-        isAdmin() ||
-        (request.auth.token.coupleId != null && request.auth.token.coupleId == coupleId)
-      );
+    // 2. Global Security & Validation Primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedAuth() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedAuth() && request.auth.token.email == 'subodhjain2007777@gmail.com';
     }
 
     function isValidId(id) {
-      return id is string && id.matches('^JR[0-9]{3}$');
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Members collection: Master Year-1 records
+    function isValidPhotoId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 160 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    function isValidCoupleId(id) {
+      return id is string && id.size() == 5 && id.matches('^JR[0-9]{3}$');
+    }
+
+    function isRequiredStr(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isOptionalStr(val, maxLen) {
+      return val == null || (val is string && val.size() <= maxLen);
+    }
+
+    function isValidMember(data, coupleId) {
+      return data.keys().hasAll(['couple_id', 'husband_name', 'wife_name', 'year1_status']) &&
+        data.keys().hasOnly([
+          'couple_id', 'husband_name', 'wife_name',
+          'husband_registered_mobile', 'wife_registered_mobile', 'year1_status'
+        ]) &&
+        data.couple_id == coupleId &&
+        isRequiredStr(data.husband_name, 1, 120) &&
+        isRequiredStr(data.wife_name, 1, 120) &&
+        isRequiredStr(data.year1_status, 1, 60) &&
+        (!('husband_registered_mobile' in data) || isOptionalStr(data.husband_registered_mobile, 20)) &&
+        (!('wife_registered_mobile' in data) || isOptionalStr(data.wife_registered_mobile, 20));
+    }
+
+    function isValidYear2Profile(data, coupleId) {
+      return data.keys().hasAll(['couple_id']) &&
+        data.keys().hasOnly([
+          'couple_id', 'city', 'residential_address', 'occupation_status',
+          'family_status', 'photo_id', 'family_photo_url', 'last_step'
+        ]) &&
+        data.couple_id == coupleId &&
+        (!('city' in data) || isOptionalStr(data.city, 120)) &&
+        (!('residential_address' in data) || isOptionalStr(data.residential_address, 500)) &&
+        (!('occupation_status' in data) || isOptionalStr(data.occupation_status, 200)) &&
+        (!('family_status' in data) || isOptionalStr(data.family_status, 300)) &&
+        (!('photo_id' in data) || isOptionalStr(data.photo_id, 160)) &&
+        (!('family_photo_url' in data) || isOptionalStr(data.family_photo_url, 1000)) &&
+        (!('last_step' in data) || (data.last_step is number && data.last_step >= 1 && data.last_step <= 10));
+    }
+
+    function isValidSubmission(data, coupleId) {
+      return data.keys().hasAll(['couple_id', 'submission_status', 'submitted_at']) &&
+        data.keys().hasOnly(['couple_id', 'submission_status', 'submitted_at', 'submitted_by_mobile']) &&
+        data.couple_id == coupleId &&
+        data.submission_status in ['submitted', 'approved', 'under_review'] &&
+        isRequiredStr(data.submitted_at, 4, 64) &&
+        (!('submitted_by_mobile' in data) || isOptionalStr(data.submitted_by_mobile, 20));
+    }
+
+    function isValidChildEntry(child) {
+      return child is map &&
+        child.keys().hasOnly(['id', 'name', 'gender', 'dob', 'education', 'interests', 'photo_url']) &&
+        (!('id' in child) || isOptionalStr(child.id, 64)) &&
+        (!('name' in child) || isOptionalStr(child.name, 150)) &&
+        (!('gender' in child) || child.gender in ['son', 'daughter']) &&
+        (!('dob' in child) || isOptionalStr(child.dob, 40)) &&
+        (!('education' in child) || isOptionalStr(child.education, 200)) &&
+        (!('interests' in child) || isOptionalStr(child.interests, 300)) &&
+        (!('photo_url' in child) || isOptionalStr(child.photo_url, 1000));
+    }
+
+    function isValidFamilyRegistration(data, regId) {
+      return data.keys().hasAll([
+          'reg_id', 'membership_type', 'submitted_by_role', 'submitter_email',
+          'husband_name', 'husband_mobile', 'husband_email',
+          'wife_name', 'wife_mobile', 'wife_email',
+          'marriage_anniversary', 'current_city', 'residential_address',
+          'has_children', 'children', 'status',
+          'created_at', 'updated_at', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'reg_id', 'membership_type', 'submitted_by_role', 'submitter_email',
+          'husband_name', 'husband_mobile', 'husband_email', 'husband_dob',
+          'husband_qualification', 'husband_occupation', 'husband_organization',
+          'husband_blood_group', 'husband_photo_url',
+          'wife_name', 'wife_mobile', 'wife_email', 'wife_dob',
+          'wife_qualification', 'wife_occupation', 'wife_organization',
+          'wife_blood_group', 'wife_photo_url',
+          'marriage_anniversary', 'current_city', 'residential_address', 'native_place',
+          'has_children', 'children', 'couple_photo_url', 'family_photo_url',
+          'contribution_areas', 'royal_idea', 'jsg_should_be_known_for',
+          'president_name', 'president_mobile', 'secretary_name', 'secretary_mobile',
+          'other_group_member', 'other_group_name', 'new_member_contribution',
+          'reference_name', 'reference_mobile', 'business_description',
+          'status', 'created_at', 'updated_at', 'createdAt', 'updatedAt'
+        ]) &&
+        data.reg_id == regId &&
+        data.membership_type in ['existing', 'new'] &&
+        data.submitted_by_role in ['husband', 'wife'] &&
+        isRequiredStr(data.submitter_email, 3, 200) &&
+        isRequiredStr(data.husband_name, 1, 150) &&
+        isRequiredStr(data.husband_mobile, 10, 20) &&
+        isRequiredStr(data.husband_email, 3, 200) &&
+        isRequiredStr(data.wife_name, 1, 150) &&
+        isRequiredStr(data.wife_mobile, 10, 20) &&
+        isRequiredStr(data.wife_email, 3, 200) &&
+        isRequiredStr(data.marriage_anniversary, 4, 40) &&
+        isRequiredStr(data.current_city, 1, 120) &&
+        isRequiredStr(data.residential_address, 1, 600) &&
+        data.has_children is bool &&
+        data.children is list &&
+        data.children.size() <= 10 &&
+        (data.children.size() == 0 || isValidChildEntry(data.children[0])) &&
+        data.status in ['submitted', 'pending_review', 'approved', 'rejected'] &&
+        isRequiredStr(data.created_at, 4, 64) &&
+        isRequiredStr(data.updated_at, 4, 64) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (!('husband_dob' in data) || isOptionalStr(data.husband_dob, 40)) &&
+        (!('husband_qualification' in data) || isOptionalStr(data.husband_qualification, 200)) &&
+        (!('husband_occupation' in data) || isOptionalStr(data.husband_occupation, 200)) &&
+        (!('husband_organization' in data) || isOptionalStr(data.husband_organization, 200)) &&
+        (!('husband_blood_group' in data) || isOptionalStr(data.husband_blood_group, 10)) &&
+        (!('husband_photo_url' in data) || isOptionalStr(data.husband_photo_url, 1000)) &&
+        (!('wife_dob' in data) || isOptionalStr(data.wife_dob, 40)) &&
+        (!('wife_qualification' in data) || isOptionalStr(data.wife_qualification, 200)) &&
+        (!('wife_occupation' in data) || isOptionalStr(data.wife_occupation, 200)) &&
+        (!('wife_organization' in data) || isOptionalStr(data.wife_organization, 200)) &&
+        (!('wife_blood_group' in data) || isOptionalStr(data.wife_blood_group, 10)) &&
+        (!('wife_photo_url' in data) || isOptionalStr(data.wife_photo_url, 1000)) &&
+        (!('native_place' in data) || isOptionalStr(data.native_place, 200)) &&
+        (!('couple_photo_url' in data) || isOptionalStr(data.couple_photo_url, 1000)) &&
+        (!('family_photo_url' in data) || isOptionalStr(data.family_photo_url, 1000)) &&
+        (!('contribution_areas' in data) || isOptionalStr(data.contribution_areas, 1000)) &&
+        (!('royal_idea' in data) || isOptionalStr(data.royal_idea, 2000)) &&
+        (!('jsg_should_be_known_for' in data) || isOptionalStr(data.jsg_should_be_known_for, 2000)) &&
+        (!('president_name' in data) || isOptionalStr(data.president_name, 150)) &&
+        (!('president_mobile' in data) || isOptionalStr(data.president_mobile, 25)) &&
+        (!('secretary_name' in data) || isOptionalStr(data.secretary_name, 150)) &&
+        (!('secretary_mobile' in data) || isOptionalStr(data.secretary_mobile, 25)) &&
+        (!('other_group_member' in data) || isOptionalStr(data.other_group_member, 10)) &&
+        (!('other_group_name' in data) || isOptionalStr(data.other_group_name, 200)) &&
+        (!('new_member_contribution' in data) || isOptionalStr(data.new_member_contribution, 2000)) &&
+        (!('reference_name' in data) || isOptionalStr(data.reference_name, 150)) &&
+        (!('reference_mobile' in data) || isOptionalStr(data.reference_mobile, 20)) &&
+        (!('business_description' in data) || isOptionalStr(data.business_description, 2000));
+    }
+
+    function isValidNewMemberApplication(data, appId) {
+      return data.keys().hasAll([
+          'app_id', 'applicant_name', 'business_name', 'mobile_number', 'email',
+          'other_group_member', 'contribution', 'reference_name', 'reference_mobile',
+          'business_description', 'status', 'created_at', 'updated_at', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'app_id', 'applicant_name', 'business_name', 'mobile_number', 'email',
+          'other_group_member', 'other_group_name', 'contribution',
+          'reference_name', 'reference_mobile', 'business_description',
+          'president_name', 'president_mobile', 'secretary_name', 'secretary_mobile',
+          'status', 'created_at', 'updated_at', 'createdAt', 'updatedAt'
+        ]) &&
+        data.app_id == appId &&
+        isRequiredStr(data.applicant_name, 1, 150) &&
+        isRequiredStr(data.business_name, 1, 200) &&
+        isRequiredStr(data.mobile_number, 10, 20) &&
+        isRequiredStr(data.email, 3, 200) &&
+        data.other_group_member in ['Yes', 'No'] &&
+        isRequiredStr(data.contribution, 1, 2000) &&
+        isRequiredStr(data.reference_name, 1, 150) &&
+        isRequiredStr(data.reference_mobile, 10, 20) &&
+        isRequiredStr(data.business_description, 1, 2000) &&
+        data.status in ['pending_review', 'approved', 'rejected'] &&
+        isRequiredStr(data.created_at, 4, 64) &&
+        isRequiredStr(data.updated_at, 4, 64) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (!('other_group_name' in data) || isOptionalStr(data.other_group_name, 200)) &&
+        (!('president_name' in data) || isOptionalStr(data.president_name, 150)) &&
+        (!('president_mobile' in data) || isOptionalStr(data.president_mobile, 25)) &&
+        (!('secretary_name' in data) || isOptionalStr(data.secretary_name, 150)) &&
+        (!('secretary_mobile' in data) || isOptionalStr(data.secretary_mobile, 25));
+    }
+
+    function isValidFamilyPhoto(data, photoId) {
+      return data.keys().hasAll(['photo_id', 'mime_type', 'data_url', 'size_bytes', 'created_at', 'createdAt']) &&
+        data.keys().hasOnly(['photo_id', 'mime_type', 'data_url', 'size_bytes', 'created_at', 'createdAt']) &&
+        data.photo_id == photoId &&
+        data.mime_type in ['image/jpeg', 'image/png', 'image/webp'] &&
+        data.data_url is string &&
+        data.data_url.size() >= 20 &&
+        data.data_url.size() <= 650000 &&
+        data.data_url[0:11] == 'data:image/' &&
+        data.size_bytes is number &&
+        data.size_bytes > 0 &&
+        data.size_bytes <= 650000 &&
+        isRequiredStr(data.created_at, 4, 64) &&
+        data.createdAt is timestamp;
+    }
+
+    // 3. Members collection: Master Year-1 records (Admin managed)
     match /members/{coupleId} {
-      allow get: if isAuthenticated();
+      allow get: if isValidCoupleId(coupleId) && isAdmin();
       allow list: if isAdmin();
-      allow create, update, delete: if isAdmin();
+      allow create: if isValidCoupleId(coupleId) && isAdmin() && isValidMember(incoming(), coupleId);
+      allow update: if isValidCoupleId(coupleId) && isAdmin() && isValidMember(incoming(), coupleId) &&
+        incoming().couple_id == existing().couple_id;
+      allow delete: if isValidCoupleId(coupleId) && isAdmin();
     }
 
-    // Year-2 profiles & drafts: Isolated per Couple ID
+    // 4. Year-2 profiles & drafts (Admin managed)
     match /year2_profiles/{coupleId} {
-      allow get: if isCoupleOwner(coupleId);
+      allow get: if isValidCoupleId(coupleId) && isAdmin();
       allow list: if isAdmin();
-      allow create, update: if isCoupleOwner(coupleId) && isValidId(coupleId);
-      allow delete: if isAdmin();
+      allow create: if isValidCoupleId(coupleId) && isAdmin() && isValidYear2Profile(incoming(), coupleId);
+      allow update: if isValidCoupleId(coupleId) && isAdmin() && isValidYear2Profile(incoming(), coupleId) &&
+        incoming().couple_id == existing().couple_id;
+      allow delete: if isValidCoupleId(coupleId) && isAdmin();
     }
 
-    // Submissions: Single submission enforcement
+    // 5. Submissions (Admin managed)
     match /submissions/{coupleId} {
-      allow get: if isCoupleOwner(coupleId);
+      allow get: if isValidCoupleId(coupleId) && isAdmin();
       allow list: if isAdmin();
-      allow create: if isCoupleOwner(coupleId) && isValidId(coupleId) && !exists(/databases/$(database)/documents/submissions/$(coupleId));
-      allow update, delete: if isAdmin();
+      allow create: if isValidCoupleId(coupleId) && isAdmin() && isValidSubmission(incoming(), coupleId) &&
+        !exists(/databases/$(database)/documents/submissions/$(coupleId));
+      allow update: if isValidCoupleId(coupleId) && isAdmin() && isValidSubmission(incoming(), coupleId) &&
+        incoming().couple_id == existing().couple_id;
+      allow delete: if isValidCoupleId(coupleId) && isAdmin();
+    }
+
+    // 6. Family Registrations: Strict write-once dossier dropbox; Admin-only read/list/update/delete
+    match /family_registrations/{regId} {
+      allow get: if isValidId(regId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(regId) &&
+        !exists(/databases/$(database)/documents/family_registrations/$(regId)) &&
+        isValidFamilyRegistration(incoming(), regId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().status in ['submitted', 'pending_review'];
+      allow update: if isValidId(regId) &&
+        isAdmin() &&
+        isValidFamilyRegistration(incoming(), regId) &&
+        incoming().reg_id == existing().reg_id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().created_at == existing().created_at &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']);
+      allow delete: if isValidId(regId) && isAdmin();
+    }
+
+    // 7. New Member Applications: Strict write-once application dropbox; Admin-only read/list/update/delete
+    match /new_member_applications/{appId} {
+      allow get: if isValidId(appId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(appId) &&
+        !exists(/databases/$(database)/documents/new_member_applications/$(appId)) &&
+        isValidNewMemberApplication(incoming(), appId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().status == 'pending_review';
+      allow update: if isValidId(appId) &&
+        isAdmin() &&
+        isValidNewMemberApplication(incoming(), appId) &&
+        incoming().app_id == existing().app_id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().created_at == existing().created_at &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']);
+      allow delete: if isValidId(appId) && isAdmin();
+    }
+
+    // 8. Family Photos: Persistent compressed photo backups for Admin review across deploys
+    match /family_photos/{photoId} {
+      allow get: if isValidPhotoId(photoId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidPhotoId(photoId) &&
+        !exists(/databases/$(database)/documents/family_photos/$(photoId)) &&
+        isValidFamilyPhoto(incoming(), photoId) &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidPhotoId(photoId) && isAdmin();
     }
   }
 }

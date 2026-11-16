@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Download, ExternalLink, Image as ImageIcon, AlertCircle, Copy, Check } from 'lucide-react';
 import {
   getDisplayImageSrc,
@@ -6,6 +6,7 @@ import {
   resolveFullMediaUrl,
   downloadMediaImage
 } from '../lib/media.ts';
+import { resolvePhotoFromFirestore } from '../lib/firestoreStore.ts';
 
 export interface PreviewPhotoState {
   title: string;
@@ -20,11 +21,17 @@ interface PhotoLightboxModalProps {
 
 export const PhotoLightboxModal: React.FC<PhotoLightboxModalProps> = ({ photo, onClose }) => {
   const [imgError, setImgError] = useState(false);
+  const [fallbackSrc, setFallbackSrc] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+    setFallbackSrc(null);
+  }, [photo?.url]);
 
   if (!photo) return null;
 
-  const displaySrc = getDisplayImageSrc(photo.url) || photo.url;
+  const displaySrc = fallbackSrc || getDisplayImageSrc(photo.url) || photo.url;
   const fullUrl = resolveFullMediaUrl(photo.url);
   const isExternal = isExternalCloudUrl(photo.url);
 
@@ -110,7 +117,16 @@ export const PhotoLightboxModal: React.FC<PhotoLightboxModalProps> = ({ photo, o
             <img
               src={displaySrc}
               alt={photo.title}
-              onError={() => setImgError(true)}
+              onError={async () => {
+                if (!fallbackSrc) {
+                  const cloudSrc = await resolvePhotoFromFirestore(photo.url).catch(() => null);
+                  if (cloudSrc) {
+                    setFallbackSrc(cloudSrc);
+                    return;
+                  }
+                }
+                setImgError(true);
+              }}
               className="max-w-full max-h-[70vh] object-contain rounded-xl shadow-lg"
             />
           ) : (

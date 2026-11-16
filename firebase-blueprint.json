@@ -8,27 +8,36 @@
         "couple_id": {
           "type": "string",
           "description": "Unique permanent Couple ID from JR001 to JR110",
-          "pattern": "^JR[0-9]{3}$"
+          "pattern": "^JR[0-9]{3}$",
+          "minLength": 5,
+          "maxLength": 5
         },
         "husband_name": {
           "type": "string",
-          "description": "Full name of the husband"
+          "description": "Full name of the husband",
+          "minLength": 1,
+          "maxLength": 120
         },
         "wife_name": {
           "type": "string",
-          "description": "Full name of the wife"
+          "description": "Full name of the wife",
+          "minLength": 1,
+          "maxLength": 120
         },
         "husband_registered_mobile": {
           "type": "string",
-          "description": "Registered 10-digit mobile number for husband"
+          "description": "Registered 10-digit mobile number for husband",
+          "maxLength": 20
         },
         "wife_registered_mobile": {
           "type": "string",
-          "description": "Registered 10-digit mobile number for wife"
+          "description": "Registered 10-digit mobile number for wife",
+          "maxLength": 20
         },
         "year1_status": {
           "type": "string",
-          "description": "Year 1 membership status"
+          "description": "Year 1 membership status",
+          "maxLength": 60
         }
       },
       "required": ["couple_id", "husband_name", "wife_name", "year1_status"]
@@ -41,31 +50,39 @@
         "couple_id": {
           "type": "string",
           "description": "Owner couple ID",
-          "pattern": "^JR[0-9]{3}$"
+          "pattern": "^JR[0-9]{3}$",
+          "minLength": 5,
+          "maxLength": 5
         },
         "city": {
           "type": "string",
-          "description": "Current residential city"
+          "description": "Current residential city",
+          "maxLength": 120
         },
         "residential_address": {
           "type": "string",
-          "description": "Current residential address"
+          "description": "Current residential address",
+          "maxLength": 500
         },
         "occupation_status": {
           "type": "string",
-          "description": "Occupation status or updates"
+          "description": "Occupation status or updates",
+          "maxLength": 200
         },
         "family_status": {
           "type": "string",
-          "description": "Family and children updates"
+          "description": "Family and children updates",
+          "maxLength": 300
         },
         "photo_id": {
           "type": "string",
-          "description": "Private photo identifier"
+          "description": "Private photo identifier",
+          "maxLength": 160
         },
         "family_photo_url": {
           "type": "string",
-          "description": "Secure reference to family photo"
+          "description": "Secure reference to family photo",
+          "maxLength": 1000
         },
         "last_step": {
           "type": "number",
@@ -82,7 +99,9 @@
         "couple_id": {
           "type": "string",
           "description": "Submitted couple ID",
-          "pattern": "^JR[0-9]{3}$"
+          "pattern": "^JR[0-9]{3}$",
+          "minLength": 5,
+          "maxLength": 5
         },
         "submission_status": {
           "type": "string",
@@ -91,28 +110,501 @@
         },
         "submitted_at": {
           "type": "string",
-          "description": "ISO timestamp of submission"
+          "description": "ISO timestamp of submission",
+          "maxLength": 64
         },
         "submitted_by_mobile": {
           "type": "string",
-          "description": "Mobile number used to submit"
+          "description": "Mobile number used to submit",
+          "maxLength": 20
         }
       },
       "required": ["couple_id", "submission_status", "submitted_at"]
+    },
+    "FamilyRegistration": {
+      "title": "FamilyRegistration",
+      "description": "Persistent JSG Royals Year 2 family registration or new member dossier",
+      "type": "object",
+      "properties": {
+        "reg_id": {
+          "type": "string",
+          "description": "Unique registration ID (e.g. ROYAL-XXXXXX or APP-XXXXXX)",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "membership_type": {
+          "type": "string",
+          "description": "Whether the family is an existing renewal or new application",
+          "enum": ["existing", "new"]
+        },
+        "submitted_by_role": {
+          "type": "string",
+          "description": "Spouse role who submitted the form",
+          "enum": ["husband", "wife"]
+        },
+        "submitter_email": {
+          "type": "string",
+          "description": "Verified submitter email address",
+          "maxLength": 200
+        },
+        "husband_name": {
+          "type": "string",
+          "description": "Husband full name",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "husband_mobile": {
+          "type": "string",
+          "description": "Husband 10-digit mobile",
+          "minLength": 10,
+          "maxLength": 20
+        },
+        "husband_email": {
+          "type": "string",
+          "description": "Husband email address",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "husband_dob": {
+          "type": "string",
+          "description": "Husband date of birth",
+          "maxLength": 40
+        },
+        "husband_qualification": {
+          "type": "string",
+          "description": "Husband educational qualification",
+          "maxLength": 200
+        },
+        "husband_occupation": {
+          "type": "string",
+          "description": "Husband occupation or profession",
+          "maxLength": 200
+        },
+        "husband_organization": {
+          "type": "string",
+          "description": "Husband business or organization",
+          "maxLength": 200
+        },
+        "husband_blood_group": {
+          "type": "string",
+          "description": "Husband blood group",
+          "maxLength": 10
+        },
+        "husband_photo_url": {
+          "type": "string",
+          "description": "Husband photo URL or Drive link",
+          "maxLength": 1000
+        },
+        "wife_name": {
+          "type": "string",
+          "description": "Wife full name",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "wife_mobile": {
+          "type": "string",
+          "description": "Wife 10-digit mobile",
+          "minLength": 10,
+          "maxLength": 20
+        },
+        "wife_email": {
+          "type": "string",
+          "description": "Wife email address",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "wife_dob": {
+          "type": "string",
+          "description": "Wife date of birth",
+          "maxLength": 40
+        },
+        "wife_qualification": {
+          "type": "string",
+          "description": "Wife educational qualification",
+          "maxLength": 200
+        },
+        "wife_occupation": {
+          "type": "string",
+          "description": "Wife occupation or profession",
+          "maxLength": 200
+        },
+        "wife_organization": {
+          "type": "string",
+          "description": "Wife business or organization",
+          "maxLength": 200
+        },
+        "wife_blood_group": {
+          "type": "string",
+          "description": "Wife blood group",
+          "maxLength": 10
+        },
+        "wife_photo_url": {
+          "type": "string",
+          "description": "Wife photo URL or Drive link",
+          "maxLength": 1000
+        },
+        "marriage_anniversary": {
+          "type": "string",
+          "description": "Marriage anniversary date",
+          "minLength": 4,
+          "maxLength": 40
+        },
+        "current_city": {
+          "type": "string",
+          "description": "Current residential city",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "residential_address": {
+          "type": "string",
+          "description": "Full residential address",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "native_place": {
+          "type": "string",
+          "description": "Native ancestral place",
+          "maxLength": 200
+        },
+        "has_children": {
+          "type": "boolean",
+          "description": "Whether couple has children"
+        },
+        "children": {
+          "type": "array",
+          "description": "List of children details (up to 10 entries)"
+        },
+        "couple_photo_url": {
+          "type": "string",
+          "description": "Couple photo URL or Drive link",
+          "maxLength": 1000
+        },
+        "family_photo_url": {
+          "type": "string",
+          "description": "Family portrait URL or Drive link",
+          "maxLength": 1000
+        },
+        "contribution_areas": {
+          "type": "string",
+          "description": "Selected club contribution areas",
+          "maxLength": 1000
+        },
+        "royal_idea": {
+          "type": "string",
+          "description": "Idea for JSG Royals Year 2",
+          "maxLength": 2000
+        },
+        "jsg_should_be_known_for": {
+          "type": "string",
+          "description": "Identity vision for JSG Royals",
+          "maxLength": 2000
+        },
+        "president_name": {
+          "type": "string",
+          "description": "Club president name",
+          "maxLength": 150
+        },
+        "president_mobile": {
+          "type": "string",
+          "description": "Club president mobile",
+          "maxLength": 25
+        },
+        "secretary_name": {
+          "type": "string",
+          "description": "Club secretary name",
+          "maxLength": 150
+        },
+        "secretary_mobile": {
+          "type": "string",
+          "description": "Club secretary mobile",
+          "maxLength": 25
+        },
+        "other_group_member": {
+          "type": "string",
+          "description": "Member of any other group",
+          "maxLength": 10
+        },
+        "other_group_name": {
+          "type": "string",
+          "description": "Other group name if applicable",
+          "maxLength": 200
+        },
+        "new_member_contribution": {
+          "type": "string",
+          "description": "New applicant contribution note",
+          "maxLength": 2000
+        },
+        "reference_name": {
+          "type": "string",
+          "description": "Referring member name",
+          "maxLength": 150
+        },
+        "reference_mobile": {
+          "type": "string",
+          "description": "Referring member 10-digit mobile",
+          "maxLength": 20
+        },
+        "business_description": {
+          "type": "string",
+          "description": "Business description for new applicants",
+          "maxLength": 2000
+        },
+        "status": {
+          "type": "string",
+          "description": "Registration review status",
+          "enum": ["submitted", "pending_review", "approved", "rejected"]
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO timestamp when registration was created",
+          "maxLength": 64
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "ISO timestamp when registration was last updated",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firestore server timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firestore server timestamp of last update"
+        }
+      },
+      "required": [
+        "reg_id",
+        "membership_type",
+        "submitted_by_role",
+        "submitter_email",
+        "husband_name",
+        "husband_mobile",
+        "husband_email",
+        "wife_name",
+        "wife_mobile",
+        "wife_email",
+        "marriage_anniversary",
+        "current_city",
+        "residential_address",
+        "has_children",
+        "children",
+        "status",
+        "created_at",
+        "updated_at",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "NewMemberApplication": {
+      "title": "NewMemberApplication",
+      "description": "Persistent JSG Royals Year 2 prospective new member application",
+      "type": "object",
+      "properties": {
+        "app_id": {
+          "type": "string",
+          "description": "Unique application ID",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "applicant_name": {
+          "type": "string",
+          "description": "Primary applicant name",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "business_name": {
+          "type": "string",
+          "description": "Applicant business or organization name",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "mobile_number": {
+          "type": "string",
+          "description": "10-digit applicant mobile number",
+          "minLength": 10,
+          "maxLength": 20
+        },
+        "email": {
+          "type": "string",
+          "description": "Applicant email address",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "other_group_member": {
+          "type": "string",
+          "description": "Whether applicant belongs to another group",
+          "enum": ["Yes", "No"]
+        },
+        "other_group_name": {
+          "type": "string",
+          "description": "Other group name if Yes",
+          "maxLength": 200
+        },
+        "contribution": {
+          "type": "string",
+          "description": "How applicant can contribute to JSG Royals",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "reference_name": {
+          "type": "string",
+          "description": "Referring member name",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "reference_mobile": {
+          "type": "string",
+          "description": "Referring member mobile number",
+          "minLength": 10,
+          "maxLength": 20
+        },
+        "business_description": {
+          "type": "string",
+          "description": "Description of applicant business",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "president_name": {
+          "type": "string",
+          "description": "Club president name",
+          "maxLength": 150
+        },
+        "president_mobile": {
+          "type": "string",
+          "description": "Club president mobile",
+          "maxLength": 25
+        },
+        "secretary_name": {
+          "type": "string",
+          "description": "Club secretary name",
+          "maxLength": 150
+        },
+        "secretary_mobile": {
+          "type": "string",
+          "description": "Club secretary mobile",
+          "maxLength": 25
+        },
+        "status": {
+          "type": "string",
+          "description": "Application review status",
+          "enum": ["pending_review", "approved", "rejected"]
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO timestamp when application was submitted",
+          "maxLength": 64
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "ISO timestamp when application was last updated",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firestore server timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firestore server timestamp of update"
+        }
+      },
+      "required": [
+        "app_id",
+        "applicant_name",
+        "business_name",
+        "mobile_number",
+        "email",
+        "other_group_member",
+        "contribution",
+        "reference_name",
+        "reference_mobile",
+        "business_description",
+        "status",
+        "created_at",
+        "updated_at",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FamilyPhoto": {
+      "title": "FamilyPhoto",
+      "description": "Compressed portrait/family photo backup persisted in Firestore across redeploys",
+      "type": "object",
+      "properties": {
+        "photo_id": {
+          "type": "string",
+          "description": "Unique uploaded photo filename / document ID",
+          "pattern": "^[a-zA-Z0-9_\\-\\.]+$",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "mime_type": {
+          "type": "string",
+          "description": "Image MIME type",
+          "enum": ["image/jpeg", "image/png", "image/webp"]
+        },
+        "data_url": {
+          "type": "string",
+          "description": "Compressed image Data URL for cross-deploy persistence",
+          "minLength": 20,
+          "maxLength": 650000
+        },
+        "size_bytes": {
+          "type": "number",
+          "description": "Byte length of encoded data URL"
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO creation timestamp",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firestore server timestamp"
+        }
+      },
+      "required": [
+        "photo_id",
+        "mime_type",
+        "data_url",
+        "size_bytes",
+        "created_at",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
     "/members/{coupleId}": {
       "schema": "Member",
-      "description": "Read-only Year 1 records for members; writeable only by admin"
+      "description": "Master Year-1 member couple records; writeable only by verified admin"
     },
     "/year2_profiles/{coupleId}": {
       "schema": "Year2Profile",
-      "description": "Year 2 profile and draft details owned by couple"
+      "description": "Year 2 profile updates owned by couple or managed by admin"
     },
     "/submissions/{coupleId}": {
       "schema": "Submission",
-      "description": "Final locked submission record per couple"
+      "description": "Final locked Year 2 submission record per couple"
+    },
+    "/family_registrations/{regId}": {
+      "schema": "FamilyRegistration",
+      "description": "Completed Year 2 family registrations and new member dossiers persisted permanently across deployments"
+    },
+    "/new_member_applications/{appId}": {
+      "schema": "NewMemberApplication",
+      "description": "Prospective new member applications persisted permanently for Admin review"
+    },
+    "/family_photos/{photoId}": {
+      "schema": "FamilyPhoto",
+      "description": "Compressed image backups keyed by photo filename so admin previews work after any redeploy"
     }
   }
 }

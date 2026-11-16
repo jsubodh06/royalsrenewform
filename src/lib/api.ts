@@ -7,6 +7,11 @@ import {
   MemberSession,
   AdminSession,
 } from './types.ts';
+import {
+  saveCompressedPhotoToFirestore,
+  saveFamilyRegistrationToFirestore,
+  saveNewMemberApplicationToFirestore,
+} from './firestoreStore.ts';
 
 export const LIVE_BACKEND_URL = 'https://ais-pre-t5c2x6fk3je4yhythikayj-923279058412.asia-southeast1.run.app';
 
@@ -104,6 +109,16 @@ export async function adminLoginApi(email: string, pin: string) {
   }>('/auth/admin-login', {
     method: 'POST',
     body: JSON.stringify({ email, password: pin }),
+  });
+}
+
+export async function adminFirebaseLoginApi(idToken: string) {
+  return apiRequest<{
+    token: string;
+    admin: AdminSession;
+  }>('/auth/admin-firebase-login', {
+    method: 'POST',
+    body: JSON.stringify({ idToken }),
   });
 }
 
@@ -594,7 +609,7 @@ export async function checkFamilyEmailApi(email: string, role: 'husband' | 'wife
 }
 
 export async function registerFamilyApi(data: any) {
-  return apiRequest<{
+  const res = await apiRequest<{
     success: boolean;
     regId: string;
     membershipType?: 'existing' | 'new';
@@ -609,6 +624,12 @@ export async function registerFamilyApi(data: any) {
     method: 'POST',
     body: JSON.stringify(data),
   });
+
+  if (res?.success && res?.registration && !res.alreadyRegistered) {
+    await saveFamilyRegistrationToFirestore(res.registration);
+  }
+
+  return res;
 }
 
 function fileToDataUrl(file: Blob): Promise<string> {
@@ -712,6 +733,9 @@ export async function uploadFamilyPhotoApi(file: File) {
       if (!response.ok) {
         throw new Error(resData.error || `Upload failed with status ${response.status}`);
       }
+      if (resData?.success && resData?.filename) {
+        await saveCompressedPhotoToFirestore(resData.filename, preparedFile).catch(() => null);
+      }
       return resData as {
         success: boolean;
         filename: string;
@@ -746,6 +770,9 @@ export async function uploadFamilyPhotoApi(file: File) {
     const resData = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(resData.error || `Upload failed with status ${response.status}`);
+    }
+    if (resData?.success && resData?.filename) {
+      await saveCompressedPhotoToFirestore(resData.filename, preparedFile).catch(() => null);
     }
     return resData as {
       success: boolean;
@@ -799,7 +826,7 @@ export interface NewMemberApplicationRecord extends NewMemberApplicationPayload 
 }
 
 export async function submitNewMemberApplicationApi(payload: NewMemberApplicationPayload) {
-  return apiRequest<{
+  const res = await apiRequest<{
     success: boolean;
     appId: string;
     notice: string;
@@ -808,6 +835,12 @@ export async function submitNewMemberApplicationApi(payload: NewMemberApplicatio
     method: 'POST',
     body: JSON.stringify(payload),
   });
+
+  if (res?.success && res?.application) {
+    await saveNewMemberApplicationToFirestore(res.application);
+  }
+
+  return res;
 }
 
 export async function getAdminNewMemberApplicationsApi(adminToken: string) {

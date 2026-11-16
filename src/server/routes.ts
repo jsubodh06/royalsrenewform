@@ -201,6 +201,89 @@ apiRouter.post('/auth/admin-login', (req, res) => {
   }
 });
 
+// Cache for Google Firebase SecureToken x509 public keys
+let cachedGoogleCerts: { certs: Record<string, string>; expiresAt: number } | null = null;
+
+async function getFirebasePublicCerts(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (cachedGoogleCerts && now < cachedGoogleCerts.expiresAt) {
+    return cachedGoogleCerts.certs;
+  }
+  const resp = await fetch(
+    'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
+  );
+  if (!resp.ok) {
+    throw new Error('Failed to retrieve Google public keys for Firebase verification.');
+  }
+  const certs = (await resp.json()) as Record<string, string>;
+  const cc = resp.headers.get('cache-control') || '';
+  const maxAgeMatch = cc.match(/max-age=(\d+)/i);
+  const ttlMs = maxAgeMatch ? Number(maxAgeMatch[1]) * 1000 : 3600 * 1000;
+  cachedGoogleCerts = { certs, expiresAt: now + Math.max(60_000, ttlMs) };
+  return certs;
+}
+
+// Admin Google (Firebase ID Token) Login
+apiRouter.post('/auth/admin-firebase-login', async (req, res) => {
+  try {
+    const idToken = String(req.body?.idToken || '').trim();
+    if (!idToken) {
+      return res.status(400).json({ error: 'Firebase ID token is required.' });
+    }
+
+    const decodedComplete = jwt.decode(idToken, { complete: true }) as any;
+    const kid = decodedComplete?.header?.kid;
+    if (!kid) {
+      return res.status(401).json({ error: 'Invalid Firebase ID token header.' });
+    }
+
+    const certs = await getFirebasePublicCerts();
+    const cert = certs[kid];
+    if (!cert) {
+      return res.status(401).json({ error: 'Unrecognized Firebase signing key.' });
+    }
+
+    const firebaseProjectId = 'jsgroyals-cb75f';
+    const verified = jwt.verify(idToken, cert, {
+      algorithms: ['RS256'],
+      audience: firebaseProjectId,
+      issuer: `https://securetoken.google.com/${firebaseProjectId}`,
+    }) as any;
+
+    const tokenEmail = String(verified?.email || '').trim().toLowerCase();
+    if (!verified?.email_verified || !tokenEmail) {
+      return res.status(403).json({ error: 'Verified Google email address is required.' });
+    }
+
+    const admin = db.prepare('SELECT * FROM admin_users WHERE LOWER(email) = ?').get(tokenEmail) as any;
+    const isBootstrappedAdmin = tokenEmail === 'subodhjain2007777@gmail.com';
+    if (!admin && !isBootstrappedAdmin) {
+      return res.status(403).json({
+        error: `Google account (${tokenEmail}) is not authorized as Committee Admin. Please sign in with subodhjain2007777@gmail.com.`,
+      });
+    }
+
+    const role = (admin?.role || 'super_admin') as 'super_admin' | 'admin';
+    const adminEmail = admin?.email || tokenEmail;
+    const token = signAdminToken({ email: adminEmail, role });
+    logAdminAudit(adminEmail, 'Admin Google login', undefined, `Verified via Google Firebase Auth as ${role}`);
+
+    res.json({
+      token,
+      admin: {
+        email: adminEmail,
+        role,
+      },
+      user: {
+        email: adminEmail,
+        role,
+      },
+    });
+  } catch (err: any) {
+    res.status(401).json({ error: err?.message || 'Google authentication verification failed.' });
+  }
+});
+
 // Dev/Test helper: returns sample couple credentials for testing (ONLY 3 fictional test members in Step 2)
 apiRouter.get('/test/sample-accounts', (req, res) => {
   try {
