@@ -489,7 +489,11 @@ export async function importMembersApi(
 }
 
 // Fresh Email-Based Family Registration APIs & 6-Digit Email OTP
-export async function requestFamilyEmailOtpApi(email: string, role: 'husband' | 'wife') {
+export async function requestFamilyEmailOtpApi(
+  email: string,
+  role: 'husband' | 'wife',
+  membershipType: 'existing' | 'new' = 'existing'
+) {
   return apiRequest<{
     success: boolean;
     email: string;
@@ -505,7 +509,7 @@ export async function requestFamilyEmailOtpApi(email: string, role: 'husband' | 
     message: string;
   }>('/family/request-email-otp', {
     method: 'POST',
-    body: JSON.stringify({ email, role }),
+    body: JSON.stringify({ email, role, membershipType }),
   });
 }
 
@@ -593,6 +597,8 @@ export async function registerFamilyApi(data: any) {
   return apiRequest<{
     success: boolean;
     regId: string;
+    membershipType?: 'existing' | 'new';
+    notice?: string;
     message: string;
     registration: any;
     alreadyRegistered?: boolean;
@@ -766,4 +772,52 @@ export async function getAdminFamilyRegistrationsApi(adminToken: string) {
     headers: { Authorization: `Bearer ${adminToken}` },
   });
 }
+
+export interface NewMemberApplicationPayload {
+  applicant_name: string;
+  business_name: string;
+  mobile_number: string;
+  email: string;
+  other_group_member: 'Yes' | 'No';
+  other_group_name?: string;
+  contribution: string;
+  reference_name: string;
+  reference_mobile: string;
+  business_description: string;
+  president_name: string;
+  president_mobile: string;
+  secretary_name: string;
+  secretary_mobile: string;
+}
+
+export interface NewMemberApplicationRecord extends NewMemberApplicationPayload {
+  id: number;
+  app_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function submitNewMemberApplicationApi(payload: NewMemberApplicationPayload) {
+  return apiRequest<{
+    success: boolean;
+    appId: string;
+    notice: string;
+    application: NewMemberApplicationRecord;
+  }>('/family/new-member-application', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getAdminNewMemberApplicationsApi(adminToken: string) {
+  return apiRequest<{
+    success: boolean;
+    count: number;
+    applications: NewMemberApplicationRecord[];
+  }>('/admin/new-member-applications', {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+}
+
 

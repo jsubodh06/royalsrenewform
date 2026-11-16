@@ -1879,9 +1879,46 @@ apiRouter.get('/admin/recent-otps', requireAdmin, (req: AuthenticatedRequest, re
 // FRESH EMAIL-BASED FAMILY REGISTRATION & SPOUSE DETECTION ENDPOINTS
 // =========================================================================
 
+// Helper: Evaluate Renewal Fee Collection Window in IST (Asia/Kolkata)
+function getRenewalWindowInfo(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(now);
+  const month = Number(parts.find((p) => p.type === 'month')?.value || now.getMonth() + 1);
+  const day = Number(parts.find((p) => p.type === 'day')?.value || now.getDate());
+  const isAfterNov29 = (month === 11 && day > 29) || month === 12;
+  const isLateWindow = month === 11 && day >= 26 && day <= 29;
+  const isRegularWindow = month === 11 && day >= 15 && day <= 25;
+  return {
+    month,
+    day,
+    isAfterNov29,
+    isLateWindow,
+    isRegularWindow,
+    renewalFee: isLateWindow ? 70000 : 60000,
+    lateFeeApplied: isLateWindow,
+  };
+}
+
 // Request 6-digit Email OTP
 apiRouter.post('/family/request-email-otp', async (req: Request, res: Response) => {
   try {
+    const windowInfo = getRenewalWindowInfo();
+    const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+    const membershipType = req.body?.membershipType === 'new' ? 'new' : 'existing';
+    if (membershipType === 'existing' && windowInfo.isAfterNov29) {
+      const existing = rawEmail
+        ? db.prepare('SELECT id FROM family_registrations WHERE LOWER(husband_email) = ? OR LOWER(wife_email) = ? LIMIT 1').get(rawEmail, rawEmail)
+        : null;
+      if (!existing) {
+        return res.status(403).json({
+          error: 'After 29 Nov 2026, existing member renewals are closed and existing members are considered as a New Entry. Please apply under New Member Application.'
+        });
+      }
+    }
     const email = req.body?.email;
     const role = req.body?.role || 'husband';
     const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0] || req.protocol || 'https';
@@ -1990,6 +2027,7 @@ function normalizeFamilyRecordPhotos(record: any, childrenList: any[], req: Requ
     ...record,
     husband_photo_url: toPublicPhotoUrl(record.husband_photo_url, req),
     wife_photo_url: toPublicPhotoUrl(record.wife_photo_url, req),
+    couple_photo_url: toPublicPhotoUrl(record.couple_photo_url, req),
     family_photo_url: toPublicPhotoUrl(record.family_photo_url, req),
     children: normalizedChildren
   };
@@ -2090,9 +2128,17 @@ apiRouter.post('/family/check-email', (req: Request, res: Response) => {
   }
 });
 
-// 2. Submit new family dossier
+// 2. Submit unified family dossier (Existing Renewal or New Member Application)
 apiRouter.post('/family/register', (req: Request, res: Response) => {
   try {
+    const membershipType = req.body?.membership_type === 'new' ? 'new' : 'existing';
+    const windowInfo = getRenewalWindowInfo();
+    if (membershipType === 'existing' && windowInfo.isAfterNov29) {
+      return res.status(403).json({
+        error: 'After 29 Nov 2026, existing member renewals are closed and existing members are considered as a New Entry. Please apply under New Member Application.'
+      });
+    }
+
     const {
       submitted_by_role,
       submitter_email,
@@ -2120,10 +2166,21 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       children,
       husband_photo_url,
       wife_photo_url,
+      couple_photo_url,
       family_photo_url,
       contribution_areas,
       royal_idea,
-      jsg_should_be_known_for
+      jsg_should_be_known_for,
+      president_name,
+      president_mobile,
+      secretary_name,
+      secretary_mobile,
+      other_group_member,
+      other_group_name,
+      new_member_contribution,
+      reference_name,
+      reference_mobile,
+      business_description
     } = req.body;
 
     if (!husband_name || !husband_mobile || !husband_email) {
@@ -2138,11 +2195,41 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
     if (!current_city || !residential_address) {
       return res.status(400).json({ error: 'Current City and Residential Address are required.' });
     }
+    const cleanPresName = String(president_name || 'Utkarsh Pooja Surana').trim() || 'Utkarsh Pooja Surana';
+    const cleanPresMobile = String(president_mobile || '').replace(/\D/g, '');
+    const cleanSecName = String(secretary_name || 'Harsh Tanya Kataria').trim() || 'Harsh Tanya Kataria';
+    const cleanSecMobile = String(secretary_mobile || '').replace(/\D/g, '');
+
+    const subRole = submitted_by_role === 'wife' ? 'wife' : 'husband';
+    const primaryOrg = String((subRole === 'wife' ? wife_organization : husband_organization) || husband_organization || wife_organization || '').trim();
+    const cleanOtherGroupMember = other_group_member === 'Yes' ? 'Yes' : 'No';
+    const cleanOtherGroupName = String(other_group_name || '').trim();
+    const cleanNewMemberContribution = String(new_member_contribution || '').trim();
+    const cleanRefName = String(reference_name || '').trim();
+    const cleanRefMobile = String(reference_mobile || '').replace(/\D/g, '');
+    const cleanBusinessDesc = String(business_description || '').trim();
+
+    if (membershipType === 'new') {
+      if (!primaryOrg) {
+        return res.status(400).json({ error: 'Business / Organization Name is required for new member applications.' });
+      }
+      if (cleanOtherGroupMember === 'Yes' && !cleanOtherGroupName) {
+        return res.status(400).json({ error: 'Please specify the name of the other group you belong to.' });
+      }
+      if (!cleanBusinessDesc) {
+        return res.status(400).json({ error: 'Business description is required for new member applications.' });
+      }
+      if (!cleanNewMemberContribution) {
+        return res.status(400).json({ error: 'Please share how you can contribute to the group.' });
+      }
+      if (!cleanRefName || cleanRefMobile.length !== 10) {
+        return res.status(400).json({ error: 'Referring member name and valid 10-digit mobile number are required.' });
+      }
+    }
 
     const hEmail = husband_email.trim().toLowerCase();
     const wEmail = wife_email.trim().toLowerCase();
-    const subEmail = (submitter_email || (submitted_by_role === 'wife' ? wEmail : hEmail)).trim().toLowerCase();
-    const subRole = submitted_by_role === 'wife' ? 'wife' : 'husband';
+    const subEmail = (submitter_email || (subRole === 'wife' ? wEmail : hEmail)).trim().toLowerCase();
 
     // Verify if either email was already submitted
     const existing = db.prepare(`
@@ -2180,11 +2267,14 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       });
     }
 
-    const regId = `ROYAL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const prefix = membershipType === 'new' ? 'APP' : 'ROYAL';
+    const regId = `${prefix}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const recordStatus = membershipType === 'new' ? 'pending_review' : 'submitted';
     const now = new Date().toISOString();
 
     const normalizedHusbandPhoto = toPublicPhotoUrl(husband_photo_url, req);
     const normalizedWifePhoto = toPublicPhotoUrl(wife_photo_url, req);
+    const normalizedCouplePhoto = toPublicPhotoUrl(couple_photo_url, req);
     const normalizedFamilyPhoto = toPublicPhotoUrl(family_photo_url, req);
 
     let normalizedChildrenArray: any[] = [];
@@ -2206,42 +2296,92 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
     }
     const childrenJson = JSON.stringify(normalizedChildrenArray);
 
-    db.prepare(`
-      INSERT INTO family_registrations (
-        reg_id, submitted_by_role, submitter_email,
-        husband_name, husband_mobile, husband_email, husband_dob,
-        husband_qualification, husband_occupation, husband_organization, husband_blood_group,
-        wife_name, wife_mobile, wife_email, wife_dob,
-        wife_qualification, wife_occupation, wife_organization, wife_blood_group,
-        marriage_anniversary, current_city, residential_address, native_place,
-        has_children, children_json,
-        husband_photo_url, wife_photo_url, family_photo_url,
-        contribution_areas, royal_idea, jsg_should_be_known_for,
-        status, created_at, updated_at
-      ) VALUES (
-        ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?,
-        ?, ?, ?,
-        ?, ?, ?,
-        'submitted', ?, ?
-      )
-    `).run(
-      regId, subRole, subEmail,
-      husband_name.trim(), husband_mobile.trim(), hEmail, husband_dob || null,
-      husband_qualification || null, husband_occupation || null, husband_organization || null, husband_blood_group || null,
-      wife_name.trim(), wife_mobile.trim(), wEmail, wife_dob || null,
-      wife_qualification || null, wife_occupation || null, wife_organization || null, wife_blood_group || null,
-      marriage_anniversary, current_city.trim(), residential_address.trim(), native_place || null,
-      has_children ? 1 : 0, childrenJson,
-      normalizedHusbandPhoto, normalizedWifePhoto, normalizedFamilyPhoto,
-      contribution_areas || null, royal_idea || null, jsg_should_be_known_for || null,
-      now, now
-    );
+    const tx = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO family_registrations (
+          reg_id, submitted_by_role, submitter_email,
+          husband_name, husband_mobile, husband_email, husband_dob,
+          husband_qualification, husband_occupation, husband_organization, husband_blood_group,
+          wife_name, wife_mobile, wife_email, wife_dob,
+          wife_qualification, wife_occupation, wife_organization, wife_blood_group,
+          marriage_anniversary, current_city, residential_address, native_place,
+          has_children, children_json,
+          husband_photo_url, wife_photo_url, couple_photo_url, family_photo_url,
+          contribution_areas, royal_idea, jsg_should_be_known_for,
+          president_name, president_mobile, secretary_name, secretary_mobile,
+          membership_type, other_group_member, other_group_name,
+          new_member_contribution, reference_name, reference_mobile, business_description,
+          status, created_at, updated_at
+        ) VALUES (
+          ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?
+        )
+      `).run(
+        regId, subRole, subEmail,
+        husband_name.trim(), husband_mobile.trim(), hEmail, husband_dob || null,
+        husband_qualification || null, husband_occupation || null, husband_organization || null, husband_blood_group || null,
+        wife_name.trim(), wife_mobile.trim(), wEmail, wife_dob || null,
+        wife_qualification || null, wife_occupation || null, wife_organization || null, wife_blood_group || null,
+        marriage_anniversary, current_city.trim(), residential_address.trim(), native_place || null,
+        has_children ? 1 : 0, childrenJson,
+        normalizedHusbandPhoto, normalizedWifePhoto, normalizedCouplePhoto, normalizedFamilyPhoto,
+        contribution_areas || null, royal_idea || null, jsg_should_be_known_for || null,
+        cleanPresName, cleanPresMobile || null, cleanSecName, cleanSecMobile || null,
+        membershipType,
+        membershipType === 'new' ? cleanOtherGroupMember : null,
+        membershipType === 'new' && cleanOtherGroupMember === 'Yes' ? cleanOtherGroupName : null,
+        membershipType === 'new' ? cleanNewMemberContribution : null,
+        membershipType === 'new' ? cleanRefName : null,
+        membershipType === 'new' ? cleanRefMobile : null,
+        membershipType === 'new' ? cleanBusinessDesc : null,
+        recordStatus, now, now
+      );
+
+      if (membershipType === 'new') {
+        const applicantName = subRole === 'wife' ? wife_name.trim() : husband_name.trim();
+        const applicantMobile = (subRole === 'wife' ? wife_mobile : husband_mobile).replace(/\D/g, '').slice(-10) || '';
+        db.prepare(`
+          INSERT OR IGNORE INTO new_member_applications (
+            app_id, applicant_name, business_name, mobile_number, email,
+            other_group_member, other_group_name, contribution,
+            reference_name, reference_mobile, business_description,
+            president_name, president_mobile, secretary_name, secretary_mobile,
+            status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?)
+        `).run(
+          regId,
+          applicantName,
+          primaryOrg,
+          applicantMobile,
+          subEmail,
+          cleanOtherGroupMember,
+          cleanOtherGroupMember === 'Yes' ? cleanOtherGroupName : null,
+          cleanNewMemberContribution,
+          cleanRefName,
+          cleanRefMobile,
+          cleanBusinessDesc,
+          cleanPresName,
+          cleanPresMobile,
+          cleanSecName,
+          cleanSecMobile,
+          now,
+          now
+        );
+      }
+    });
+
+    tx();
 
     const created = db.prepare('SELECT * FROM family_registrations WHERE reg_id = ?').get(regId) as any;
     let parsedCreatedChildren = [];
@@ -2252,7 +2392,15 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
     res.json({
       success: true,
       regId,
-      message: 'Family dossier registered successfully!',
+      membershipType,
+      notice:
+        membershipType === 'new'
+          ? 'This is not a confirmed membership. Your application will be reviewed, and confirmation will be sent to you once approved.'
+          : undefined,
+      message:
+        membershipType === 'new'
+          ? 'New member application submitted for review!'
+          : 'Family dossier registered successfully!',
       registration: normalizeFamilyRecordPhotos(created, parsedCreatedChildren, req)
     });
   } catch (err: any) {
@@ -2408,5 +2556,117 @@ apiRouter.get('/admin/family-registrations', requireAdmin, (req: AuthenticatedRe
     res.status(500).json({ error: 'Failed to retrieve family registrations.' });
   }
 });
+
+// 5. Submit New Member Application (Prospective Members)
+apiRouter.post('/family/new-member-application', (req: Request, res: Response) => {
+  try {
+    const {
+      applicant_name,
+      business_name,
+      mobile_number,
+      email,
+      other_group_member,
+      other_group_name,
+      contribution,
+      reference_name,
+      reference_mobile,
+      business_description,
+      president_name,
+      president_mobile,
+      secretary_name,
+      secretary_mobile,
+    } = req.body || {};
+
+    const cleanName = String(applicant_name || '').trim();
+    const cleanBusiness = String(business_name || '').trim();
+    const cleanMobile = String(mobile_number || '').replace(/\D/g, '');
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const cleanOtherMember = other_group_member === 'Yes' ? 'Yes' : 'No';
+    const cleanOtherGroupName = String(other_group_name || '').trim();
+    const cleanContribution = String(contribution || '').trim();
+    const cleanRefName = String(reference_name || '').trim();
+    const cleanRefMobile = String(reference_mobile || '').replace(/\D/g, '');
+    const cleanBusinessDesc = String(business_description || '').trim();
+    const cleanPresName = String(president_name || 'Utkarsh Pooja Surana').trim() || 'Utkarsh Pooja Surana';
+    const cleanPresMobile = String(president_mobile || '').replace(/\D/g, '');
+    const cleanSecName = String(secretary_name || 'Harsh Tanya Kataria').trim() || 'Harsh Tanya Kataria';
+    const cleanSecMobile = String(secretary_mobile || '').replace(/\D/g, '');
+
+    if (!cleanName || !cleanBusiness || !cleanEmail) {
+      return res.status(400).json({ error: 'Applicant name, business name, and email are required.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+    if (cleanMobile.length !== 10) {
+      return res.status(400).json({ error: 'Applicant mobile number must be exactly 10 digits.' });
+    }
+    if (cleanOtherMember === 'Yes' && !cleanOtherGroupName) {
+      return res.status(400).json({ error: 'Please specify the other group name.' });
+    }
+    if (!cleanContribution) {
+      return res.status(400).json({ error: 'Please share how you can contribute to the group.' });
+    }
+    if (!cleanRefName || cleanRefMobile.length !== 10) {
+      return res.status(400).json({ error: 'Referring member name and valid 10-digit mobile number are required.' });
+    }
+    if (!cleanBusinessDesc) {
+      return res.status(400).json({ error: 'Business description is required.' });
+    }
+
+    const appId = `APP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO new_member_applications (
+        app_id, applicant_name, business_name, mobile_number, email,
+        other_group_member, other_group_name, contribution,
+        reference_name, reference_mobile, business_description,
+        president_name, president_mobile, secretary_name, secretary_mobile,
+        status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?)
+    `).run(
+      appId,
+      cleanName,
+      cleanBusiness,
+      cleanMobile,
+      cleanEmail,
+      cleanOtherMember,
+      cleanOtherMember === 'Yes' ? cleanOtherGroupName : null,
+      cleanContribution,
+      cleanRefName,
+      cleanRefMobile,
+      cleanBusinessDesc,
+      cleanPresName,
+      cleanPresMobile,
+      cleanSecName,
+      cleanSecMobile,
+      now,
+      now
+    );
+
+    const created = db.prepare('SELECT * FROM new_member_applications WHERE app_id = ?').get(appId);
+
+    res.json({
+      success: true,
+      appId,
+      notice: 'This is not a confirmed membership. Your application will be reviewed, and confirmation will be sent to you once approved.',
+      application: created,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to submit new member application.' });
+  }
+});
+
+// 6. Admin API to view all New Member Applications
+apiRouter.get('/admin/new-member-applications', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const rows = db.prepare('SELECT * FROM new_member_applications ORDER BY id DESC').all();
+    res.json({ success: true, count: rows.length, applications: rows });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve new member applications.' });
+  }
+});
+
 
 

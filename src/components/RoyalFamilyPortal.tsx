@@ -33,7 +33,12 @@ import {
   ExternalLink,
   Link2,
   Eye,
-  Download
+  Download,
+  IndianRupee,
+  Clock,
+  UserPlus,
+  FileText,
+  Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -60,6 +65,7 @@ export interface ChildItem {
 interface PhotoUploadOrDriveLinkProps {
   label: string;
   subtitle?: string;
+  guideline?: string;
   value: string | null;
   onChange: (url: string | null) => void;
   required?: boolean;
@@ -68,6 +74,7 @@ interface PhotoUploadOrDriveLinkProps {
 function PhotoUploadOrDriveLink({
   label,
   subtitle,
+  guideline,
   value,
   onChange,
   required = false
@@ -143,6 +150,13 @@ function PhotoUploadOrDriveLink({
           </button>
         )}
       </div>
+
+      {guideline && (
+        <div className="p-2.5 rounded-lg bg-[#FAF7F2] border border-[#D4AF37]/50 text-[#6D531E] text-[11px] flex items-start gap-2">
+          <ImageIcon className="w-3.5 h-3.5 text-[#8C6D2B] shrink-0 mt-0.5" />
+          <span className="leading-snug font-medium">{guideline}</span>
+        </div>
+      )}
 
       {error && (
         <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-[11px] flex items-center gap-1.5">
@@ -400,7 +414,135 @@ function RoyalCornerBrackets() {
   );
 }
 
+interface FeeWindowStatus {
+  month: number;
+  day: number;
+  isRegularWindow: boolean;
+  isLateWindow: boolean;
+  isRenewalClosed: boolean;
+  isBeforeCollection: boolean;
+  renewalFeeFormatted: string;
+  statusHeading: string;
+  statusDetail: string;
+}
+
+function getMembershipFeeWindowStatus(now = new Date()): FeeWindowStatus {
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+
+  const isRenewalClosed = (month === 11 && day > 29) || month === 12;
+  const isLateWindow = month === 11 && day >= 26 && day <= 29;
+  const isRegularWindow = month === 11 && day >= 15 && day <= 25;
+  const isBeforeCollection = !isRenewalClosed && !isLateWindow && !isRegularWindow;
+
+  if (isRenewalClosed) {
+    return {
+      month,
+      day,
+      isRegularWindow: false,
+      isLateWindow: false,
+      isRenewalClosed: true,
+      isBeforeCollection: false,
+      renewalFeeFormatted: 'New Entry',
+      statusHeading: 'Existing Member Renewals Closed (After 29 Nov 2026)',
+      statusDetail: 'After 29 Nov 2026, existing members will be considered as a New Entry (₹60,000 Fees + ₹40,000 One-Time Registration Fees).',
+    };
+  }
+
+  if (isLateWindow) {
+    return {
+      month,
+      day,
+      isRegularWindow: false,
+      isLateWindow: true,
+      isRenewalClosed: false,
+      isBeforeCollection: false,
+      renewalFeeFormatted: '₹70,000',
+      statusHeading: 'Existing Member Fee: ₹70,000 (26–29 Nov 2026)',
+      statusDetail: 'From 26 Nov to 29 Nov 2026, existing member renewal fee is ₹70,000. After 29 Nov 2026, existing members will be considered as a New Entry.',
+    };
+  }
+
+  if (isRegularWindow) {
+    return {
+      month,
+      day,
+      isRegularWindow: true,
+      isLateWindow: false,
+      isRenewalClosed: false,
+      isBeforeCollection: false,
+      renewalFeeFormatted: '₹60,000',
+      statusHeading: 'Existing Member Fee Open: ₹60,000 (15–25 Nov 2026)',
+      statusDetail: 'From 15 Nov to 25 Nov 2026, existing member fee is ₹60,000 (₹70,000 from 26–29 Nov 2026). After 29 Nov 2026, existing members will be considered as a New Entry.',
+    };
+  }
+
+  return {
+    month,
+    day,
+    isRegularWindow: false,
+    isLateWindow: false,
+    isRenewalClosed: false,
+    isBeforeCollection: true,
+    renewalFeeFormatted: '₹60,000',
+    statusHeading: 'Existing Member Fee Window: 15–25 Nov 2026',
+    statusDetail: 'Existing: ₹60,000 (15–25 Nov 2026), ₹70,000 (26–29 Nov 2026). After 29 Nov 2026, existing members will be considered as a New Entry.',
+  };
+}
+
+const ROYAL_LEADERSHIP = {
+  president: 'Utkarsh Pooja Surana',
+  secretary: 'Harsh Tanya Kataria',
+} as const;
+
+interface FeeCollectionContact {
+  name: string;
+  role: string;
+  phonePlaceholder: string;
+  addresses?: { label?: string; text: string }[];
+}
+
+const FEE_COLLECTION_CONTACTS: FeeCollectionContact[] = [
+  {
+    name: 'Rishabh Betala',
+    role: 'Fee Collection Coordinator',
+    phonePlaceholder: '+91 XXXXX XXXXX',
+    addresses: [
+      {
+        text: 'Vikram Tower, 419-420, Sapna Sangeeta Rd, Old Agarwal Nagar, Indore, Madhya Pradesh 452001, India',
+      },
+    ],
+  },
+  {
+    name: 'Piyush Jain (Office)',
+    role: 'Office Collection Desk',
+    phonePlaceholder: '+91 XXXXX XXXXX',
+    addresses: [
+      {
+        label: 'Anushakti',
+        text: '5 H Sector A, Scheme No 71, Near Gumasta Nagar, Indore',
+      },
+      {
+        label: 'Anushakti Earthmovers',
+        text: 'M - 17, Block A, New Siyaganj, Indore (M.P.)',
+      },
+    ],
+  },
+  {
+    name: 'Vivek Samota',
+    role: 'Fee Collection Coordinator',
+    phonePlaceholder: '+91 XXXXX XXXXX',
+  },
+];
+
 export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
+  const feeStatus = useMemo(() => getMembershipFeeWindowStatus(new Date()), []);
+  const [expandedAddresses, setExpandedAddresses] = useState<Record<string, boolean>>({});
+
+  // Membership Type Selection: '' until user explicitly chooses 'existing' or 'new' (mandatory on entrance)
+  const [membershipChoice, setMembershipChoice] = useState<'' | 'existing' | 'new'>('');
+  const membershipType: 'existing' | 'new' = membershipChoice === 'new' ? 'new' : 'existing';
+
   // Navigation View: 'gate' | 'spouse_celebration' | 'form' | 'success'
   const [currentView, setCurrentView] = useState<'gate' | 'spouse_celebration' | 'form' | 'success'>('gate');
 
@@ -412,6 +554,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [gateFieldError, setGateFieldError] = useState<'membership' | 'email' | null>(null);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [gateError, setGateError] = useState<string | null>(null);
   const [gateSuccessMsg, setGateSuccessMsg] = useState<string | null>(null);
@@ -468,6 +611,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
   const [husbandPhotoUrl, setHusbandPhotoUrl] = useState<string | null>(null);
   const [wifePhotoUrl, setWifePhotoUrl] = useState<string | null>(null);
+  const [couplePhotoUrl, setCouplePhotoUrl] = useState<string | null>(null);
   const [familyPhotoUrl, setFamilyPhotoUrl] = useState<string | null>(null);
 
   const [contributionAreas, setContributionAreas] = useState<string[]>([
@@ -477,8 +621,19 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const [royalIdea, setRoyalIdea] = useState('');
   const [jsgShouldBeKnownFor, setJsgShouldBeKnownFor] = useState('');
 
+  // Additional Questions for New Members in the unified flow
+  const [appOtherGroup, setAppOtherGroup] = useState<'No' | 'Yes'>('No');
+  const [appOtherGroupName, setAppOtherGroupName] = useState('');
+  const [appContribution, setAppContribution] = useState('');
+  const [appRefName, setAppRefName] = useState('');
+  const [appRefMobile, setAppRefMobile] = useState('');
+  const [appBusinessDesc, setAppBusinessDesc] = useState('');
+  const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
+
   // Clean Entrance Reset Helper (always lands back on initial Email gate screen)
   const resetToEntrance = () => {
+    setMembershipChoice('');
+    setGateFieldError(null);
     setGateOtpStep('email');
     setGateOtp('');
     setGateEmail('');
@@ -488,6 +643,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     setGateSuccessMsg(null);
     setExistingRecord(null);
     setFinalRegistration(null);
+    setSubmissionNotice(null);
     setActiveStep(1);
 
     setHusbandName('');
@@ -517,10 +673,18 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
     setHasChildren(true);
     setChildren([{ id: '1', name: '', gender: 'son', dob: '', education: '', interests: '', photo_url: '' }]);
+    setCouplePhotoUrl(null);
     setFamilyPhotoUrl(null);
     setRoyalIdea('');
     setJsgShouldBeKnownFor('');
+    setAppOtherGroup('No');
+    setAppOtherGroupName('');
+    setAppContribution('');
+    setAppRefName('');
+    setAppRefMobile('');
+    setAppBusinessDesc('');
     setSubmitError(null);
+    setFieldErrors({});
 
     setCurrentView('gate');
   };
@@ -528,7 +692,29 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   // Submission State
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [finalRegistration, setFinalRegistration] = useState<any>(null);
+
+  const clearFieldError = (key: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const scrollToFirstError = () => {
+    setTimeout(() => {
+      const el = document.querySelector('[data-field-error="true"]') as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof el.focus === 'function') {
+          el.focus({ preventScroll: true });
+        }
+      }
+    }, 60);
+  };
 
   // Grand Multi-Stage Confetti Fanfare
   const triggerConfettiFanfare = () => {
@@ -589,18 +775,31 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   // 1. Step 1: Request 6-digit Royal Verification Code to Email
   const handleRequestOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!gateEmail.trim() || !gateEmail.includes('@')) {
+
+    if (!membershipChoice) {
+      setGateFieldError('membership');
+      setGateError('Please choose Existing Member or New Member before continuing.');
+      return;
+    }
+    if (membershipChoice === 'existing' && feeStatus.isRenewalClosed) {
+      setGateFieldError('membership');
+      setGateError('After 29 Nov 2026, existing members are treated as a New Entry. Please choose New Member.');
+      return;
+    }
+    if (!gateEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gateEmail.trim())) {
+      setGateFieldError('email');
       setGateError('Please enter a valid email address.');
       return;
     }
 
     setSendingOtp(true);
+    setGateFieldError(null);
     setGateError(null);
     setGateSuccessMsg(null);
 
     try {
       const email = gateEmail.trim().toLowerCase();
-      const res = await requestFamilyEmailOtpApi(email, gateRole);
+      const res = await requestFamilyEmailOtpApi(email, gateRole, membershipChoice);
       setGateOtpStep('otp');
       setGateOtp('');
       setResendCooldown(res.cooldownSeconds || 30);
@@ -728,31 +927,24 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       return;
     }
 
-    if (!husbandName.trim() || !husbandMobile.trim() || !husbandEmail.trim()) {
-      setSubmitError('Husband Name, Mobile, and Email are required.');
-      setActiveStep(1);
-      return;
-    }
-    if (!wifeName.trim() || !wifeMobile.trim() || !wifeEmail.trim()) {
-      setSubmitError('Wife Name, Mobile, and Email are required.');
-      setActiveStep(2);
-      return;
-    }
-    if (!marriageAnniversary) {
-      setSubmitError('Please enter your Marriage Anniversary date.');
-      setActiveStep(3);
-      return;
-    }
-    if (!currentCity.trim() || !residentialAddress.trim()) {
-      setSubmitError('Current City and Residential Address are required.');
-      setActiveStep(3);
-      return;
+    const mandatorySteps = membershipType === 'new' ? [1, 2, 3, 5] : [1, 2, 3];
+    for (const stepNum of mandatorySteps) {
+      const errs = validateStepFields(stepNum);
+      if (Object.keys(errs).length > 0) {
+        setFieldErrors(errs);
+        setSubmitError(`Some mandatory fields in Step ${stepNum} were missed. Highlighted in red below.`);
+        setActiveStep(stepNum);
+        scrollToFirstError();
+        return;
+      }
     }
 
     setSubmitting(true);
     setSubmitError(null);
+    setFieldErrors({});
 
     const payload = {
+      membership_type: membershipType,
       submitted_by_role: gateRole,
       submitter_email: gateEmail.trim().toLowerCase() || (gateRole === 'husband' ? husbandEmail : wifeEmail),
       husband_name: husbandName.trim(),
@@ -798,10 +990,21 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
               photo_url: c.photo_url || null
             }))
         : [],
+      couple_photo_url: couplePhotoUrl || null,
       family_photo_url: familyPhotoUrl || null,
       contribution_areas: contributionAreas.join(', '),
       royal_idea: royalIdea.trim() || null,
-      jsg_should_be_known_for: jsgShouldBeKnownFor.trim() || null
+      jsg_should_be_known_for: jsgShouldBeKnownFor.trim() || null,
+      ...(membershipType === 'new'
+        ? {
+            other_group_member: appOtherGroup,
+            other_group_name: appOtherGroup === 'Yes' ? appOtherGroupName.trim() : null,
+            business_description: appBusinessDesc.trim(),
+            new_member_contribution: appContribution.trim(),
+            reference_name: appRefName.trim(),
+            reference_mobile: appRefMobile.replace(/\D/g, ''),
+          }
+        : {}),
     };
 
     try {
@@ -818,6 +1021,12 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
         return;
       }
 
+      setSubmissionNotice(
+        res.notice ||
+          (membershipType === 'new'
+            ? 'This is not a confirmed membership. Your application will be reviewed, and confirmation will be sent to you once approved.'
+            : null)
+      );
       setFinalRegistration(res.registration);
       setCurrentView('success');
       triggerConfettiFanfare();
@@ -828,18 +1037,99 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     }
   };
 
-  const canProceedStep = () => {
-    if (activeStep === 1) {
-      return husbandName.trim().length > 0 && husbandMobile.trim().length >= 10 && husbandEmail.includes('@');
+  const validateStepFields = (step: number): Record<string, string> => {
+    const errors: Record<string, string> = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (step === 1) {
+      if (!husbandName.trim()) {
+        errors.husbandName = 'This field was missed — please enter Husband Full Name.';
+      }
+      const hDigits = husbandMobile.replace(/\D/g, '');
+      if (hDigits.length !== 10) {
+        errors.husbandMobile = hDigits.length === 0
+          ? 'This field was missed — please enter a 10-digit mobile number.'
+          : 'Please enter a valid 10-digit mobile number.';
+      }
+      if (!husbandEmail.trim()) {
+        errors.husbandEmail = 'This field was missed — please enter Husband Email.';
+      } else if (!emailRegex.test(husbandEmail.trim())) {
+        errors.husbandEmail = 'Please enter a valid email address.';
+      }
+      if (membershipType === 'new' && gateRole === 'husband' && !husbandOrganization.trim()) {
+        errors.husbandOrganization = 'This field was missed — Company / Business / Organization is required for new members.';
+      }
+    } else if (step === 2) {
+      if (!wifeName.trim()) {
+        errors.wifeName = 'This field was missed — please enter Wife Full Name.';
+      }
+      const wDigits = wifeMobile.replace(/\D/g, '');
+      if (wDigits.length !== 10) {
+        errors.wifeMobile = wDigits.length === 0
+          ? 'This field was missed — please enter a 10-digit mobile number.'
+          : 'Please enter a valid 10-digit mobile number.';
+      }
+      if (!wifeEmail.trim()) {
+        errors.wifeEmail = 'This field was missed — please enter Wife Email.';
+      } else if (!emailRegex.test(wifeEmail.trim())) {
+        errors.wifeEmail = 'Please enter a valid email address.';
+      }
+      if (membershipType === 'new' && gateRole === 'wife' && !wifeOrganization.trim()) {
+        errors.wifeOrganization = 'This field was missed — Company / Business / Organization is required for new members.';
+      }
+    } else if (step === 3) {
+      if (!marriageAnniversary) {
+        errors.marriageAnniversary = 'This field was missed — please select Marriage Anniversary Date.';
+      }
+      if (!currentCity.trim()) {
+        errors.currentCity = 'This field was missed — please enter Current City of Residence.';
+      }
+      if (!residentialAddress.trim()) {
+        errors.residentialAddress = 'This field was missed — please enter Complete Residential Address.';
+      }
+    } else if (step === 5) {
+      if (membershipType === 'new') {
+        if (appOtherGroup === 'Yes' && !appOtherGroupName.trim()) {
+          errors.appOtherGroupName = 'This field was missed — please enter the Group Name.';
+        }
+        if (!appBusinessDesc.trim()) {
+          errors.appBusinessDesc = 'This field was missed — please provide a short Business Description.';
+        }
+        if (!appContribution.trim()) {
+          errors.appContribution = 'This field was missed — please share how you can contribute to the group.';
+        }
+        if (!appRefName.trim()) {
+          errors.appRefName = 'This field was missed — please enter Referring Member Name.';
+        }
+        const rDigits = appRefMobile.replace(/\D/g, '');
+        if (rDigits.length !== 10) {
+          errors.appRefMobile = rDigits.length === 0
+            ? 'This field was missed — please enter Referring Member 10-digit Mobile.'
+            : 'Please enter a valid 10-digit mobile number.';
+        }
+      }
     }
-    if (activeStep === 2) {
-      return wifeName.trim().length > 0 && wifeMobile.trim().length >= 10 && wifeEmail.includes('@');
-    }
-    if (activeStep === 3) {
-      return marriageAnniversary.length > 0 && currentCity.trim().length > 0 && residentialAddress.trim().length > 0;
-    }
-    return true;
+
+    return errors;
   };
+
+  const getFieldBorderClass = (key: string) =>
+    fieldErrors[key]
+      ? 'border-red-500 bg-red-50/70 text-red-950 focus:ring-2 focus:ring-red-400 focus:border-red-600'
+      : 'border-[#D9CDB8] bg-white text-[#1C1917] focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]';
+
+  const getLabelColorClass = (key: string) =>
+    fieldErrors[key] ? 'text-red-700' : 'text-[#44403C]';
+
+  const renderFieldError = (key: string) =>
+    fieldErrors[key] ? (
+      <p className="mt-1 text-[11px] font-medium text-red-600 flex items-center gap-1">
+        <AlertCircle className="w-3 h-3 shrink-0" />
+        <span>{fieldErrors[key]}</span>
+      </p>
+    ) : null;
+
+  const canProceedStep = () => Object.keys(validateStepFields(activeStep)).length === 0;
 
   return (
     <div className="min-h-screen bg-royal-parchment text-[#1C1917] selection:bg-[#EFE4C9] selection:text-[#8C6D2B] relative overflow-hidden">
@@ -865,142 +1155,258 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       </div>
 
       {/* ========================================================================= */}
-      {/* VIEW 1: REGAL ENTRANCE GATE & UNIQUE EMAIL CHECK                          */}
+      {/* PORTAL MODE SWITCHER BAR (EXISTING MEMBER VS NEW MEMBER APPLICATION)      */}
+      {/* ========================================================================= */}
+      {/* COMPACT ANIMATED ROYAL LEADERSHIP BANNER (PRESIDENT & SECRETARY)          */}
       {/* ========================================================================= */}
       {currentView === 'gate' && (
-        <div className="max-w-2xl mx-auto px-4 py-12 sm:py-18 relative z-10 animate-fade-in-up">
-          <div className="bg-[#FFFFFF]/90 backdrop-blur-md border border-[#E2D5BE] rounded-3xl p-6 sm:p-10 shadow-2xl relative overflow-hidden royal-box-shadow">
+        <div className="max-w-2xl mx-auto px-4 pt-4 relative z-10 animate-fade-in-up">
+          <div className="relative rounded-2xl p-[1.5px] overflow-hidden shadow-lg royal-box-shadow">
+            {/* Orbiting metallic gold border sheen */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -inset-[160%] animate-royal-orbit opacity-85"
+              style={{
+                background:
+                  'conic-gradient(from 0deg, rgba(212,175,55,0.12) 0deg, rgba(247,232,176,0.9) 55deg, rgba(197,168,105,0.22) 120deg, rgba(247,232,176,0.75) 210deg, rgba(140,109,43,0.18) 290deg, rgba(212,175,55,0.12) 360deg)',
+              }}
+            />
+
+            <div className="relative rounded-[14px] bg-gradient-to-br from-[#1B1714] via-[#120F0D] to-[#1E1915] px-4 py-3 sm:px-5 sm:py-3.5 overflow-hidden">
+              {/* Sweeping diagonal specular sheen */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-[#F5E6B3]/12 to-transparent animate-royal-sheen"
+              />
+              {/* Soft ambient gold canopy glow */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -top-12 left-1/2 -translate-x-1/2 w-64 h-24 rounded-full bg-[#D4AF37]/15 blur-2xl animate-royal-aura"
+              />
+
+              {/* President & Secretary Compact Pedestals */}
+              <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3.5 items-stretch">
+                {/* President */}
+                <div className="group relative rounded-xl bg-white/[0.03] border border-[#C5A869]/30 hover:border-[#D4AF37]/75 px-3.5 py-2.5 flex items-center gap-3 transition-transform duration-300 ease-out hover:-translate-y-0.5">
+                  <div className="relative w-10 h-10 shrink-0 flex items-center justify-center">
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0 rounded-full border border-dashed border-[#D4AF37]/55 animate-royal-orbit"
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-1 rounded-full border border-[#F3DF9C]/35 animate-royal-orbit-reverse"
+                    />
+                    <div className="relative w-7 h-7 rounded-full bg-gradient-to-br from-[#2C241B] to-[#17130F] border border-[#D4AF37]/80 flex items-center justify-center">
+                      <Crown className="w-3.5 h-3.5 text-[#F3DF9C]" />
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A869]">
+                      President
+                    </span>
+                    <div className="font-serif-royal font-bold text-sm sm:text-base tracking-wide royal-foil-name truncate">
+                      {ROYAL_LEADERSHIP.president}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Secretary */}
+                <div className="group relative rounded-xl bg-white/[0.03] border border-[#C5A869]/30 hover:border-[#D4AF37]/75 px-3.5 py-2.5 flex items-center gap-3 transition-transform duration-300 ease-out hover:-translate-y-0.5">
+                  <div className="relative w-10 h-10 shrink-0 flex items-center justify-center">
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0 rounded-full border border-dashed border-[#D4AF37]/55 animate-royal-orbit-reverse"
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-1 rounded-full border border-[#F3DF9C]/35 animate-royal-orbit"
+                    />
+                    <div className="relative w-7 h-7 rounded-full bg-gradient-to-br from-[#2C241B] to-[#17130F] border border-[#D4AF37]/80 flex items-center justify-center">
+                      <Award className="w-3.5 h-3.5 text-[#F3DF9C]" />
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A869]">
+                      Secretary
+                    </span>
+                    <div className="font-serif-royal font-bold text-sm sm:text-base tracking-wide royal-foil-name truncate">
+                      {ROYAL_LEADERSHIP.secretary}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW 1: FIRST-FOLD ENTRANCE GATE (LOGO + MEMBER TYPE + EMAIL ENTRY)       */}
+      {/* ========================================================================= */}
+      {currentView === 'gate' && (
+        <div className="max-w-2xl mx-auto px-4 pt-4 pb-8 relative z-10 animate-fade-in-up">
+          <div className="bg-[#FFFFFF]/95 backdrop-blur-md border border-[#E2D5BE] rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden royal-box-shadow">
             
             {/* Gilded Top Shimmer Accent */}
             <div className="absolute top-0 left-0 right-0 h-1.5 shimmer-gold-bg" />
             <RoyalCornerBrackets />
 
-            {/* Regal Heraldic Crest Icon */}
-            <div className="text-center mb-6">
-              <RoyalLogo className="w-28 h-28 rounded-3xl border-2 border-[#D4AF37] mx-auto shadow-xl animate-float-slow p-1 hover:scale-105 transition-transform" />
+            {/* Regal Crest Logo Only */}
+            <div className="text-center mb-5">
+              <RoyalLogo className="w-16 h-16 rounded-2xl border-2 border-[#D4AF37] mx-auto shadow-md p-0.5 hover:scale-105 transition-transform" />
             </div>
 
-            {/* Title & Introduction */}
-            <div className="text-center space-y-2 mb-6">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-[#8C6D2B] block">
-                Exclusive Royal Family Registry
-              </span>
-              <h1 className="font-serif-royal text-2xl sm:text-3xl font-extrabold text-[#1C1917] tracking-tight">
-                Welcome, Royal Household
-              </h1>
-              <RoyalFlourish />
-              <p className="text-xs sm:text-sm text-[#78716C] max-w-md mx-auto leading-relaxed">
-                Enter your unique email address to register your complete household.
-                Husband, Wife, and Children are captured together in a single magnificent dossier.
-              </p>
-            </div>
-
-            {/* Notifications & Error Banners */}
+            {/* Alert Banners */}
             {gateError && (
-              <div className="mb-6 p-4 rounded-2xl bg-red-50/95 border border-red-200 text-red-900 text-xs flex items-start gap-3 shadow-xs animate-in fade-in">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-semibold text-red-800">Verification Alert</p>
-                  <p className="leading-relaxed">{gateError}</p>
-                </div>
+              <div className="mb-4 p-3 rounded-xl bg-red-50/95 border border-red-200 text-red-900 text-xs flex items-center gap-2.5 shadow-xs animate-in fade-in">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                <span className="leading-snug">{gateError}</span>
               </div>
             )}
 
             {gateSuccessMsg && gateOtpStep === 'otp' && (
-              <div className="mb-6 p-4 rounded-2xl bg-emerald-50/95 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-3 shadow-xs animate-in fade-in">
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-semibold text-emerald-800">Verification Code Dispatched</p>
-                  <p className="leading-relaxed">{gateSuccessMsg}</p>
-                </div>
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50/95 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2.5 shadow-xs animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span className="leading-snug">{gateSuccessMsg}</span>
               </div>
             )}
 
-            {/* STEP 1: ROYAL EMAIL INPUT */}
+            {/* STEP 1: MEMBERSHIP TYPE + ROLE + EMAIL INPUT */}
             {gateOtpStep === 'email' && (
-              <form onSubmit={handleRequestOtp} className="space-y-6">
+              <form onSubmit={handleRequestOtp} noValidate className="space-y-4">
                 
-                {/* Role Selection */}
+                {/* Mandatory Membership Type Selection */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-2.5 text-center">
-                    Select Your Royal Identity
+                  <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
+                    gateFieldError === 'membership' ? 'text-red-700' : 'text-[#44403C]'
+                  }`}>
+                    Membership Type *
                   </label>
-                  <div className="grid grid-cols-2 gap-3.5">
+                  <div className={`grid grid-cols-2 gap-2.5 p-1 rounded-2xl border ${
+                    gateFieldError === 'membership'
+                      ? 'border-red-500 bg-red-50/60'
+                      : 'border-[#E7DDCE] bg-[#FAF7F2]'
+                  }`}>
                     <button
                       type="button"
-                      onClick={() => setGateRole('husband')}
-                      className={`p-4 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-2.5 ${
-                        gateRole === 'husband'
-                          ? 'bg-gradient-to-b from-[#1C1917] to-[#25221F] border-[#D4AF37] text-[#FAF7F2] shadow-lg ring-2 ring-[#C5A869]/40'
-                          : 'bg-[#FAF7F2] border-[#E7DDCE] text-[#44403C] hover:bg-[#F2ECE1] hover:border-[#D9CDB8]'
+                      disabled={feeStatus.isRenewalClosed}
+                      onClick={() => {
+                        if (!feeStatus.isRenewalClosed) {
+                          setMembershipChoice('existing');
+                          if (gateFieldError === 'membership') setGateFieldError(null);
+                          setGateError(null);
+                        }
+                      }}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
+                        feeStatus.isRenewalClosed
+                          ? 'bg-stone-100 text-stone-400 cursor-not-allowed'
+                          : membershipChoice === 'existing'
+                          ? 'bg-[#1C1917] text-[#D4AF37] shadow-sm border border-[#C5A869]/40 cursor-pointer'
+                          : 'bg-white text-[#44403C] hover:bg-[#F5EFE6] border border-transparent cursor-pointer'
                       }`}
                     >
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
-                        gateRole === 'husband' ? 'bg-[#312B26] text-[#D4AF37]' : 'bg-white text-[#8C6D2B] shadow-2xs'
-                      }`}>
-                        <User className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-xs">I am the Husband</div>
-                        <div className={`text-[10px] uppercase tracking-wider ${gateRole === 'husband' ? 'text-[#D4AF37]' : 'text-[#78716C]'}`}>
-                          Royal Gentleman
-                        </div>
-                      </div>
+                      {feeStatus.isRenewalClosed ? <Lock className="w-3.5 h-3.5 shrink-0" /> : <Crown className="w-3.5 h-3.5 shrink-0" />}
+                      <span className="truncate">
+                        {feeStatus.isRenewalClosed ? 'Existing (Closed)' : 'Existing Member'}
+                      </span>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setGateRole('wife')}
-                      className={`p-4 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-2.5 ${
-                        gateRole === 'wife'
-                          ? 'bg-gradient-to-b from-[#1C1917] to-[#25221F] border-[#D4AF37] text-[#FAF7F2] shadow-lg ring-2 ring-[#C5A869]/40'
-                          : 'bg-[#FAF7F2] border-[#E7DDCE] text-[#44403C] hover:bg-[#F2ECE1] hover:border-[#D9CDB8]'
+                      onClick={() => {
+                        setMembershipChoice('new');
+                        if (gateFieldError === 'membership') setGateFieldError(null);
+                        setGateError(null);
+                      }}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
+                        membershipChoice === 'new'
+                          ? 'bg-[#1C1917] text-[#D4AF37] shadow-sm border border-[#C5A869]/40'
+                          : 'bg-white text-[#44403C] hover:bg-[#F5EFE6] border border-transparent'
                       }`}
                     >
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
-                        gateRole === 'wife' ? 'bg-[#312B26] text-[#D4AF37]' : 'bg-white text-[#8C6D2B] shadow-2xs'
-                      }`}>
-                        <Heart className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-xs">I am the Wife</div>
-                        <div className={`text-[10px] uppercase tracking-wider ${gateRole === 'wife' ? 'text-[#D4AF37]' : 'text-[#78716C]'}`}>
-                          Royal Lady
-                        </div>
-                      </div>
+                      <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">New Member</span>
                     </button>
                   </div>
+                  {gateFieldError === 'membership' && (
+                    <p className="mt-1 text-[11px] font-medium text-red-600 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      <span>This field was missed — please select Existing Member or New Member.</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Role Selection (Compact Single Row) */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setGateRole('husband')}
+                    className={`py-2.5 px-3 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                      gateRole === 'husband'
+                        ? 'bg-[#1C1917] border-[#D4AF37] text-[#FAF7F2] shadow-sm'
+                        : 'bg-[#FAF7F2] border-[#E7DDCE] text-[#44403C] hover:bg-[#F2ECE1]'
+                    }`}
+                  >
+                    <User className={`w-4 h-4 shrink-0 ${gateRole === 'husband' ? 'text-[#D4AF37]' : 'text-[#8C6D2B]'}`} />
+                    <span className="font-semibold text-xs whitespace-nowrap">Husband</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setGateRole('wife')}
+                    className={`py-2.5 px-3 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                      gateRole === 'wife'
+                        ? 'bg-[#1C1917] border-[#D4AF37] text-[#FAF7F2] shadow-sm'
+                        : 'bg-[#FAF7F2] border-[#E7DDCE] text-[#44403C] hover:bg-[#F2ECE1]'
+                    }`}
+                  >
+                    <Heart className={`w-4 h-4 shrink-0 ${gateRole === 'wife' ? 'text-[#D4AF37]' : 'text-[#8C6D2B]'}`} />
+                    <span className="font-semibold text-xs whitespace-nowrap">Wife</span>
+                  </button>
                 </div>
 
                 {/* Email Input */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1.5">
-                    Your Unique Email Address
+                  <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
+                    gateFieldError === 'email' ? 'text-red-700' : 'text-[#44403C]'
+                  }`}>
+                    Email Address *
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-[#8C6D2B]" />
+                    <Mail className={`w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 ${
+                      gateFieldError === 'email' ? 'text-red-500' : 'text-[#8C6D2B]'
+                    }`} />
                     <input
                       type="email"
                       required
                       placeholder="e.g. royalfamily@example.com"
                       value={gateEmail}
-                      onChange={(e) => setGateEmail(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-[#D9CDB8] text-sm text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869] transition-all shadow-xs"
+                      onChange={(e) => {
+                        setGateEmail(e.target.value);
+                        if (gateFieldError === 'email') setGateFieldError(null);
+                        if (gateError) setGateError(null);
+                      }}
+                      className={`w-full pl-11 pr-4 py-3 rounded-2xl border text-sm outline-hidden transition-all shadow-xs ${
+                        gateFieldError === 'email'
+                          ? 'border-red-500 bg-red-50/70 text-red-950 focus:ring-2 focus:ring-red-400 focus:border-red-600'
+                          : 'border-[#D9CDB8] bg-white text-[#1C1917] focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]'
+                      }`}
                     />
                   </div>
-                  <p className="text-[11px] text-[#78716C] mt-2 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
-                    <span>
-                      A 6-digit verification code will be dispatched to this email to verify your royal household identity.
-                    </span>
-                  </p>
+                  {gateFieldError === 'email' && (
+                    <p className="mt-1 text-[11px] font-medium text-red-600 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      <span>This field was missed — please enter a valid email address.</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Send OTP Button */}
                 <button
                   type="submit"
-                  disabled={sendingOtp || !gateEmail.trim()}
-                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#1C1917] via-[#2A2623] to-[#1C1917] hover:from-black hover:to-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-sm shadow-xl transition-all flex items-center justify-center gap-2 border border-[#C5A869]/50 cursor-pointer"
+                  disabled={sendingOtp}
+                  className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-[#1C1917] via-[#2A2623] to-[#1C1917] hover:from-black hover:to-[#2A2623] disabled:opacity-50 text-[#FAF7F2] font-semibold text-sm shadow-xl transition-all flex items-center justify-center gap-2 border border-[#C5A869]/50 cursor-pointer"
                 >
                   {sendingOtp ? (
                     <>
@@ -1079,7 +1485,9 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   ) : (
                     <>
                       <KeyRound className="w-4 h-4 text-[#D4AF37]" />
-                      <span>Verify Code &amp; Enter Dossier</span>
+                      <span>
+                        {membershipType === 'new' ? 'Verify Code & Start Application' : 'Verify Code & Enter Dossier'}
+                      </span>
                       <ArrowRight className="w-4 h-4 text-[#D4AF37]" />
                     </>
                   )}
@@ -1108,10 +1516,10 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
             {/* Smart Cross-Spouse Sync Badge & Discreet Admin Link */}
             <div className="mt-8 pt-6 border-t border-[#F0E8DC] text-center space-y-3">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FAF7F2] border border-[#E7DDCE] text-[11px] text-[#78716C]">
+              <p className="text-[11px] text-[#78716C] flex items-center justify-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#8C6D2B]" />
-                <span>Zero Duplicate Entries • Automated Cross-Spouse Synchronization</span>
-              </div>
+                <span>Zero Duplicate Entries · Automated Cross-Spouse Synchronization</span>
+              </p>
               {onOpenAdmin && (
                 <div>
                   <button
@@ -1129,6 +1537,242 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       )}
 
       {/* ========================================================================= */}
+      {/* FEES SECTION & FEE COLLECTION CONTACTS CARD (ALWAYS VISIBLE ON ENTRANCE)  */}
+      {/* ========================================================================= */}
+      {currentView === 'gate' && (
+        <section aria-label="Membership Fees and Collection Contacts" className="max-w-4xl mx-auto px-4 pb-14 pt-2 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            {/* Fees Schedule Card */}
+            <div className="bg-white/95 backdrop-blur-md border border-[#E2D5BE] rounded-3xl p-6 sm:p-7 shadow-lg flex flex-col justify-between space-y-5">
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3 border-b border-[#F0E8DC] pb-4">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#8C6D2B] block">
+                      Annual Membership Schedule
+                    </span>
+                    <h2 className="font-serif-royal text-xl font-bold text-[#1C1917] mt-0.5">
+                      Membership Fees
+                    </h2>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-[#FAF7F2] border border-[#E2D5BE] text-[#8C6D2B] flex items-center justify-center shrink-0">
+                    <IndianRupee className="w-5 h-5" />
+                  </div>
+                </div>
+
+                {/* Current Window Status (Existing Members Only) */}
+                <div className={`p-3.5 rounded-2xl border text-xs space-y-1 ${
+                  feeStatus.isRenewalClosed
+                    ? 'bg-red-50 border-red-200 text-red-900'
+                    : feeStatus.isLateWindow
+                    ? 'bg-amber-50 border-amber-200 text-amber-950'
+                    : 'bg-[#FAF7F2] border-[#E2D5BE] text-[#1C1917]'
+                }`}>
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 shrink-0" />
+                    <span>{feeStatus.statusHeading}</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed opacity-90">
+                    {feeStatus.statusDetail}
+                  </p>
+                </div>
+
+                {/* Fee Schedule Split: Existing Members & New Entries */}
+                <div className="space-y-4">
+                  {/* 1. Existing Members */}
+                  <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 border-b border-[#E7DDCE] pb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#8C6D2B]">
+                        Existing Members
+                      </span>
+                      <span className="text-[11px] font-medium text-[#78716C]">
+                        2026 Schedule
+                      </span>
+                    </div>
+                    <dl className="divide-y divide-[#EDE4D5] text-sm">
+                      <div className="py-2 flex items-center justify-between gap-4">
+                        <dt className="text-[#44403C] font-medium">15 Nov – 25 Nov 2026</dt>
+                        <dd className="font-serif-royal font-bold text-lg text-[#1C1917] tabular-nums whitespace-nowrap">
+                          ₹60,000
+                        </dd>
+                      </div>
+                      <div className="py-2 flex items-center justify-between gap-4">
+                        <dt className="text-[#44403C] font-medium">
+                          26 Nov – 29 Nov 2026
+                          <span className="block text-[11px] text-[#78716C] font-normal">
+                            With late renewal fee
+                          </span>
+                        </dt>
+                        <dd className="font-serif-royal font-bold text-lg text-amber-800 tabular-nums whitespace-nowrap">
+                          ₹70,000
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="p-2.5 rounded-xl bg-red-50/90 border border-red-200 text-red-900 text-[11px] flex items-start gap-2">
+                      <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                      <p className="leading-relaxed">
+                        <strong>After 29 Nov 2026:</strong> Existing members will be considered as a <strong>New Entry</strong>.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 2. New Entries (New Member Fees) */}
+                  <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 border-b border-[#E7DDCE] pb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#8C6D2B]">
+                        New Entries (New Member Fees)
+                      </span>
+                      <span className="text-[11px] font-medium text-[#78716C]">
+                        New Applicants
+                      </span>
+                    </div>
+                    <dl className="divide-y divide-[#EDE4D5] text-sm">
+                      <div className="py-2 flex items-center justify-between gap-4">
+                        <dt className="text-[#44403C] font-medium">Fees</dt>
+                        <dd className="font-serif-royal font-bold text-lg text-[#1C1917] tabular-nums whitespace-nowrap">
+                          ₹60,000
+                        </dd>
+                      </div>
+                      <div className="py-2 flex items-center justify-between gap-4">
+                        <dt className="text-[#44403C] font-medium">One-Time Registration Fees</dt>
+                        <dd className="font-serif-royal font-bold text-lg text-[#1C1917] tabular-nums whitespace-nowrap">
+                          ₹40,000
+                        </dd>
+                      </div>
+                      <div className="pt-2.5 flex items-center justify-between gap-4">
+                        <dt className="text-xs font-bold uppercase tracking-wider text-[#8C6D2B]">
+                          Total (New Entry)
+                        </dt>
+                        <dd className="font-serif-royal font-bold text-lg text-[#8C6D2B] tabular-nums whitespace-nowrap">
+                          ₹1,00,000
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Fee Collection Contacts Card */}
+            <div className="bg-white/95 backdrop-blur-md border border-[#E2D5BE] rounded-3xl p-6 sm:p-7 shadow-lg flex flex-col justify-between space-y-5">
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3 border-b border-[#F0E8DC] pb-4">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#8C6D2B] block">
+                      Authorized Payment Contacts
+                    </span>
+                    <h2 className="font-serif-royal text-xl font-bold text-[#1C1917] mt-0.5">
+                      Fee Collection
+                    </h2>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-[#FAF7F2] border border-[#E2D5BE] text-[#8C6D2B] flex items-center justify-center shrink-0">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#57534E] leading-relaxed">
+                  Please coordinate fee submission with any of the authorized Fee Collection representatives below:
+                </p>
+
+                <div className="space-y-3">
+                  {FEE_COLLECTION_CONTACTS.map((contact) => {
+                    const hasAddresses = Boolean(contact.addresses && contact.addresses.length > 0);
+                    const isExpanded = Boolean(expandedAddresses[contact.name]);
+                    const combinedPreview = contact.addresses
+                      ? contact.addresses
+                          .map((addr) => (addr.label ? `${addr.label} — ${addr.text}` : addr.text))
+                          .join(' | ')
+                      : '';
+
+                    return (
+                      <div
+                        key={contact.name}
+                        className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE] space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-sm text-[#1C1917]">
+                              {contact.name}
+                            </div>
+                            <div className="text-[11px] text-[#78716C]">
+                              {contact.role}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="inline-flex items-center gap-1.5 text-xs font-mono tabular-nums font-semibold text-[#8C6D2B] bg-white px-3 py-1.5 rounded-lg border border-[#E2D5BE]">
+                              <Phone className="w-3.5 h-3.5 shrink-0" />
+                              <span>{contact.phonePlaceholder}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {hasAddresses && (
+                          <div className="pt-2 border-t border-[#E7DDCE]/80 text-[11px] text-[#57534E]">
+                            {!isExpanded ? (
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <MapPin className="w-3.5 h-3.5 text-[#8C6D2B] shrink-0" />
+                                <span className="truncate flex-1 min-w-0" title={combinedPreview}>
+                                  {combinedPreview}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedAddresses((prev) => ({ ...prev, [contact.name]: true }))
+                                  }
+                                  className="text-[#8C6D2B] hover:text-[#6D531E] font-semibold underline underline-offset-2 shrink-0 cursor-pointer"
+                                >
+                                  Show more
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {contact.addresses!.map((addr, idx) => (
+                                  <div key={idx} className="flex items-start gap-1.5 leading-relaxed">
+                                    <MapPin className="w-3.5 h-3.5 text-[#8C6D2B] shrink-0 mt-0.5" />
+                                    <div>
+                                      {addr.label && (
+                                        <span className="font-semibold text-[#1C1917]">{addr.label}: </span>
+                                      )}
+                                      <span>{addr.text}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedAddresses((prev) => ({ ...prev, [contact.name]: false }))
+                                  }
+                                  className="text-[#8C6D2B] hover:text-[#6D531E] font-semibold underline underline-offset-2 cursor-pointer inline-block pt-0.5"
+                                >
+                                  Show less
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE] text-[11px] text-[#78716C] flex items-center justify-between gap-2">
+                <span>Existing: 15–25 Nov (₹60k) • 26–29 Nov 2026 (₹70k)</span>
+                {onOpenAdmin && (
+                  <button
+                    type="button"
+                    onClick={onOpenAdmin}
+                    className="text-[#8C6D2B] hover:text-[#1C1917] font-semibold underline underline-offset-2 shrink-0 cursor-pointer"
+                  >
+                    Admin Console
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ========================================================================= */}
       {/* VIEW 2: SPOUSE COMPLETED CELEBRATION / PROCLAMATION SCREEN                */}
       {/* ========================================================================= */}
       {currentView === 'spouse_celebration' && existingRecord && (
@@ -1142,10 +1786,17 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
             <div className="text-center space-y-3">
               <RoyalLogo className="w-24 h-24 rounded-3xl border-2 border-[#D4AF37] mx-auto shadow-xl animate-ring-float p-1" />
 
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold uppercase tracking-wider">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Official Royal Decree Sealed</span>
-              </div>
+              {existingRecord.membership_type === 'new' || existingRecord.status === 'pending_review' ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold uppercase tracking-wider">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>New Application · Pending Review</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold uppercase tracking-wider">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Official Royal Decree Sealed</span>
+                </div>
+              )}
 
               <h2 className="font-serif-royal text-2xl sm:text-3xl font-bold text-[#1C1917] leading-tight">
                 {spouseNotificationMessage}
@@ -1153,10 +1804,16 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
               <RoyalFlourish />
 
+              {(existingRecord.membership_type === 'new' || existingRecord.status === 'pending_review') && (
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 text-xs sm:text-sm font-medium max-w-lg mx-auto">
+                  This is not a confirmed membership. Your application will be reviewed, and confirmation will be sent to you once approved.
+                </div>
+              )}
+
               <p className="text-xs sm:text-sm text-[#78716C] max-w-lg mx-auto leading-relaxed">
                 {isFiledBySpouse
                   ? `Your beloved ${spouseRole === 'husband' ? 'husband' : 'wife'} (${spouseName}) has already registered your complete royal household in the JSG Royals Year 2 Directory. You do not need to fill out any form!`
-                  : `Your family dossier is officially recorded and confirmed in the JSG Royals Master Directory.`}
+                  : `Your family dossier is officially recorded in the JSG Royals Master Directory.`}
               </p>
             </div>
 
@@ -1258,6 +1915,14 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   <span className="text-[10px] font-bold uppercase text-[#78716C] block">Residential Address</span>
                   <span className="text-[#57534E] block">{existingRecord.residential_address}</span>
                 </div>
+                {existingRecord.couple_photo_url && (
+                  <div className="sm:col-span-2 pt-2 border-t border-[#F0E8DC] space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase text-[#8C6D2B] block">
+                      💑 Couple Photo
+                    </span>
+                    <DossierPhotoThumbnail url={existingRecord.couple_photo_url} alt="Couple Photo" />
+                  </div>
+                )}
               </div>
 
               {/* Children */}
@@ -1299,8 +1964,30 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 </div>
               )}
 
-              {(existingRecord.contribution_areas || existingRecord.royal_idea) && (
-                <div className="p-4 rounded-xl bg-white border border-[#E7DDCE] text-xs space-y-1.5">
+              {(existingRecord.contribution_areas || existingRecord.royal_idea || existingRecord.president_name || existingRecord.secretary_name) && (
+                <div className="p-4 rounded-xl bg-white border border-[#E7DDCE] text-xs space-y-2.5">
+                  {(existingRecord.president_name || existingRecord.secretary_name) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pb-2 border-b border-[#F0E8DC]">
+                      {existingRecord.president_name && (
+                        <div>
+                          <span className="text-[10px] font-bold uppercase text-[#78716C] block">President</span>
+                          <span className="text-[#1C1917] font-semibold">
+                            {existingRecord.president_name}
+                            {existingRecord.president_mobile ? ` · ${existingRecord.president_mobile}` : ''}
+                          </span>
+                        </div>
+                      )}
+                      {existingRecord.secretary_name && (
+                        <div>
+                          <span className="text-[10px] font-bold uppercase text-[#78716C] block">Secretary</span>
+                          <span className="text-[#1C1917] font-semibold">
+                            {existingRecord.secretary_name}
+                            {existingRecord.secretary_mobile ? ` · ${existingRecord.secretary_mobile}` : ''}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {existingRecord.contribution_areas && (
                     <div>
                       <span className="text-[10px] font-bold uppercase text-[#78716C] block">Contribution Areas</span>
@@ -1319,6 +2006,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5">
+
               <button
                 type="button"
                 onClick={triggerConfettiFanfare}
@@ -1341,9 +2029,9 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       )}
 
       {/* ========================================================================= */}
-      {/* VIEW 3: FRESH MULTI-STEP UNIFIED FAMILY FORM                              */}
+      {/* VIEW 3: UNIFIED MULTI-STEP FAMILY DOSSIER FORM (EXISTING & NEW MEMBERS)   */}
       {/* ========================================================================= */}
-      {currentView === 'form' && isEmailVerified && (
+      {currentView === 'form' && isEmailVerified && (membershipType === 'new' || !feeStatus.isRenewalClosed) && (
         <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12 space-y-6 relative z-10 animate-fade-in-up">
           
           <div className="bg-[#FFFFFF]/95 backdrop-blur-md border border-[#E2D5BE] rounded-3xl p-6 sm:p-9 shadow-xl space-y-6 royal-box-shadow relative overflow-hidden">
@@ -1357,14 +2045,17 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-widest text-[#8C6D2B] flex items-center gap-1.5">
                     <span>✦</span>
-                    <span>Step {activeStep} of {totalSteps}</span>
+                    <span>
+                      Step {activeStep} of {totalSteps} •{' '}
+                      {membershipType === 'new' ? 'New Member Application' : 'Existing Member Renewal'}
+                    </span>
                   </span>
                   <h2 className="font-serif-royal text-xl sm:text-2xl font-bold text-[#1C1917]">
                     {activeStep === 1 && "🤵 Husband's Royal Dossier"}
                     {activeStep === 2 && "👰 Wife's Royal Dossier"}
                     {activeStep === 3 && "💍 Royal Union & Residence"}
                     {activeStep === 4 && "👶 Royal Heirs & Children"}
-                    {activeStep === 5 && "📸 Family Portrait & Vision"}
+                    {activeStep === 5 && (membershipType === 'new' ? "📸 Vision, Reference & Portrait" : "📸 Family Portrait & Vision")}
                     {activeStep === 6 && "📜 Review & Royal Seal"}
                   </h2>
                 </div>
@@ -1391,9 +2082,26 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       key={s.num}
                       type="button"
                       onClick={() => {
-                        if (isCompleted || canProceedStep()) {
+                        if (isCompleted) {
+                          setFieldErrors({});
+                          setSubmitError(null);
                           setActiveStep(s.num);
+                          return;
                         }
+                        if (s.num === activeStep) return;
+                        for (let step = activeStep; step < s.num; step++) {
+                          const errs = validateStepFields(step);
+                          if (Object.keys(errs).length > 0) {
+                            setFieldErrors(errs);
+                            setSubmitError(`Please fill the highlighted required field(s) in Step ${step} before continuing.`);
+                            setActiveStep(step);
+                            scrollToFirstError();
+                            return;
+                          }
+                        }
+                        setFieldErrors({});
+                        setSubmitError(null);
+                        setActiveStep(s.num);
                       }}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                         isCurrent
@@ -1439,21 +2147,27 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandName')}`}>
                         Husband Full Name *
                       </label>
                       <input
                         type="text"
                         required
+                        data-field-error={fieldErrors.husbandName ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.husbandName)}
                         placeholder="e.g. Subodh Samota"
                         value={husbandName}
-                        onChange={(e) => setHusbandName(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                        onChange={(e) => {
+                          setHusbandName(e.target.value);
+                          clearFieldError('husbandName');
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandName')}`}
                       />
+                      {renderFieldError('husbandName')}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandMobile')}`}>
                         Husband Registered Mobile *
                       </label>
                       <div className="relative">
@@ -1462,17 +2176,23 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                           type="tel"
                           required
                           maxLength={10}
+                          data-field-error={fieldErrors.husbandMobile ? 'true' : undefined}
+                          aria-invalid={Boolean(fieldErrors.husbandMobile)}
                           placeholder="10-digit mobile"
                           value={husbandMobile}
-                          onChange={(e) => setHusbandMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                          className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-mono text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                          onChange={(e) => {
+                            setHusbandMobile(e.target.value.replace(/\D/g, '').slice(0, 10));
+                            clearFieldError('husbandMobile');
+                          }}
+                          className={`w-full pl-11 pr-4 py-2.5 rounded-xl border text-xs font-mono outline-hidden ${getFieldBorderClass('husbandMobile')}`}
                         />
                       </div>
+                      {renderFieldError('husbandMobile')}
                     </div>
 
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C]">
+                        <label className={`block text-xs font-semibold uppercase tracking-wider ${getLabelColorClass('husbandEmail')}`}>
                           Husband Unique Email *
                         </label>
                         {gateRole === 'husband' && gateEmail && (
@@ -1487,16 +2207,22 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       <input
                         type="email"
                         required
+                        data-field-error={fieldErrors.husbandEmail ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.husbandEmail)}
                         placeholder="husband@example.com"
                         value={husbandEmail}
-                        onChange={(e) => setHusbandEmail(e.target.value)}
+                        onChange={(e) => {
+                          setHusbandEmail(e.target.value);
+                          clearFieldError('husbandEmail');
+                        }}
                         onBlur={() => {
                           if (gateRole === 'wife') {
                             handleCheckSpouseEmailOnBlur(husbandEmail, 'husband');
                           }
                         }}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandEmail')}`}
                       />
+                      {renderFieldError('husbandEmail')}
                     </div>
 
                     <div>
@@ -1553,16 +2279,23 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Company / Business / Organization
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandOrganization')}`}>
+                        Company / Business / Organization {membershipType === 'new' && gateRole === 'husband' ? '*' : ''}
                       </label>
                       <input
                         type="text"
+                        required={membershipType === 'new' && gateRole === 'husband'}
+                        data-field-error={fieldErrors.husbandOrganization ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.husbandOrganization)}
                         placeholder="e.g. Samota Industries"
                         value={husbandOrganization}
-                        onChange={(e) => setHusbandOrganization(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                        onChange={(e) => {
+                          setHusbandOrganization(e.target.value);
+                          clearFieldError('husbandOrganization');
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandOrganization')}`}
                       />
+                      {renderFieldError('husbandOrganization')}
                     </div>
                   </div>
 
@@ -1590,21 +2323,27 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeName')}`}>
                         Wife Full Name *
                       </label>
                       <input
                         type="text"
                         required
+                        data-field-error={fieldErrors.wifeName ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.wifeName)}
                         placeholder="e.g. Shaily Agrawal"
                         value={wifeName}
-                        onChange={(e) => setWifeName(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                        onChange={(e) => {
+                          setWifeName(e.target.value);
+                          clearFieldError('wifeName');
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeName')}`}
                       />
+                      {renderFieldError('wifeName')}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeMobile')}`}>
                         Wife Registered Mobile *
                       </label>
                       <div className="relative">
@@ -1613,17 +2352,23 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                           type="tel"
                           required
                           maxLength={10}
+                          data-field-error={fieldErrors.wifeMobile ? 'true' : undefined}
+                          aria-invalid={Boolean(fieldErrors.wifeMobile)}
                           placeholder="10-digit mobile"
                           value={wifeMobile}
-                          onChange={(e) => setWifeMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                          className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-mono text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                          onChange={(e) => {
+                            setWifeMobile(e.target.value.replace(/\D/g, '').slice(0, 10));
+                            clearFieldError('wifeMobile');
+                          }}
+                          className={`w-full pl-11 pr-4 py-2.5 rounded-xl border text-xs font-mono outline-hidden ${getFieldBorderClass('wifeMobile')}`}
                         />
                       </div>
+                      {renderFieldError('wifeMobile')}
                     </div>
 
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C]">
+                        <label className={`block text-xs font-semibold uppercase tracking-wider ${getLabelColorClass('wifeEmail')}`}>
                           Wife Unique Email *
                         </label>
                         {gateRole === 'wife' && gateEmail && (
@@ -1638,16 +2383,22 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       <input
                         type="email"
                         required
+                        data-field-error={fieldErrors.wifeEmail ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.wifeEmail)}
                         placeholder="wife@example.com"
                         value={wifeEmail}
-                        onChange={(e) => setWifeEmail(e.target.value)}
+                        onChange={(e) => {
+                          setWifeEmail(e.target.value);
+                          clearFieldError('wifeEmail');
+                        }}
                         onBlur={() => {
                           if (gateRole === 'husband') {
                             handleCheckSpouseEmailOnBlur(wifeEmail, 'wife');
                           }
                         }}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeEmail')}`}
                       />
+                      {renderFieldError('wifeEmail')}
                     </div>
 
                     <div>
@@ -1704,16 +2455,23 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Company / Business / Organization
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeOrganization')}`}>
+                        Company / Business / Organization {membershipType === 'new' && gateRole === 'wife' ? '*' : ''}
                       </label>
                       <input
                         type="text"
+                        required={membershipType === 'new' && gateRole === 'wife'}
+                        data-field-error={fieldErrors.wifeOrganization ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.wifeOrganization)}
                         placeholder="e.g. Swiggy / Entrepreneur"
                         value={wifeOrganization}
-                        onChange={(e) => setWifeOrganization(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                        onChange={(e) => {
+                          setWifeOrganization(e.target.value);
+                          clearFieldError('wifeOrganization');
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeOrganization')}`}
                       />
+                      {renderFieldError('wifeOrganization')}
                     </div>
                   </div>
 
@@ -1732,11 +2490,15 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 <div key={3} className="space-y-4 animate-fade-in-up">
                   
                   {/* Anniversary Spotlight */}
-                  <div className="p-5 rounded-2xl bg-gradient-to-br from-[#FAF7F2] to-[#F5ECE0] border border-[#E2D5BE] space-y-3 shadow-2xs">
+                  <div className={`p-5 rounded-2xl border space-y-3 shadow-2xs ${
+                    fieldErrors.marriageAnniversary
+                      ? 'bg-red-50/60 border-red-400'
+                      : 'bg-gradient-to-br from-[#FAF7F2] to-[#F5ECE0] border-[#E2D5BE]'
+                  }`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Gem className="w-4 h-4 text-[#8C6D2B]" />
-                        <label className="text-xs font-semibold uppercase tracking-wider text-[#44403C]">
+                        <Gem className={`w-4 h-4 ${fieldErrors.marriageAnniversary ? 'text-red-600' : 'text-[#8C6D2B]'}`} />
+                        <label className={`text-xs font-semibold uppercase tracking-wider ${getLabelColorClass('marriageAnniversary')}`}>
                           💍 Marriage Anniversary Date *
                         </label>
                       </div>
@@ -1750,30 +2512,49 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     <input
                       type="date"
                       required
+                      data-field-error={fieldErrors.marriageAnniversary ? 'true' : undefined}
+                      aria-invalid={Boolean(fieldErrors.marriageAnniversary)}
                       value={marriageAnniversary}
                       onChange={(e) => {
                         setMarriageAnniversary(e.target.value);
+                        clearFieldError('marriageAnniversary');
                         if (e.target.value) {
                           triggerConfettiFanfare();
                         }
                       }}
-                      className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                      className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('marriageAnniversary')}`}
                     />
+                    {renderFieldError('marriageAnniversary')}
                   </div>
+
+                  {/* Couple Photo on Anniversary Page */}
+                  <PhotoUploadOrDriveLink
+                    label="💑 Couple Photo / Google Drive Link"
+                    subtitle="Upload a couple photo of Husband & Wife together or paste a Google Drive photo URL"
+                    guideline="Please add your Couple Photo (Husband & Wife together) for your Anniversary & Union profile."
+                    value={couplePhotoUrl}
+                    onChange={setCouplePhotoUrl}
+                  />
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('currentCity')}`}>
                         Current City of Residence *
                       </label>
                       <input
                         type="text"
                         required
+                        data-field-error={fieldErrors.currentCity ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.currentCity)}
                         placeholder="e.g. Indore"
                         value={currentCity}
-                        onChange={(e) => setCurrentCity(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                        onChange={(e) => {
+                          setCurrentCity(e.target.value);
+                          clearFieldError('currentCity');
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('currentCity')}`}
                       />
+                      {renderFieldError('currentCity')}
                     </div>
 
                     <div>
@@ -1791,17 +2572,23 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
+                    <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('residentialAddress')}`}>
                       Complete Residential Address *
                     </label>
                     <textarea
                       required
                       rows={3}
+                      data-field-error={fieldErrors.residentialAddress ? 'true' : undefined}
+                      aria-invalid={Boolean(fieldErrors.residentialAddress)}
                       placeholder="House/Bungalow number, street, colony, landmark, pincode..."
                       value={residentialAddress}
-                      onChange={(e) => setResidentialAddress(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                      onChange={(e) => {
+                        setResidentialAddress(e.target.value);
+                        clearFieldError('residentialAddress');
+                      }}
+                      className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('residentialAddress')}`}
                     />
+                    {renderFieldError('residentialAddress')}
                   </div>
                 </div>
               )}
@@ -1815,7 +2602,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         Royal Heirs &amp; Children
                       </h4>
                       <p className="text-xs text-[#78716C]">
-                        Register details for your sons and daughters.
+                        Register details for your sons and daughters, and add each kid photo with parents.
                       </p>
                     </div>
 
@@ -1935,10 +2722,11 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                             </div>
                           </div>
 
-                          {/* Child Photo / Google Drive Link */}
+                          {/* Child Photo with Parents / Google Drive Link */}
                           <PhotoUploadOrDriveLink
-                            label={`📸 ${child.name.trim() ? `${child.name.trim()}'s` : `Child #${index + 1}`} Photo / Google Drive Link`}
-                            subtitle="Upload a portrait of this child or paste a Google Drive photo URL"
+                            label={`📸 ${child.name.trim() ? `${child.name.trim()} — ` : `Child #${index + 1} — `}Kid Photo with Parents / Google Drive Link`}
+                            subtitle="Upload a photo of the kid together with parents (Father, Mother & Child) or paste a Google Drive URL"
+                            guideline="Picture Instruction: While taking or uploading the picture, please add kid photo with parents (Husband, Wife & Child together)."
                             value={child.photo_url || null}
                             onChange={(url) => handleUpdateChild(child.id, 'photo_url', url || '')}
                           />
@@ -2025,6 +2813,155 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
                     />
                   </div>
+
+                  {/* Additional Questions for New Members Only */}
+                  {membershipType === 'new' && (
+                    <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/60 border border-[#D4AF37]/60 space-y-4">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#8C6D2B] block">
+                          New Member Application Questions
+                        </span>
+                        <h4 className="font-serif-royal font-bold text-sm text-[#1C1917]">
+                          Group Background, Business &amp; Reference *
+                        </h4>
+                        <p className="text-[11px] text-[#78716C]">
+                          Please answer these additional questions required for new member review.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
+                            Are you part of any other group? *
+                          </label>
+                          <select
+                            value={appOtherGroup}
+                            onChange={(e) => {
+                              const val = e.target.value as 'Yes' | 'No';
+                              setAppOtherGroup(val);
+                              if (val === 'No') {
+                                setAppOtherGroupName('');
+                                clearFieldError('appOtherGroupName');
+                              }
+                            }}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
+                          >
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                          </select>
+                        </div>
+
+                        {appOtherGroup === 'Yes' && (
+                          <div>
+                            <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appOtherGroupName')}`}>
+                              Group Name *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              data-field-error={fieldErrors.appOtherGroupName ? 'true' : undefined}
+                              aria-invalid={Boolean(fieldErrors.appOtherGroupName)}
+                              placeholder="Enter name of the other group"
+                              value={appOtherGroupName}
+                              onChange={(e) => {
+                                setAppOtherGroupName(e.target.value);
+                                clearFieldError('appOtherGroupName');
+                              }}
+                              className={`w-full px-3.5 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appOtherGroupName')}`}
+                            />
+                            {renderFieldError('appOtherGroupName')}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appBusinessDesc')}`}>
+                          Business Description (Short industry-related details) *
+                        </label>
+                        <textarea
+                          required
+                          rows={2}
+                          data-field-error={fieldErrors.appBusinessDesc ? 'true' : undefined}
+                          aria-invalid={Boolean(fieldErrors.appBusinessDesc)}
+                          placeholder="Briefly describe your industry, products, or services..."
+                          value={appBusinessDesc}
+                          onChange={(e) => {
+                            setAppBusinessDesc(e.target.value);
+                            clearFieldError('appBusinessDesc');
+                          }}
+                          className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appBusinessDesc')}`}
+                        />
+                        {renderFieldError('appBusinessDesc')}
+                      </div>
+
+                      <div>
+                        <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appContribution')}`}>
+                          How can you contribute to the group? *
+                        </label>
+                        <textarea
+                          required
+                          rows={2}
+                          data-field-error={fieldErrors.appContribution ? 'true' : undefined}
+                          aria-invalid={Boolean(fieldErrors.appContribution)}
+                          placeholder="Share how you can contribute your skills, time, events, or fellowship..."
+                          value={appContribution}
+                          onChange={(e) => {
+                            setAppContribution(e.target.value);
+                            clearFieldError('appContribution');
+                          }}
+                          className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appContribution')}`}
+                        />
+                        {renderFieldError('appContribution')}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appRefName')}`}>
+                            Reference (Referring Member Name) *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            data-field-error={fieldErrors.appRefName ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.appRefName)}
+                            placeholder="Name of referring JSG Royals member"
+                            value={appRefName}
+                            onChange={(e) => {
+                              setAppRefName(e.target.value);
+                              clearFieldError('appRefName');
+                            }}
+                            className={`w-full px-3.5 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appRefName')}`}
+                          />
+                          {renderFieldError('appRefName')}
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appRefMobile')}`}>
+                            Referring Member Mobile *
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-[#78716C]">+91</span>
+                            <input
+                              type="tel"
+                              required
+                              inputMode="numeric"
+                              maxLength={10}
+                              data-field-error={fieldErrors.appRefMobile ? 'true' : undefined}
+                              aria-invalid={Boolean(fieldErrors.appRefMobile)}
+                              placeholder="10-digit mobile"
+                              value={appRefMobile}
+                              onChange={(e) => {
+                                setAppRefMobile(e.target.value.replace(/\D/g, '').slice(0, 10));
+                                clearFieldError('appRefMobile');
+                              }}
+                              className={`w-full pl-11 pr-3.5 py-2.5 rounded-xl border text-xs font-mono tabular-nums outline-hidden ${getFieldBorderClass('appRefMobile')}`}
+                            />
+                          </div>
+                          {renderFieldError('appRefMobile')}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2171,6 +3108,14 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                           <span className="text-[10px] text-[#A8A29E] uppercase block">Residential Address</span>
                           <span className="text-[#D6D3D1]">{residentialAddress || 'Not entered'}</span>
                         </div>
+                        {couplePhotoUrl ? (
+                          <div className="pt-1.5 border-t border-white/10 space-y-1">
+                            <span className="text-[10px] text-[#D4AF37] uppercase block font-bold">💑 Couple Photo</span>
+                            <DossierPhotoThumbnail url={couplePhotoUrl} alt="Royal Couple Photo" />
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-[#A8A29E]">No Couple Photo Attached</div>
+                        )}
                       </div>
 
                       {/* Children / Royal Heirs Full Details */}
@@ -2206,7 +3151,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                                 {c.photo_url ? (
                                   <DossierPhotoThumbnail url={c.photo_url} alt={c.name || `Child ${idx + 1}`} />
                                 ) : (
-                                  <div className="text-[10px] text-[#A8A29E]">No Child Photo Attached</div>
+                                  <div className="text-[10px] text-[#A8A29E]">No Kid &amp; Parents Photo Attached</div>
                                 )}
                               </div>
                             ))}
@@ -2252,8 +3197,65 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                             <span className="text-[#D6D3D1] italic">"{royalIdea.trim()}"</span>
                           </div>
                         )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-white/10 text-[11px]">
+                          <div>
+                            <span className="text-[10px] text-[#A8A29E] uppercase block">President</span>
+                            <span className="text-[#F3DF9C] font-semibold">
+                              {ROYAL_LEADERSHIP.president}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-[#A8A29E] uppercase block">Secretary</span>
+                            <span className="text-[#F3DF9C] font-semibold">
+                              {ROYAL_LEADERSHIP.secretary}
+                            </span>
+                          </div>
+                        </div>
+
+                        {membershipType === 'new' && (
+                          <div className="space-y-2 pt-2 border-t border-white/10 text-[11px]">
+                            <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-bold block">
+                              New Member Application Details
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <div>
+                                <span className="text-[10px] text-[#A8A29E] uppercase block">Other Group</span>
+                                <span className="text-white">
+                                  {appOtherGroup === 'Yes' ? `Yes — ${appOtherGroupName}` : 'No'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-[#A8A29E] uppercase block">Referring Member</span>
+                                <span className="text-white font-semibold">
+                                  {appRefName || '—'} · <span className="font-mono tabular-nums text-[#D4AF37]">{appRefMobile || '—'}</span>
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-[#A8A29E] uppercase block">Business Description</span>
+                              <span className="text-[#D6D3D1]">{appBusinessDesc || '—'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-[#A8A29E] uppercase block">How You Can Contribute</span>
+                              <span className="text-[#D6D3D1]">{appContribution || '—'}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
+
+                    {membershipType === 'new' && (
+                      <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-xs text-amber-950 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                          <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
+                          <span>Application Review Notice</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                          This is not a confirmed membership. Your application will be reviewed, and confirmation will be sent to you once approved.
+                        </p>
+                      </div>
+                    )}
 
                     <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-1">
                       <div className="font-bold flex items-center gap-1.5 text-amber-900">
@@ -2261,7 +3263,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         <span>Automated Cross-Spouse Sync:</span>
                       </div>
                       <p className="text-[11px]">
-                        Upon sealing, if your spouse visits the portal with their email ({gateRole === 'husband' ? wifeEmail || 'Wife' : husbandEmail || 'Husband'}),
+                        Upon submission, if your spouse visits the portal with their email ({gateRole === 'husband' ? wifeEmail || 'Wife' : husbandEmail || 'Husband'}),
                         they will immediately be presented with this completed dossier!
                       </p>
                     </div>
@@ -2274,7 +3276,11 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 {activeStep > 1 ? (
                   <button
                     type="button"
-                    onClick={() => setActiveStep((prev) => prev - 1)}
+                    onClick={() => {
+                      setFieldErrors({});
+                      setSubmitError(null);
+                      setActiveStep((prev) => prev - 1);
+                    }}
                     className="px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#FAF7F2] transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
@@ -2294,10 +3300,17 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!canProceedStep()) {
-                        setSubmitError('Please complete the required fields before continuing.');
+                      const errs = validateStepFields(activeStep);
+                      if (Object.keys(errs).length > 0) {
+                        setFieldErrors(errs);
+                        const count = Object.keys(errs).length;
+                        setSubmitError(
+                          `${count} mandatory field${count > 1 ? 's were' : ' was'} missed or incomplete below. Please fill the fields highlighted in red.`
+                        );
+                        scrollToFirstError();
                         return;
                       }
+                      setFieldErrors({});
                       setSubmitError(null);
                       setActiveStep((prev) => prev + 1);
                     }}
@@ -2315,12 +3328,12 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     {submitting ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin text-[#D4AF37]" />
-                        <span>Sealing Royal Dossier...</span>
+                        <span>{membershipType === 'new' ? 'Submitting Application...' : 'Sealing Royal Dossier...'}</span>
                       </>
                     ) : (
                       <>
                         <Crown className="w-4 h-4 text-[#D4AF37]" />
-                        <span>Seal &amp; Submit Family Dossier</span>
+                        <span>{membershipType === 'new' ? 'Submit New Member Application' : 'Seal & Submit Family Dossier'}</span>
                         <PartyPopper className="w-4 h-4 text-[#D4AF37]" />
                       </>
                     )}
@@ -2346,29 +3359,58 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
             <div className="space-y-2">
               <span className="text-xs font-bold uppercase tracking-widest text-[#8C6D2B]">
-                Official Certificate of Registration
+                {finalRegistration?.membership_type === 'new' || membershipType === 'new'
+                  ? 'New Member Application Received'
+                  : 'Official Certificate of Registration'}
               </span>
               <h2 className="font-serif-royal text-2xl sm:text-3xl font-extrabold text-[#1C1917]">
-                Family Dossier Sealed &amp; Registered!
+                {finalRegistration?.membership_type === 'new' || membershipType === 'new'
+                  ? 'Application Submitted for Review!'
+                  : 'Family Dossier Sealed & Registered!'}
               </h2>
               <RoyalFlourish />
               <p className="text-xs sm:text-sm text-[#78716C] max-w-md mx-auto">
-                Congratulations! Your royal household has been officially entered into the JSG Royals Year 2 • 2027 Directory.
+                {finalRegistration?.membership_type === 'new' || membershipType === 'new'
+                  ? 'Thank you for submitting your family dossier and application for JSG Royals Year 2 • 2027.'
+                  : 'Congratulations! Your royal household has been officially entered into the JSG Royals Year 2 • 2027 Directory.'}
               </p>
             </div>
+
+            {(finalRegistration?.membership_type === 'new' || membershipType === 'new') && (
+              <div className="p-5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 text-left flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                    Important Notice
+                  </p>
+                  <p className="text-sm font-medium leading-relaxed text-amber-950">
+                    {submissionNotice ||
+                      'This is not a confirmed membership. Your application will be reviewed, and confirmation will be sent to you once approved.'}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {finalRegistration && (
               <div className="space-y-4 text-left">
                 {/* Official Code Header */}
                 <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] font-bold text-[#78716C] uppercase tracking-wider block">Official Registration Code</span>
+                    <span className="text-[10px] font-bold text-[#78716C] uppercase tracking-wider block">
+                      {finalRegistration.membership_type === 'new' ? 'Application Reference Code' : 'Official Registration Code'}
+                    </span>
                     <span className="font-mono font-black text-lg text-[#8C6D2B]">{finalRegistration.reg_id}</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                      Sealed &amp; Verified
-                    </span>
+                    {finalRegistration.membership_type === 'new' || finalRegistration.status === 'pending_review' ? (
+                      <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Pending Review
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Sealed &amp; Verified
+                      </span>
+                    )}
                     <span className="text-[10px] text-[#78716C] block mt-1">
                       {new Date(finalRegistration.created_at || Date.now()).toLocaleDateString('en-IN', {
                         day: 'numeric',
@@ -2444,6 +3486,12 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       <span className="text-[#1C1917]">{finalRegistration.native_place}</span>
                     </div>
                   )}
+                  {finalRegistration.couple_photo_url && (
+                    <div className="pt-2 border-t border-[#E2D5BE] space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-[#8C6D2B] block">💑 Couple Photo</span>
+                      <DossierPhotoThumbnail url={finalRegistration.couple_photo_url} alt="Couple Photo" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Children Details */}
@@ -2484,9 +3532,31 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   </div>
                 )}
 
-                {/* Contributions / Vision */}
-                {(finalRegistration.contribution_areas || finalRegistration.royal_idea || finalRegistration.jsg_should_be_known_for) && (
-                  <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E2D5BE] text-xs space-y-2">
+                {/* Contributions / Vision & Leadership */}
+                {(finalRegistration.contribution_areas || finalRegistration.royal_idea || finalRegistration.jsg_should_be_known_for || finalRegistration.president_name || finalRegistration.secretary_name) && (
+                  <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E2D5BE] text-xs space-y-2.5">
+                    {(finalRegistration.president_name || finalRegistration.secretary_name) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pb-2 border-b border-[#E2D5BE]">
+                        {finalRegistration.president_name && (
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#78716C] block">President</span>
+                            <span className="text-[#1C1917] font-semibold">
+                              {finalRegistration.president_name}
+                              {finalRegistration.president_mobile ? ` · ${finalRegistration.president_mobile}` : ''}
+                            </span>
+                          </div>
+                        )}
+                        {finalRegistration.secretary_name && (
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#78716C] block">Secretary</span>
+                            <span className="text-[#1C1917] font-semibold">
+                              {finalRegistration.secretary_name}
+                              {finalRegistration.secretary_mobile ? ` · ${finalRegistration.secretary_mobile}` : ''}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {finalRegistration.contribution_areas && (
                       <div>
                         <span className="text-[10px] uppercase font-bold text-[#78716C] block">Areas of Contribution</span>
@@ -2497,6 +3567,39 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       <div>
                         <span className="text-[10px] uppercase font-bold text-[#78716C] block">Royal Year 2 Idea</span>
                         <p className="text-[#57534E] italic font-serif-royal">"{finalRegistration.royal_idea}"</p>
+                      </div>
+                    )}
+                    {finalRegistration.membership_type === 'new' && (
+                      <div className="space-y-2 pt-2 border-t border-[#E2D5BE]">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#78716C] block">Other Group Membership</span>
+                            <span className="text-[#1C1917] font-semibold">
+                              {finalRegistration.other_group_member === 'Yes'
+                                ? `Yes — ${finalRegistration.other_group_name}`
+                                : 'No'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#78716C] block">Referring Member</span>
+                            <span className="text-[#1C1917] font-semibold">
+                              {finalRegistration.reference_name}
+                              {finalRegistration.reference_mobile ? ` · ${finalRegistration.reference_mobile}` : ''}
+                            </span>
+                          </div>
+                        </div>
+                        {finalRegistration.business_description && (
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#78716C] block">Business Description</span>
+                            <p className="text-[#57534E]">{finalRegistration.business_description}</p>
+                          </div>
+                        )}
+                        {finalRegistration.new_member_contribution && (
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#78716C] block">Contribution to Group</span>
+                            <p className="text-[#57534E]">{finalRegistration.new_member_contribution}</p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

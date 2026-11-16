@@ -32,12 +32,11 @@ if (isVercel && !fs.existsSync(dbPath)) {
 
 export const db = new Database(dbPath);
 
-// Enable busy timeout, foreign key constraints, and safe WAL journaling mode
+// Enable busy timeout, foreign key constraints, and safe atomic DELETE journaling mode
 db.pragma('busy_timeout = 5000');
 try {
-  db.pragma('journal_mode = WAL');
-  db.pragma('synchronous = NORMAL');
-  db.pragma('wal_checkpoint(TRUNCATE)');
+  db.pragma('journal_mode = DELETE');
+  db.pragma('synchronous = FULL');
 } catch (e) {
   try {
     db.pragma('journal_mode = DELETE');
@@ -290,10 +289,24 @@ export function initDatabase() {
 
       husband_photo_url TEXT,
       wife_photo_url TEXT,
+      couple_photo_url TEXT,
       family_photo_url TEXT,
       contribution_areas TEXT,
       royal_idea TEXT,
       jsg_should_be_known_for TEXT,
+
+      president_name TEXT,
+      president_mobile TEXT,
+      secretary_name TEXT,
+      secretary_mobile TEXT,
+
+      membership_type TEXT NOT NULL DEFAULT 'existing',
+      other_group_member TEXT,
+      other_group_name TEXT,
+      new_member_contribution TEXT,
+      reference_name TEXT,
+      reference_mobile TEXT,
+      business_description TEXT,
 
       status TEXT NOT NULL DEFAULT 'submitted',
       created_at TEXT NOT NULL,
@@ -315,6 +328,34 @@ export function initDatabase() {
       size_bytes INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+  `);
+
+  // 15. new_member_applications — Prospective new member application submissions
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS new_member_applications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      app_id TEXT UNIQUE NOT NULL,
+      applicant_name TEXT NOT NULL,
+      business_name TEXT NOT NULL,
+      mobile_number TEXT NOT NULL,
+      email TEXT NOT NULL,
+      other_group_member TEXT NOT NULL DEFAULT 'No',
+      other_group_name TEXT,
+      contribution TEXT NOT NULL,
+      reference_name TEXT NOT NULL,
+      reference_mobile TEXT NOT NULL,
+      business_description TEXT NOT NULL,
+      president_name TEXT NOT NULL,
+      president_mobile TEXT NOT NULL,
+      secretary_name TEXT NOT NULL,
+      secretary_mobile TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending_review',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nma_email ON new_member_applications(email);
+    CREATE INDEX IF NOT EXISTS idx_nma_mobile ON new_member_applications(mobile_number);
   `);
 
   // Admin users are seeded/maintained with subodhjain2007777@gmail.com and PIN rroyals2027
@@ -368,8 +409,44 @@ function ensureFamilyRegistrationColumns() {
     if (!columnNames.includes('wife_photo_url')) {
       db.exec('ALTER TABLE family_registrations ADD COLUMN wife_photo_url TEXT');
     }
+    if (!columnNames.includes('couple_photo_url')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN couple_photo_url TEXT');
+    }
     if (!columnNames.includes('family_photo_url')) {
       db.exec('ALTER TABLE family_registrations ADD COLUMN family_photo_url TEXT');
+    }
+    if (!columnNames.includes('president_name')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN president_name TEXT');
+    }
+    if (!columnNames.includes('president_mobile')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN president_mobile TEXT');
+    }
+    if (!columnNames.includes('secretary_name')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN secretary_name TEXT');
+    }
+    if (!columnNames.includes('secretary_mobile')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN secretary_mobile TEXT');
+    }
+    if (!columnNames.includes('membership_type')) {
+      db.exec("ALTER TABLE family_registrations ADD COLUMN membership_type TEXT NOT NULL DEFAULT 'existing'");
+    }
+    if (!columnNames.includes('other_group_member')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN other_group_member TEXT');
+    }
+    if (!columnNames.includes('other_group_name')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN other_group_name TEXT');
+    }
+    if (!columnNames.includes('new_member_contribution')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN new_member_contribution TEXT');
+    }
+    if (!columnNames.includes('reference_name')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN reference_name TEXT');
+    }
+    if (!columnNames.includes('reference_mobile')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN reference_mobile TEXT');
+    }
+    if (!columnNames.includes('business_description')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN business_description TEXT');
     }
   } catch (e) {
     console.error('ensureFamilyRegistrationColumns error:', e);

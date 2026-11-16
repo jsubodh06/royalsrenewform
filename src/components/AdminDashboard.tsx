@@ -38,7 +38,9 @@ import {
   KeyRound,
   Printer,
   Link2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  UserPlus,
+  Building2
 } from 'lucide-react';
 import { RoyalLogo } from './RoyalLogo.tsx';
 import { PhotoLightboxModal, PreviewPhotoState } from './PhotoLightboxModal.tsx';
@@ -65,6 +67,8 @@ import {
   testFast2SmsApi,
   getRecentOtpsApi,
   getAdminFamilyRegistrationsApi,
+  getAdminNewMemberApplicationsApi,
+  NewMemberApplicationRecord,
   getEmailConfigApi,
   saveEmailConfigApi,
   sendAdminTestEmailApi
@@ -99,8 +103,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Active Tab: 'members' | 'family' | 'corrections' | 'sms' | 'email' | 'audit' | 'export' | 'import'
-  const [activeTab, setActiveTab] = useState<'members' | 'family' | 'corrections' | 'sms' | 'email' | 'audit' | 'export' | 'import'>('family');
+  // Active Tab: 'members' | 'family' | 'applications' | 'corrections' | 'sms' | 'email' | 'audit' | 'export' | 'import'
+  const [activeTab, setActiveTab] = useState<'members' | 'family' | 'applications' | 'corrections' | 'sms' | 'email' | 'audit' | 'export' | 'import'>('family');
 
   // Fresh Family Registrations State
   const [familyRegistrations, setFamilyRegistrations] = useState<any[]>([]);
@@ -108,6 +112,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [viewingFamilyModal, setViewingFamilyModal] = useState<any | null>(null);
   const [previewPhotoModal, setPreviewPhotoModal] = useState<PreviewPhotoState | null>(null);
   const [familyFilterSearch, setFamilyFilterSearch] = useState('');
+
+  // New Member Applications State
+  const [newApplications, setNewApplications] = useState<NewMemberApplicationRecord[]>([]);
+  const [loadingNewApplications, setLoadingNewApplications] = useState(false);
+  const [newAppFilterSearch, setNewAppFilterSearch] = useState('');
+  const [viewingNewAppModal, setViewingNewAppModal] = useState<NewMemberApplicationRecord | null>(null);
 
   // Central Authentication Error Handler (Auto-logout if session expired or invalid)
   const handleAuthError = (err: any) => {
@@ -135,6 +145,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const loadNewApplications = async () => {
+    if (!adminToken) return;
+    setLoadingNewApplications(true);
+    try {
+      const data = await getAdminNewMemberApplicationsApi(adminToken);
+      if (data?.applications) {
+        setNewApplications(data.applications);
+      }
+    } catch (err: any) {
+      if (handleAuthError(err)) return;
+      console.error('Failed to load new member applications', err);
+    } finally {
+      setLoadingNewApplications(false);
+    }
+  };
+
+  const exportNewApplicationsCsv = () => {
+    if (newApplications.length === 0) return;
+    const headers = [
+      'Application ID',
+      'Applicant Name',
+      'Business Name',
+      'Mobile Number',
+      'Email',
+      'Part of Other Group',
+      'Other Group Name',
+      'How Can You Contribute',
+      'Reference Name',
+      'Reference Mobile',
+      'Business Description',
+      'President Name',
+      'President Mobile',
+      'Secretary Name',
+      'Secretary Mobile',
+      'Status',
+      'Submitted At'
+    ];
+    const escapeCsv = (str: any) => {
+      if (str === null || str === undefined) return '""';
+      const s = String(str).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+    const rows = newApplications.map((a) => [
+      escapeCsv(a.app_id),
+      escapeCsv(a.applicant_name),
+      escapeCsv(a.business_name),
+      escapeCsv(a.mobile_number),
+      escapeCsv(a.email),
+      escapeCsv(a.other_group_member),
+      escapeCsv(a.other_group_name || ''),
+      escapeCsv(a.contribution),
+      escapeCsv(a.reference_name),
+      escapeCsv(a.reference_mobile),
+      escapeCsv(a.business_description),
+      escapeCsv(a.president_name),
+      escapeCsv(a.president_mobile),
+      escapeCsv(a.secretary_name),
+      escapeCsv(a.secretary_mobile),
+      escapeCsv(a.status),
+      escapeCsv(a.created_at)
+    ].join(','));
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `JSG_Royals_New_Member_Applications_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const exportFamiliesCsv = () => {
     if (familyRegistrations.length === 0) return;
     const maxKidsCount = familyRegistrations.reduce((max, r) => {
@@ -145,6 +229,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const headers = [
       'Reg ID',
+      'Membership Type',
       'Submitted By Role',
       'Submitter Email',
       'Husband Name',
@@ -165,6 +250,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'Wife Organization',
       'Wife Blood Group',
       'Wife Photo / Drive URL',
+      'Couple Photo / Drive URL',
       'Family Photo / Drive URL',
       'Anniversary',
       'City',
@@ -177,6 +263,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'Contribution Areas',
       'Royal Idea',
       'JSG Vision',
+      'President Name',
+      'President Mobile',
+      'Secretary Name',
+      'Secretary Mobile',
+      'Other Group Member',
+      'Other Group Name',
+      'Reference Name',
+      'Reference Mobile',
+      'Business Description',
+      'Contribution to Group',
       'Status',
       'Registered At'
     ];
@@ -201,6 +297,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         .join(' | ');
       return [
         escapeCsv(r.reg_id),
+        escapeCsv(r.membership_type === 'new' ? 'New Application' : 'Existing Renewal'),
         escapeCsv(r.submitted_by_role),
         escapeCsv(r.submitter_email),
         escapeCsv(r.husband_name),
@@ -221,6 +318,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         escapeCsv(r.wife_organization),
         escapeCsv(r.wife_blood_group),
         escapeCsv(resolveFullMediaUrl(r.wife_photo_url)),
+        escapeCsv(resolveFullMediaUrl(r.couple_photo_url)),
         escapeCsv(resolveFullMediaUrl(r.family_photo_url)),
         escapeCsv(r.marriage_anniversary),
         escapeCsv(r.current_city),
@@ -233,6 +331,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         escapeCsv(r.contribution_areas),
         escapeCsv(r.royal_idea),
         escapeCsv(r.jsg_should_be_known_for),
+        escapeCsv(r.president_name || ''),
+        escapeCsv(r.president_mobile || ''),
+        escapeCsv(r.secretary_name || ''),
+        escapeCsv(r.secretary_mobile || ''),
+        escapeCsv(r.other_group_member || ''),
+        escapeCsv(r.other_group_name || ''),
+        escapeCsv(r.reference_name || ''),
+        escapeCsv(r.reference_mobile || ''),
+        escapeCsv(r.business_description || ''),
+        escapeCsv(r.new_member_contribution || ''),
         escapeCsv(r.status),
         escapeCsv(r.created_at)
       ].join(',');
@@ -646,6 +754,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (adminToken) {
       loadOverview();
       loadFamilyRegistrations();
+      loadNewApplications();
       loadMembers();
       loadCorrections();
       loadEmailConfig();
@@ -665,6 +774,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     if (adminToken && activeTab === 'family') {
       loadFamilyRegistrations();
+    }
+    if (adminToken && activeTab === 'applications') {
+      loadNewApplications();
     }
     if (adminToken && activeTab === 'email') {
       loadEmailConfig(true);
@@ -960,6 +1072,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <button
             onClick={() => {
               loadOverview();
+              loadFamilyRegistrations();
+              loadNewApplications();
               loadMembers();
               loadCorrections();
               if (activeTab === 'audit') loadAuditLogs();
@@ -981,7 +1095,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* KPI Overview Tiles */}
       {overview && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
           <div className="bg-gradient-to-br from-[#1C1917] to-[#2B2623] p-4 rounded-2xl border-2 border-[#D4AF37] shadow-md text-white">
             <span className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-wider block flex items-center gap-1.5">
               <Crown className="w-3.5 h-3.5 text-[#D4AF37]" /> Fresh Families
@@ -989,7 +1103,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span className="font-serif-royal text-2xl font-black text-white">
               {familyRegistrations.length}
             </span>
-            <span className="text-[10px] text-[#C5A869] block mt-0.5">Year 2 Registrations</span>
+            <span className="text-[10px] text-[#C5A869] block mt-0.5">Year 2 Renewals</span>
+          </div>
+
+          <div className="bg-[#FAF7F2] p-4 rounded-2xl border-2 border-[#C5A869]/70 shadow-xs">
+            <span className="text-[10px] font-bold text-[#8C6D2B] uppercase tracking-wider block flex items-center gap-1.5">
+              <UserPlus className="w-3.5 h-3.5 text-[#8C6D2B]" /> New Apps
+            </span>
+            <span className="font-serif-royal text-2xl font-black text-[#1C1917]">
+              {newApplications.length}
+            </span>
+            <span className="text-[10px] text-[#78716C] block mt-0.5">Pending Review</span>
           </div>
 
           <div className="bg-[#FFFFFF] p-4 rounded-2xl border border-[#E7DDCE] shadow-xs">
@@ -1069,6 +1193,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <Crown className="w-4 h-4 text-[#D4AF37]" />
           <span>Fresh Family Dossiers ({familyRegistrations.length})</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('applications');
+            loadNewApplications();
+          }}
+          className={`pb-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'applications'
+              ? 'border-[#1C1917] text-[#1C1917]'
+              : 'border-transparent text-[#78716C] hover:text-[#1C1917]'
+          }`}
+        >
+          <UserPlus className="w-4 h-4 text-[#8C6D2B]" />
+          <span>New Member Applications ({newApplications.length})</span>
         </button>
 
         <button
@@ -1288,7 +1427,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       .map((reg) => (
                         <tr key={reg.id} className="hover:bg-[#FAF7F2] transition-colors">
                           <td className="px-4 py-3 font-mono font-bold text-[#8C6D2B] whitespace-nowrap">
-                            {reg.reg_id}
+                            <div>{reg.reg_id}</div>
+                            <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-sans font-bold uppercase tracking-wider ${
+                              reg.membership_type === 'new'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                            }`}>
+                              {reg.membership_type === 'new' ? 'New Application' : 'Existing Renewal'}
+                            </span>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -1397,6 +1543,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   )}
                                 </div>
                               )}
+                              {reg.couple_photo_url && (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewPhotoModal({
+                                      title: `Couple Photo — ${reg.husband_name} & ${reg.wife_name}`,
+                                      url: reg.couple_photo_url,
+                                      downloadName: `${reg.reg_id}_couple.jpg`
+                                    })}
+                                    className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-800 hover:underline truncate cursor-pointer text-left"
+                                  >
+                                    {getDisplayImageSrc(reg.couple_photo_url) && (
+                                      <img
+                                        src={getDisplayImageSrc(reg.couple_photo_url)!}
+                                        alt="Couple"
+                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                        className="w-6 h-6 rounded object-cover border border-[#D9CDB8] shrink-0"
+                                      />
+                                    )}
+                                    <span className="truncate">Couple Photo</span>
+                                  </button>
+                                  {isExternalCloudUrl(reg.couple_photo_url) && (
+                                    <a
+                                      href={resolveFullMediaUrl(reg.couple_photo_url)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Open Drive Link"
+                                      className="text-amber-700 hover:text-amber-900 shrink-0"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
                               {reg.family_photo_url && (
                                 <div className="flex items-center gap-1.5">
                                   <button
@@ -1471,6 +1651,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               )}
                               {!reg.husband_photo_url &&
                                 !reg.wife_photo_url &&
+                                !reg.couple_photo_url &&
                                 !reg.family_photo_url &&
                                 !(Array.isArray(reg.children) && reg.children.some((c: any) => c.photo_url)) && (
                                   <span className="text-[11px] text-[#A8A29E] italic">No photos</span>
@@ -1492,6 +1673,167 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             >
                               <Eye className="w-3 h-3 text-[#8C6D2B]" />
                               <span>View Dossier</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: NEW MEMBER APPLICATIONS */}
+      {activeTab === 'applications' && (
+        <div className="bg-[#FFFFFF] border border-[#E7DDCE] rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#F0E8DC]">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#1C1917] border border-[#C5A869]/70 shadow-xs flex items-center justify-center text-[#D4AF37]">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-serif-royal font-bold text-lg text-[#1C1917]">
+                  New Member Applications (Pending Review)
+                </h3>
+                <p className="text-xs text-[#78716C]">
+                  Prospective member applications submitted for Year 2 review &amp; committee approval
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {newApplications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={exportNewApplicationsCsv}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#FAF7F2] transition-all cursor-pointer shadow-2xs"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Export CSV ({newApplications.length})</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={loadNewApplications}
+                disabled={loadingNewApplications}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D9CDB8] text-xs font-semibold text-[#1C1917] hover:bg-[#F2ECE1] transition-all cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingNewApplications ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+
+          {newApplications.length === 0 ? (
+            <div className="p-12 text-center bg-[#FAF7F2] rounded-2xl border border-[#E7DDCE] space-y-2.5">
+              <UserPlus className="w-12 h-12 text-[#C5A869] mx-auto" />
+              <div className="font-serif-royal font-bold text-base text-[#1C1917]">
+                No New Member Applications Yet
+              </div>
+              <p className="text-xs text-[#78716C] max-w-md mx-auto">
+                Prospective member applications submitted from the main portal will appear here for committee review.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#A8A29E] absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={newAppFilterSearch}
+                  onChange={(e) => setNewAppFilterSearch(e.target.value)}
+                  placeholder="Search applications by applicant name, business, mobile, email, reference, or App ID..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE] text-xs text-[#1C1917] placeholder:text-[#A8A29E] focus:outline-none focus:border-[#C5A869]"
+                />
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-[#E7DDCE]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#F5EFE6] text-[#44403C] uppercase text-[10px] font-semibold border-b border-[#E7DDCE]">
+                    <tr>
+                      <th className="px-4 py-3">App ID</th>
+                      <th className="px-4 py-3">Applicant &amp; Business</th>
+                      <th className="px-4 py-3">Contact</th>
+                      <th className="px-4 py-3">Reference</th>
+                      <th className="px-4 py-3">President / Secretary</th>
+                      <th className="px-4 py-3">Other Group</th>
+                      <th className="px-4 py-3">Submitted At</th>
+                      <th className="px-4 py-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0E8DC] bg-white">
+                    {newApplications
+                      .filter((app) => {
+                        if (!newAppFilterSearch) return true;
+                        const term = newAppFilterSearch.toLowerCase();
+                        return (
+                          (app.app_id || '').toLowerCase().includes(term) ||
+                          (app.applicant_name || '').toLowerCase().includes(term) ||
+                          (app.business_name || '').toLowerCase().includes(term) ||
+                          (app.mobile_number || '').includes(term) ||
+                          (app.email || '').toLowerCase().includes(term) ||
+                          (app.reference_name || '').toLowerCase().includes(term)
+                        );
+                      })
+                      .map((app) => (
+                        <tr key={app.id} className="hover:bg-[#FAF7F2] transition-colors">
+                          <td className="px-4 py-3 font-mono font-bold text-[#8C6D2B] whitespace-nowrap">
+                            {app.app_id}
+                            <div className="text-[10px] font-sans font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded mt-1 inline-block">
+                              Pending Review
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-[#1C1917]">{app.applicant_name}</div>
+                            <div className="text-[11px] text-[#57534E] flex items-center gap-1 mt-0.5">
+                              <Building2 className="w-3 h-3 text-[#8C6D2B] shrink-0" />
+                              <span>{app.business_name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-mono text-[#1C1917]">{app.mobile_number}</div>
+                            <div className="text-[11px] text-[#78716C] truncate max-w-[160px]">{app.email}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-[#1C1917]">{app.reference_name}</div>
+                            <div className="text-[11px] text-[#78716C] font-mono">{app.reference_mobile}</div>
+                          </td>
+                          <td className="px-4 py-3 text-[11px]">
+                            <div>
+                              <span className="text-[#78716C]">Pres:</span>{' '}
+                              <strong className="text-[#1C1917]">{app.president_name}</strong> ({app.president_mobile})
+                            </div>
+                            <div className="mt-0.5">
+                              <span className="text-[#78716C]">Sec:</span>{' '}
+                              <strong className="text-[#1C1917]">{app.secretary_name}</strong> ({app.secretary_mobile})
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {app.other_group_member === 'Yes' ? (
+                              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-200 text-[10px] font-semibold">
+                                Yes: {app.other_group_name}
+                              </span>
+                            ) : (
+                              <span className="text-[#78716C]">No</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-[11px] text-[#78716C]">
+                            {new Date(app.created_at).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right">
+                            <button
+                              type="button"
+                              onClick={() => setViewingNewAppModal(app)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] border border-[#D9CDB8] font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
+                            >
+                              <Eye className="w-3 h-3 text-[#8C6D2B]" />
+                              <span>View</span>
                             </button>
                           </td>
                         </tr>
@@ -3415,12 +3757,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex items-center gap-3">
                 <RoyalLogo className="w-12 h-12 rounded-2xl border border-[#C5A869]/70 shadow-xs p-0.5" />
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-serif-royal font-bold text-xl text-[#1C1917]">
                       {viewingFamilyModal.husband_name} &amp; {viewingFamilyModal.wife_name}
                     </h3>
                     <span className="font-mono text-xs font-bold text-[#8C6D2B] bg-[#FAF7F2] border border-[#E2D5BE] px-2.5 py-0.5 rounded">
                       {viewingFamilyModal.reg_id}
+                    </span>
+                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                      viewingFamilyModal.membership_type === 'new'
+                        ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                        : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                    }`}>
+                      {viewingFamilyModal.membership_type === 'new'
+                        ? 'New Application • Pending Review'
+                        : 'Existing Renewal'}
                     </span>
                   </div>
                   <p className="text-xs text-[#78716C] mt-0.5">
@@ -3626,6 +3977,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             </div>
 
+            {/* Couple Photo Section */}
+            {viewingFamilyModal.couple_photo_url && (
+              <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2.5 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C6D2B] block">
+                  💑 Couple Photo / Drive URL
+                </span>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  {getDisplayImageSrc(viewingFamilyModal.couple_photo_url) && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPhotoModal({
+                        title: `Couple Photo — ${viewingFamilyModal.husband_name} & ${viewingFamilyModal.wife_name}`,
+                        url: viewingFamilyModal.couple_photo_url,
+                        downloadName: `${viewingFamilyModal.reg_id}_couple.jpg`
+                      })}
+                      className="cursor-pointer text-left"
+                    >
+                      <img
+                        src={getDisplayImageSrc(viewingFamilyModal.couple_photo_url)!}
+                        alt="Couple Photo"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                        className="max-h-52 rounded-xl object-contain border border-[#D9CDB8] hover:opacity-95 transition-opacity"
+                      />
+                    </button>
+                  )}
+                  <div className="space-y-2 flex-1 min-w-0">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewPhotoModal({
+                          title: `Couple Photo — ${viewingFamilyModal.husband_name} & ${viewingFamilyModal.wife_name}`,
+                          url: viewingFamilyModal.couple_photo_url,
+                          downloadName: `${viewingFamilyModal.reg_id}_couple.jpg`
+                        })}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-[#EFE6D5] border border-[#DFCFAE] text-[#8C6D2B] text-xs font-semibold cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View Full Size</span>
+                      </button>
+                      {!isExternalCloudUrl(viewingFamilyModal.couple_photo_url) ? (
+                        <button
+                          type="button"
+                          onClick={() => downloadMediaImage(viewingFamilyModal.couple_photo_url, `${viewingFamilyModal.reg_id}_couple.jpg`)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1C1917] text-[#D4AF37] text-xs font-semibold cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </button>
+                      ) : (
+                        <a
+                          href={resolveFullMediaUrl(viewingFamilyModal.couple_photo_url)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Open Drive Link</span>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-mono text-[#78716C] break-all">
+                      {resolveFullMediaUrl(viewingFamilyModal.couple_photo_url)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Family Portrait Section */}
             {viewingFamilyModal.family_photo_url && (
               <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2.5 text-xs">
@@ -3827,6 +4246,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             )}
 
+            {/* President & Secretary Details */}
+            {(viewingFamilyModal.president_name || viewingFamilyModal.secretary_name) && (
+              <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-2 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C6D2B] block">
+                  President &amp; Secretary Details
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[#57534E]">
+                  <div>
+                    <span className="text-[10px] text-[#78716C] block">President</span>
+                    <strong className="text-[#1C1917]">{viewingFamilyModal.president_name || '—'}</strong>
+                    {viewingFamilyModal.president_mobile && (
+                      <div className="font-mono text-[11px] text-[#57534E]">{viewingFamilyModal.president_mobile}</div>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#78716C] block">Secretary</span>
+                    <strong className="text-[#1C1917]">{viewingFamilyModal.secretary_name || '—'}</strong>
+                    {viewingFamilyModal.secretary_mobile && (
+                      <div className="font-mono text-[11px] text-[#57534E]">{viewingFamilyModal.secretary_mobile}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* New Member Application Details */}
+            {(viewingFamilyModal.membership_type === 'new' ||
+              viewingFamilyModal.other_group_member ||
+              viewingFamilyModal.reference_name ||
+              viewingFamilyModal.business_description ||
+              viewingFamilyModal.new_member_contribution) && (
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block">
+                  New Member Application Questions
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-white border border-amber-200/70">
+                    <span className="text-[10px] text-[#78716C] block">Part of Another Group?</span>
+                    <strong className="text-[#1C1917]">
+                      {viewingFamilyModal.other_group_member === 'Yes'
+                        ? `Yes — ${viewingFamilyModal.other_group_name || 'Not specified'}`
+                        : viewingFamilyModal.other_group_member || 'No'}
+                    </strong>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white border border-amber-200/70">
+                    <span className="text-[10px] text-[#78716C] block">Referring Member</span>
+                    <strong className="text-[#1C1917] block">{viewingFamilyModal.reference_name || '—'}</strong>
+                    {viewingFamilyModal.reference_mobile && (
+                      <span className="font-mono text-[11px] text-[#57534E]">{viewingFamilyModal.reference_mobile}</span>
+                    )}
+                  </div>
+                </div>
+                {viewingFamilyModal.business_description && (
+                  <div className="p-3 rounded-xl bg-white border border-amber-200/70">
+                    <span className="text-[10px] text-[#78716C] block mb-0.5">Business Description</span>
+                    <p className="text-[#1C1917] whitespace-pre-wrap leading-relaxed">
+                      {viewingFamilyModal.business_description}
+                    </p>
+                  </div>
+                )}
+                {viewingFamilyModal.new_member_contribution && (
+                  <div className="p-3 rounded-xl bg-white border border-amber-200/70">
+                    <span className="text-[10px] text-[#78716C] block mb-0.5">How Applicant Can Contribute to the Group</span>
+                    <p className="text-[#1C1917] whitespace-pre-wrap leading-relaxed">
+                      {viewingFamilyModal.new_member_contribution}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Modal Footer */}
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-[#F0E8DC]">
               <button
@@ -3838,6 +4328,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* New Member Application Detail Modal */}
+      {viewingNewAppModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-[#E7DDCE] rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl space-y-5 my-8">
+            <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#F0E8DC]">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#8C6D2B] block">
+                  New Member Application • Pending Review
+                </span>
+                <h3 className="font-serif-royal font-bold text-xl text-[#1C1917] mt-0.5">
+                  {viewingNewAppModal.applicant_name}
+                </h3>
+                <p className="text-xs text-[#78716C] font-mono mt-0.5">
+                  {viewingNewAppModal.app_id} • {new Date(viewingNewAppModal.created_at).toLocaleString('en-IN')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingNewAppModal(null)}
+                className="p-2 rounded-xl bg-[#FAF7F2] text-[#78716C] hover:text-[#1C1917] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                <span className="text-[10px] uppercase font-bold text-[#78716C] block">Business Name</span>
+                <strong className="text-[#1C1917]">{viewingNewAppModal.business_name}</strong>
+              </div>
+              <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                <span className="text-[10px] uppercase font-bold text-[#78716C] block">Contact</span>
+                <strong className="text-[#1C1917] font-mono block">{viewingNewAppModal.mobile_number}</strong>
+                <span className="text-[#57534E]">{viewingNewAppModal.email}</span>
+              </div>
+              <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                <span className="text-[10px] uppercase font-bold text-[#78716C] block">Other Group Membership</span>
+                <strong className="text-[#1C1917]">
+                  {viewingNewAppModal.other_group_member === 'Yes'
+                    ? `Yes — ${viewingNewAppModal.other_group_name}`
+                    : 'No'}
+                </strong>
+              </div>
+              <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                <span className="text-[10px] uppercase font-bold text-[#78716C] block">Referring Member</span>
+                <strong className="text-[#1C1917] block">{viewingNewAppModal.reference_name}</strong>
+                <span className="font-mono text-[#57534E]">{viewingNewAppModal.reference_mobile}</span>
+              </div>
+              <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                <span className="text-[10px] uppercase font-bold text-[#78716C] block">President</span>
+                <strong className="text-[#1C1917] block">{viewingNewAppModal.president_name}</strong>
+                <span className="font-mono text-[#57534E]">{viewingNewAppModal.president_mobile}</span>
+              </div>
+              <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E7DDCE]">
+                <span className="text-[10px] uppercase font-bold text-[#78716C] block">Secretary</span>
+                <strong className="text-[#1C1917] block">{viewingNewAppModal.secretary_name}</strong>
+                <span className="font-mono text-[#57534E]">{viewingNewAppModal.secretary_mobile}</span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-[#E7DDCE] space-y-2 text-xs">
+              <span className="text-[10px] uppercase font-bold text-[#8C6D2B] block">Business Description</span>
+              <p className="text-[#1C1917] leading-relaxed">{viewingNewAppModal.business_description}</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-[#E7DDCE] space-y-2 text-xs">
+              <span className="text-[10px] uppercase font-bold text-[#8C6D2B] block">How Applicant Can Contribute</span>
+              <p className="text-[#1C1917] leading-relaxed">{viewingNewAppModal.contribution}</p>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-[#F0E8DC]">
+              <button
+                type="button"
+                onClick={() => setViewingNewAppModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] font-semibold text-xs border border-[#D9CDB8] transition-all cursor-pointer"
+              >
+                Close Application
+              </button>
+            </div>
           </div>
         </div>
       )}

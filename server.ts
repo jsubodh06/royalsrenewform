@@ -1,13 +1,23 @@
+import 'dotenv/config';
 import express from 'express';
-import dotenv from 'dotenv';
+import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import { apiRouter } from './src/server/routes.ts';
 
-dotenv.config();
+function getPortFromArgs(): number {
+  const portArgIndex = process.argv.indexOf('--port');
+  if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
+    const parsed = parseInt(process.argv[portArgIndex + 1], 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  const envPort = process.env.PORT ? parseInt(process.env.PORT, 10) : NaN;
+  if (!Number.isNaN(envPort) && envPort > 0) return envPort;
+  return 3000;
+}
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = getPortFromArgs();
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Enable CORS for Vercel and production origins
@@ -31,9 +41,6 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
-// Mount API routes
-app.use('/api', apiRouter);
-
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
@@ -43,15 +50,19 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Mount API routes
+app.use('/api', apiRouter);
+
 async function startServer() {
+  const server = http.createServer(app);
+
   if (!isProduction) {
-    // Development mode: mount Vite dev server as middleware
+    // Development mode: mount Vite dev server as middleware (HMR disabled in preview runtime)
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: {
         middlewareMode: true,
-        host: '0.0.0.0',
-        port: PORT,
+        hmr: false,
         watch: process.env.DISABLE_HMR === 'true' ? null : {},
       },
       appType: 'spa',
@@ -69,7 +80,7 @@ async function startServer() {
     }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`JSG ROYALS 2027 Server listening on http://0.0.0.0:${PORT}`);
   });
 }

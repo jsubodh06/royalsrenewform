@@ -153,4 +153,65 @@
   will-change: transform, opacity;
 }
 
+/* Royal Leadership Banner Animations (compositor-only transform & opacity) */
+@keyframes royalOrbitSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 
+@keyframes royalOrbitSpinReverse {
+  0% { transform: rotate(360deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes royalSheenSweep {
+  0% { transform: translate3d(-135%, 0, 0) skewX(-22deg); opacity: 0; }
+  15% { opacity: 0.75; }
+  55% { transform: translate3d(260%, 0, 0) skewX(-22deg); opacity: 0.75; }
+  70%, 100% { transform: translate3d(260%, 0, 0) skewX(-22deg); opacity: 0; }
+}
+
+@keyframes royalAuraPulse {
+  0%, 100% { opacity: 0.38; transform: scale(1); }
+  50% { opacity: 0.72; transform: scale(1.03); }
+}
+
+.animate-royal-orbit {
+  animation: royalOrbitSpin 18s linear infinite;
+  will-change: transform;
+}
+
+.animate-royal-orbit-reverse {
+  animation: royalOrbitSpinReverse 24s linear infinite;
+  will-change: transform;
+}
+
+.animate-royal-sheen {
+  animation: royalSheenSweep 5.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.animate-royal-aura {
+  animation: royalAuraPulse 4.2s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.royal-foil-name {
+  background: linear-gradient(120deg, #F5E6B3 0%, #D4AF37 38%, #FFF6D6 52%, #C59B38 78%, #F5E6B3 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-royal-orbit,
+  .animate-royal-orbit-reverse,
+  .animate-royal-sheen,
+  .animate-royal-aura,
+  .animate-float-slow,
+  .animate-pulse-gold,
+  .animate-ring-float,
+  .animate-twinkle,
+  .shimmer-gold-bg {
+    animation: none !important;
+  }
+}
