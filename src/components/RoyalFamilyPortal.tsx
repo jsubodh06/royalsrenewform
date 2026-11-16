@@ -492,21 +492,28 @@ function getMembershipFeeWindowStatus(now = new Date()): FeeWindowStatus {
 
 const ROYAL_LEADERSHIP = {
   president: 'Utkarsh Pooja Surana',
+  presidentPhone: '+91 87707 13343',
   secretary: 'Harsh Tanya Kataria',
+  secretaryPhone: '+91 96696 18111',
 } as const;
 
 interface FeeCollectionContact {
   name: string;
   role: string;
-  phonePlaceholder: string;
+  phone: string;
   addresses?: { label?: string; text: string }[];
 }
 
 const FEE_COLLECTION_CONTACTS: FeeCollectionContact[] = [
   {
+    name: 'Vivek Samota',
+    role: 'Fee Collection Coordinator',
+    phone: '+91 96375 26522',
+  },
+  {
     name: 'Rishabh Betala',
     role: 'Fee Collection Coordinator',
-    phonePlaceholder: '+91 XXXXX XXXXX',
+    phone: '+91 77959 59911',
     addresses: [
       {
         text: 'Vikram Tower, 419-420, Sapna Sangeeta Rd, Old Agarwal Nagar, Indore, Madhya Pradesh 452001, India',
@@ -516,7 +523,7 @@ const FEE_COLLECTION_CONTACTS: FeeCollectionContact[] = [
   {
     name: 'Piyush Jain (Office)',
     role: 'Office Collection Desk',
-    phonePlaceholder: '+91 XXXXX XXXXX',
+    phone: '+91 99770 80007',
     addresses: [
       {
         label: 'Anushakti',
@@ -527,11 +534,6 @@ const FEE_COLLECTION_CONTACTS: FeeCollectionContact[] = [
         text: 'M - 17, Block A, New Siyaganj, Indore (M.P.)',
       },
     ],
-  },
-  {
-    name: 'Vivek Samota',
-    role: 'Fee Collection Coordinator',
-    phonePlaceholder: '+91 XXXXX XXXXX',
   },
 ];
 
@@ -1208,6 +1210,13 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     <div className="font-serif-royal font-bold text-sm sm:text-base tracking-wide royal-foil-name truncate">
                       {ROYAL_LEADERSHIP.president}
                     </div>
+                    <a
+                      href={`tel:${ROYAL_LEADERSHIP.presidentPhone.replace(/\s+/g, '')}`}
+                      className="inline-flex items-center gap-1 text-[11px] font-mono tabular-nums text-[#E7DDCE]/90 hover:text-[#F3DF9C] transition-colors mt-0.5"
+                    >
+                      <Phone className="w-2.5 h-2.5 text-[#D4AF37] shrink-0" />
+                      <span>{ROYAL_LEADERSHIP.presidentPhone}</span>
+                    </a>
                   </div>
                 </div>
 
@@ -1233,6 +1242,13 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     <div className="font-serif-royal font-bold text-sm sm:text-base tracking-wide royal-foil-name truncate">
                       {ROYAL_LEADERSHIP.secretary}
                     </div>
+                    <a
+                      href={`tel:${ROYAL_LEADERSHIP.secretaryPhone.replace(/\s+/g, '')}`}
+                      className="inline-flex items-center gap-1 text-[11px] font-mono tabular-nums text-[#E7DDCE]/90 hover:text-[#F3DF9C] transition-colors mt-0.5"
+                    >
+                      <Phone className="w-2.5 h-2.5 text-[#D4AF37] shrink-0" />
+                      <span>{ROYAL_LEADERSHIP.secretaryPhone}</span>
+                    </a>
                   </div>
                 </div>
               </div>
@@ -1698,10 +1714,13 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="inline-flex items-center gap-1.5 text-xs font-mono tabular-nums font-semibold text-[#8C6D2B] bg-white px-3 py-1.5 rounded-lg border border-[#E2D5BE]">
+                            <a
+                              href={`tel:${contact.phone.replace(/\s+/g, '')}`}
+                              className="inline-flex items-center gap-1.5 text-xs font-mono tabular-nums font-semibold text-[#8C6D2B] hover:text-[#1C1917] bg-white hover:bg-[#FAF7F2] px-3 py-1.5 rounded-lg border border-[#E2D5BE] transition-colors"
+                            >
                               <Phone className="w-3.5 h-3.5 shrink-0" />
-                              <span>{contact.phonePlaceholder}</span>
-                            </div>
+                              <span>{contact.phone}</span>
+                            </a>
                           </div>
                         </div>
 
@@ -3202,13 +3221,13 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                           <div>
                             <span className="text-[10px] text-[#A8A29E] uppercase block">President</span>
                             <span className="text-[#F3DF9C] font-semibold">
-                              {ROYAL_LEADERSHIP.president}
+                              {ROYAL_LEADERSHIP.president} · <span className="font-mono tabular-nums">{ROYAL_LEADERSHIP.presidentPhone}</span>
                             </span>
                           </div>
                           <div>
                             <span className="text-[10px] text-[#A8A29E] uppercase block">Secretary</span>
                             <span className="text-[#F3DF9C] font-semibold">
-                              {ROYAL_LEADERSHIP.secretary}
+                              {ROYAL_LEADERSHIP.secretary} · <span className="font-mono tabular-nums">{ROYAL_LEADERSHIP.secretaryPhone}</span>
                             </span>
                           </div>
                         </div>

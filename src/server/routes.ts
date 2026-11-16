@@ -2196,9 +2196,9 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Current City and Residential Address are required.' });
     }
     const cleanPresName = String(president_name || 'Utkarsh Pooja Surana').trim() || 'Utkarsh Pooja Surana';
-    const cleanPresMobile = String(president_mobile || '').replace(/\D/g, '');
+    const cleanPresMobile = String(president_mobile || '8770713343').replace(/\D/g, '') || '8770713343';
     const cleanSecName = String(secretary_name || 'Harsh Tanya Kataria').trim() || 'Harsh Tanya Kataria';
-    const cleanSecMobile = String(secretary_mobile || '').replace(/\D/g, '');
+    const cleanSecMobile = String(secretary_mobile || '9669618111').replace(/\D/g, '') || '9669618111';
 
     const subRole = submitted_by_role === 'wife' ? 'wife' : 'husband';
     const primaryOrg = String((subRole === 'wife' ? wife_organization : husband_organization) || husband_organization || wife_organization || '').trim();
@@ -2588,9 +2588,9 @@ apiRouter.post('/family/new-member-application', (req: Request, res: Response) =
     const cleanRefMobile = String(reference_mobile || '').replace(/\D/g, '');
     const cleanBusinessDesc = String(business_description || '').trim();
     const cleanPresName = String(president_name || 'Utkarsh Pooja Surana').trim() || 'Utkarsh Pooja Surana';
-    const cleanPresMobile = String(president_mobile || '').replace(/\D/g, '');
+    const cleanPresMobile = String(president_mobile || '8770713343').replace(/\D/g, '') || '8770713343';
     const cleanSecName = String(secretary_name || 'Harsh Tanya Kataria').trim() || 'Harsh Tanya Kataria';
-    const cleanSecMobile = String(secretary_mobile || '').replace(/\D/g, '');
+    const cleanSecMobile = String(secretary_mobile || '9669618111').replace(/\D/g, '') || '9669618111';
 
     if (!cleanName || !cleanBusiness || !cleanEmail) {
       return res.status(400).json({ error: 'Applicant name, business name, and email are required.' });
