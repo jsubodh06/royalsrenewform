@@ -836,7 +836,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
           // Spouse already completed registration! Show grand proclamation screen
           setExistingRecord(res.registration);
           setSpouseNotificationMessage(res.message || 'Your spouse has already registered your family household!');
-          setIsFiledBySpouse(true);
+          setIsFiledBySpouse(Boolean(res.filedBySpouse));
           setSpouseName(res.spouseName || (gateRole === 'husband' ? res.registration.wife_name : res.registration.husband_name));
           setSpouseRole(res.spouseRole || (gateRole === 'husband' ? 'wife' : 'husband'));
           setCurrentView('spouse_celebration');
@@ -882,7 +882,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       if (res.exists && res.registration) {
         setExistingRecord(res.registration);
         setSpouseNotificationMessage(res.message || 'Your spouse has already registered your family household!');
-        setIsFiledBySpouse(true);
+        setIsFiledBySpouse(Boolean(res.filedBySpouse));
         setSpouseName(res.spouseName || (expectedRole === 'husband' ? res.registration.husband_name : res.registration.wife_name));
         setSpouseRole(res.spouseRole || expectedRole);
         setCurrentView('spouse_celebration');

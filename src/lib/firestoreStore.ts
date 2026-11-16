@@ -25,6 +25,11 @@ function clampStr(val: unknown, maxLen: number): string {
   return String(val).trim().slice(0, maxLen);
 }
 
+function clampRequiredStr(val: unknown, minLen: number, maxLen: number, fallback: string): string {
+  const cleaned = clampStr(val, maxLen);
+  return cleaned.length >= minLen ? cleaned : fallback;
+}
+
 function clampOptionalStr(val: unknown, maxLen: number): string | null {
   if (val === null || val === undefined) return null;
   const trimmed = String(val).trim();
@@ -102,15 +107,18 @@ export function buildFirestoreFamilyRegistrationPayload(reg: any) {
       ? 'pending_review'
       : 'submitted';
 
-  const hEmail = clampStr(reg?.husband_email, 200).toLowerCase() || 'member@jsgroyals.org';
-  const wEmail = clampStr(reg?.wife_email, 200).toLowerCase() || 'member@jsgroyals.org';
-  const subEmail =
-    clampStr(reg?.submitter_email, 200).toLowerCase() ||
-    (submittedByRole === 'wife' ? wEmail : hEmail);
+  const hEmail = clampRequiredStr(reg?.husband_email, 3, 200, 'member@jsgroyals.org').toLowerCase();
+  const wEmail = clampRequiredStr(reg?.wife_email, 3, 200, 'member@jsgroyals.org').toLowerCase();
+  const subEmail = clampRequiredStr(
+    reg?.submitter_email || (submittedByRole === 'wife' ? wEmail : hEmail),
+    3,
+    200,
+    submittedByRole === 'wife' ? wEmail : hEmail
+  ).toLowerCase();
 
   const sanitizedChildren = sanitizeChildrenList(reg?.children ?? reg?.children_json);
-  const createdAtIso = clampStr(reg?.created_at, 64) || nowIso;
-  const updatedAtIso = clampStr(reg?.updated_at, 64) || createdAtIso;
+  const createdAtIso = clampRequiredStr(reg?.created_at, 4, 64, nowIso);
+  const updatedAtIso = clampRequiredStr(reg?.updated_at, 4, 64, createdAtIso);
 
   return {
     reg_id: regId,
@@ -138,7 +146,7 @@ export function buildFirestoreFamilyRegistrationPayload(reg: any) {
     wife_blood_group: clampOptionalStr(reg?.wife_blood_group, 10),
     wife_photo_url: clampOptionalStr(reg?.wife_photo_url, 1000),
 
-    marriage_anniversary: clampStr(reg?.marriage_anniversary, 40) || '2000-01-01',
+    marriage_anniversary: clampRequiredStr(reg?.marriage_anniversary, 4, 40, '2000-01-01'),
     current_city: clampStr(reg?.current_city, 120) || 'Indore',
     residential_address: clampStr(reg?.residential_address, 600) || 'Indore',
     native_place: clampOptionalStr(reg?.native_place, 200),
@@ -181,15 +189,15 @@ export function buildFirestoreNewMemberApplicationPayload(app: any) {
 
   const statusAllowed = ['pending_review', 'approved', 'rejected'];
   const status = statusAllowed.includes(app?.status) ? app.status : 'pending_review';
-  const createdAtIso = clampStr(app?.created_at, 64) || nowIso;
-  const updatedAtIso = clampStr(app?.updated_at, 64) || createdAtIso;
+  const createdAtIso = clampRequiredStr(app?.created_at, 4, 64, nowIso);
+  const updatedAtIso = clampRequiredStr(app?.updated_at, 4, 64, createdAtIso);
 
   return {
     app_id: appId,
     applicant_name: clampStr(app?.applicant_name, 150) || 'Applicant',
     business_name: clampStr(app?.business_name, 200) || 'Business',
     mobile_number: sanitizeMobile(app?.mobile_number),
-    email: clampStr(app?.email, 200).toLowerCase() || 'applicant@jsgroyals.org',
+    email: clampRequiredStr(app?.email, 3, 200, 'applicant@jsgroyals.org').toLowerCase(),
     other_group_member: app?.other_group_member === 'Yes' ? 'Yes' : 'No',
     other_group_name: clampOptionalStr(app?.other_group_name, 200),
     contribution: clampStr(app?.contribution, 2000) || 'Group participation',

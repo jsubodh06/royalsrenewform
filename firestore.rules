@@ -29,15 +29,15 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function isValidPhotoId(id) {
-      return id is string && id.size() >= 3 && id.size() <= 160 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+      return id.size() >= 3 && id.size() <= 160 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
     }
 
     function isValidCoupleId(id) {
-      return id is string && id.size() == 5 && id.matches('^JR[0-9]{3}$');
+      return id.size() == 5 && id.matches('^JR[0-9]{3}$');
     }
 
     function isRequiredStr(val, minLen, maxLen) {
@@ -90,25 +90,17 @@ service cloud.firestore {
     function isValidChildEntry(child) {
       return child is map &&
         child.keys().hasOnly(['id', 'name', 'gender', 'dob', 'education', 'interests', 'photo_url']) &&
-        (!('id' in child) || isOptionalStr(child.id, 64)) &&
-        (!('name' in child) || isOptionalStr(child.name, 150)) &&
-        (!('gender' in child) || child.gender in ['son', 'daughter']) &&
-        (!('dob' in child) || isOptionalStr(child.dob, 40)) &&
-        (!('education' in child) || isOptionalStr(child.education, 200)) &&
-        (!('interests' in child) || isOptionalStr(child.interests, 300)) &&
-        (!('photo_url' in child) || isOptionalStr(child.photo_url, 1000));
+        child.id is string && child.id.size() <= 64 &&
+        child.name is string && child.name.size() <= 150 &&
+        child.gender in ['son', 'daughter'] &&
+        child.dob is string && child.dob.size() <= 40 &&
+        child.education is string && child.education.size() <= 200 &&
+        child.interests is string && child.interests.size() <= 300 &&
+        (child.photo_url == null || (child.photo_url is string && child.photo_url.size() <= 1000));
     }
 
     function isValidFamilyRegistration(data, regId) {
-      return data.keys().hasAll([
-          'reg_id', 'membership_type', 'submitted_by_role', 'submitter_email',
-          'husband_name', 'husband_mobile', 'husband_email',
-          'wife_name', 'wife_mobile', 'wife_email',
-          'marriage_anniversary', 'current_city', 'residential_address',
-          'has_children', 'children', 'status',
-          'created_at', 'updated_at', 'createdAt', 'updatedAt'
-        ]) &&
-        data.keys().hasOnly([
+      return data.keys().hasOnly([
           'reg_id', 'membership_type', 'submitted_by_role', 'submitter_email',
           'husband_name', 'husband_mobile', 'husband_email', 'husband_dob',
           'husband_qualification', 'husband_occupation', 'husband_organization',
@@ -127,60 +119,55 @@ service cloud.firestore {
         data.reg_id == regId &&
         data.membership_type in ['existing', 'new'] &&
         data.submitted_by_role in ['husband', 'wife'] &&
-        isRequiredStr(data.submitter_email, 3, 200) &&
-        isRequiredStr(data.husband_name, 1, 150) &&
-        isRequiredStr(data.husband_mobile, 10, 20) &&
-        isRequiredStr(data.husband_email, 3, 200) &&
-        isRequiredStr(data.wife_name, 1, 150) &&
-        isRequiredStr(data.wife_mobile, 10, 20) &&
-        isRequiredStr(data.wife_email, 3, 200) &&
-        isRequiredStr(data.marriage_anniversary, 4, 40) &&
-        isRequiredStr(data.current_city, 1, 120) &&
-        isRequiredStr(data.residential_address, 1, 600) &&
+        data.submitter_email is string && data.submitter_email.size() <= 200 &&
+        data.husband_name is string && data.husband_name.size() <= 150 &&
+        data.husband_mobile is string && data.husband_mobile.size() >= 10 && data.husband_mobile.size() <= 20 &&
+        data.husband_email is string && data.husband_email.size() <= 200 &&
+        data.wife_name is string && data.wife_name.size() <= 150 &&
+        data.wife_mobile is string && data.wife_mobile.size() >= 10 && data.wife_mobile.size() <= 20 &&
+        data.wife_email is string && data.wife_email.size() <= 200 &&
+        data.marriage_anniversary is string && data.marriage_anniversary.size() <= 40 &&
+        data.current_city is string && data.current_city.size() <= 120 &&
+        data.residential_address is string && data.residential_address.size() <= 600 &&
         data.has_children is bool &&
         data.children is list &&
         data.children.size() <= 10 &&
         (data.children.size() == 0 || isValidChildEntry(data.children[0])) &&
         data.status in ['submitted', 'pending_review', 'approved', 'rejected'] &&
-        isRequiredStr(data.created_at, 4, 64) &&
-        isRequiredStr(data.updated_at, 4, 64) &&
-        (!('husband_dob' in data) || isOptionalStr(data.husband_dob, 40)) &&
-        (!('husband_qualification' in data) || isOptionalStr(data.husband_qualification, 200)) &&
-        (!('husband_occupation' in data) || isOptionalStr(data.husband_occupation, 200)) &&
-        (!('husband_organization' in data) || isOptionalStr(data.husband_organization, 200)) &&
-        (!('husband_blood_group' in data) || isOptionalStr(data.husband_blood_group, 10)) &&
-        (!('husband_photo_url' in data) || isOptionalStr(data.husband_photo_url, 1000)) &&
-        (!('wife_dob' in data) || isOptionalStr(data.wife_dob, 40)) &&
-        (!('wife_qualification' in data) || isOptionalStr(data.wife_qualification, 200)) &&
-        (!('wife_occupation' in data) || isOptionalStr(data.wife_occupation, 200)) &&
-        (!('wife_organization' in data) || isOptionalStr(data.wife_organization, 200)) &&
-        (!('wife_blood_group' in data) || isOptionalStr(data.wife_blood_group, 10)) &&
-        (!('wife_photo_url' in data) || isOptionalStr(data.wife_photo_url, 1000)) &&
-        (!('native_place' in data) || isOptionalStr(data.native_place, 200)) &&
-        (!('couple_photo_url' in data) || isOptionalStr(data.couple_photo_url, 1000)) &&
-        (!('family_photo_url' in data) || isOptionalStr(data.family_photo_url, 1000)) &&
-        (!('contribution_areas' in data) || isOptionalStr(data.contribution_areas, 1000)) &&
-        (!('royal_idea' in data) || isOptionalStr(data.royal_idea, 2000)) &&
-        (!('jsg_should_be_known_for' in data) || isOptionalStr(data.jsg_should_be_known_for, 2000)) &&
-        (!('president_name' in data) || isOptionalStr(data.president_name, 150)) &&
-        (!('president_mobile' in data) || isOptionalStr(data.president_mobile, 25)) &&
-        (!('secretary_name' in data) || isOptionalStr(data.secretary_name, 150)) &&
-        (!('secretary_mobile' in data) || isOptionalStr(data.secretary_mobile, 25)) &&
-        (!('other_group_member' in data) || isOptionalStr(data.other_group_member, 10)) &&
-        (!('other_group_name' in data) || isOptionalStr(data.other_group_name, 200)) &&
-        (!('new_member_contribution' in data) || isOptionalStr(data.new_member_contribution, 2000)) &&
-        (!('reference_name' in data) || isOptionalStr(data.reference_name, 150)) &&
-        (!('reference_mobile' in data) || isOptionalStr(data.reference_mobile, 20)) &&
-        (!('business_description' in data) || isOptionalStr(data.business_description, 2000));
+        data.created_at is string && data.created_at.size() <= 64 &&
+        data.updated_at is string && data.updated_at.size() <= 64 &&
+        (data.husband_dob == null || (data.husband_dob is string && data.husband_dob.size() <= 40)) &&
+        (data.husband_qualification == null || (data.husband_qualification is string && data.husband_qualification.size() <= 200)) &&
+        (data.husband_occupation == null || (data.husband_occupation is string && data.husband_occupation.size() <= 200)) &&
+        (data.husband_organization == null || (data.husband_organization is string && data.husband_organization.size() <= 200)) &&
+        (data.husband_blood_group == null || (data.husband_blood_group is string && data.husband_blood_group.size() <= 10)) &&
+        (data.husband_photo_url == null || (data.husband_photo_url is string && data.husband_photo_url.size() <= 1000)) &&
+        (data.wife_dob == null || (data.wife_dob is string && data.wife_dob.size() <= 40)) &&
+        (data.wife_qualification == null || (data.wife_qualification is string && data.wife_qualification.size() <= 200)) &&
+        (data.wife_occupation == null || (data.wife_occupation is string && data.wife_occupation.size() <= 200)) &&
+        (data.wife_organization == null || (data.wife_organization is string && data.wife_organization.size() <= 200)) &&
+        (data.wife_blood_group == null || (data.wife_blood_group is string && data.wife_blood_group.size() <= 10)) &&
+        (data.wife_photo_url == null || (data.wife_photo_url is string && data.wife_photo_url.size() <= 1000)) &&
+        (data.native_place == null || (data.native_place is string && data.native_place.size() <= 200)) &&
+        (data.couple_photo_url == null || (data.couple_photo_url is string && data.couple_photo_url.size() <= 1000)) &&
+        (data.family_photo_url == null || (data.family_photo_url is string && data.family_photo_url.size() <= 1000)) &&
+        (data.contribution_areas == null || (data.contribution_areas is string && data.contribution_areas.size() <= 1000)) &&
+        (data.royal_idea == null || (data.royal_idea is string && data.royal_idea.size() <= 2000)) &&
+        (data.jsg_should_be_known_for == null || (data.jsg_should_be_known_for is string && data.jsg_should_be_known_for.size() <= 2000)) &&
+        (data.president_name == null || (data.president_name is string && data.president_name.size() <= 150)) &&
+        (data.president_mobile == null || (data.president_mobile is string && data.president_mobile.size() <= 25)) &&
+        (data.secretary_name == null || (data.secretary_name is string && data.secretary_name.size() <= 150)) &&
+        (data.secretary_mobile == null || (data.secretary_mobile is string && data.secretary_mobile.size() <= 25)) &&
+        (data.other_group_member == null || (data.other_group_member is string && data.other_group_member.size() <= 10)) &&
+        (data.other_group_name == null || (data.other_group_name is string && data.other_group_name.size() <= 200)) &&
+        (data.new_member_contribution == null || (data.new_member_contribution is string && data.new_member_contribution.size() <= 2000)) &&
+        (data.reference_name == null || (data.reference_name is string && data.reference_name.size() <= 150)) &&
+        (data.reference_mobile == null || (data.reference_mobile is string && data.reference_mobile.size() <= 20)) &&
+        (data.business_description == null || (data.business_description is string && data.business_description.size() <= 2000));
     }
 
     function isValidNewMemberApplication(data, appId) {
-      return data.keys().hasAll([
-          'app_id', 'applicant_name', 'business_name', 'mobile_number', 'email',
-          'other_group_member', 'contribution', 'reference_name', 'reference_mobile',
-          'business_description', 'status', 'created_at', 'updated_at', 'createdAt', 'updatedAt'
-        ]) &&
-        data.keys().hasOnly([
+      return data.keys().hasOnly([
           'app_id', 'applicant_name', 'business_name', 'mobile_number', 'email',
           'other_group_member', 'other_group_name', 'contribution',
           'reference_name', 'reference_mobile', 'business_description',
@@ -188,23 +175,23 @@ service cloud.firestore {
           'status', 'created_at', 'updated_at', 'createdAt', 'updatedAt'
         ]) &&
         data.app_id == appId &&
-        isRequiredStr(data.applicant_name, 1, 150) &&
-        isRequiredStr(data.business_name, 1, 200) &&
-        isRequiredStr(data.mobile_number, 10, 20) &&
-        isRequiredStr(data.email, 3, 200) &&
+        data.applicant_name is string && data.applicant_name.size() >= 1 && data.applicant_name.size() <= 150 &&
+        data.business_name is string && data.business_name.size() >= 1 && data.business_name.size() <= 200 &&
+        data.mobile_number is string && data.mobile_number.size() >= 10 && data.mobile_number.size() <= 20 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 200 &&
         data.other_group_member in ['Yes', 'No'] &&
-        isRequiredStr(data.contribution, 1, 2000) &&
-        isRequiredStr(data.reference_name, 1, 150) &&
-        isRequiredStr(data.reference_mobile, 10, 20) &&
-        isRequiredStr(data.business_description, 1, 2000) &&
+        data.contribution is string && data.contribution.size() >= 1 && data.contribution.size() <= 2000 &&
+        data.reference_name is string && data.reference_name.size() >= 1 && data.reference_name.size() <= 150 &&
+        data.reference_mobile is string && data.reference_mobile.size() >= 10 && data.reference_mobile.size() <= 20 &&
+        data.business_description is string && data.business_description.size() >= 1 && data.business_description.size() <= 2000 &&
         data.status in ['pending_review', 'approved', 'rejected'] &&
-        isRequiredStr(data.created_at, 4, 64) &&
-        isRequiredStr(data.updated_at, 4, 64) &&
-        (!('other_group_name' in data) || isOptionalStr(data.other_group_name, 200)) &&
-        (!('president_name' in data) || isOptionalStr(data.president_name, 150)) &&
-        (!('president_mobile' in data) || isOptionalStr(data.president_mobile, 25)) &&
-        (!('secretary_name' in data) || isOptionalStr(data.secretary_name, 150)) &&
-        (!('secretary_mobile' in data) || isOptionalStr(data.secretary_mobile, 25));
+        data.created_at is string && data.created_at.size() >= 4 && data.created_at.size() <= 64 &&
+        data.updated_at is string && data.updated_at.size() >= 4 && data.updated_at.size() <= 64 &&
+        (data.other_group_name == null || (data.other_group_name is string && data.other_group_name.size() <= 200)) &&
+        (data.president_name == null || (data.president_name is string && data.president_name.size() <= 150)) &&
+        (data.president_mobile == null || (data.president_mobile is string && data.president_mobile.size() <= 25)) &&
+        (data.secretary_name == null || (data.secretary_name is string && data.secretary_name.size() <= 150)) &&
+        (data.secretary_mobile == null || (data.secretary_mobile is string && data.secretary_mobile.size() <= 25));
     }
 
     function isValidFamilyPhoto(data, photoId) {
@@ -219,7 +206,7 @@ service cloud.firestore {
         data.size_bytes is number &&
         data.size_bytes > 0 &&
         data.size_bytes <= 650000 &&
-        isRequiredStr(data.created_at, 4, 64);
+        data.created_at is string && data.created_at.size() >= 4 && data.created_at.size() <= 64;
     }
 
     // 3. Members collection: Master Year-1 records (Admin managed)
@@ -257,18 +244,18 @@ service cloud.firestore {
       allow get: if isValidId(regId) && isAdmin();
       allow list: if isAdmin();
       allow create: if isValidId(regId) &&
-        isValidFamilyRegistration(incoming(), regId) &&
-        incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time &&
-        incoming().status in ['submitted', 'pending_review'];
+        isValidFamilyRegistration(request.resource.data, regId) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.status in ['submitted', 'pending_review'];
       allow update: if isValidId(regId) &&
         isAdmin() &&
-        isValidFamilyRegistration(incoming(), regId) &&
-        incoming().reg_id == existing().reg_id &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().created_at == existing().created_at &&
-        incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']);
+        isValidFamilyRegistration(request.resource.data, regId) &&
+        request.resource.data.reg_id == existing().reg_id &&
+        request.resource.data.createdAt == existing().createdAt &&
+        request.resource.data.created_at == existing().created_at &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.diff(existing()).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']);
       allow delete: if isValidId(regId) && isAdmin();
     }
 
@@ -277,18 +264,18 @@ service cloud.firestore {
       allow get: if isValidId(appId) && isAdmin();
       allow list: if isAdmin();
       allow create: if isValidId(appId) &&
-        isValidNewMemberApplication(incoming(), appId) &&
-        incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time &&
-        incoming().status == 'pending_review';
+        isValidNewMemberApplication(request.resource.data, appId) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.status == 'pending_review';
       allow update: if isValidId(appId) &&
         isAdmin() &&
-        isValidNewMemberApplication(incoming(), appId) &&
-        incoming().app_id == existing().app_id &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().created_at == existing().created_at &&
-        incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']);
+        isValidNewMemberApplication(request.resource.data, appId) &&
+        request.resource.data.app_id == existing().app_id &&
+        request.resource.data.createdAt == existing().createdAt &&
+        request.resource.data.created_at == existing().created_at &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.diff(existing()).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']);
       allow delete: if isValidId(appId) && isAdmin();
     }
 
