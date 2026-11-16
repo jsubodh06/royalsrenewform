@@ -608,9 +608,37 @@ export async function checkFamilyEmailApi(email: string, role: 'husband' | 'wife
   });
 }
 
-export async function registerFamilyApi(data: any) {
-  const res = await apiRequest<{
+async function postRegisterAllowing409(body: any) {
+  const response = await fetch(`${API_BASE}/family/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const resData = await response.json().catch(() => ({}));
+
+  if (response.status === 409 && resData?.alreadyRegistered) {
+    return resData as {
+      success?: boolean;
+      regId?: string;
+      membershipType?: 'existing' | 'new';
+      notice?: string;
+      message: string;
+      registration: any;
+      alreadyRegistered: boolean;
+      filedBySpouse?: boolean;
+      spouseName?: string;
+      spouseRole?: string;
+    };
+  }
+
+  if (!response.ok) {
+    throw new Error(resData.error || `Request failed with status ${response.status}`);
+  }
+
+  return resData as {
     success: boolean;
+    validateOnly?: boolean;
     regId: string;
     membershipType?: 'existing' | 'new';
     notice?: string;
@@ -620,16 +648,27 @@ export async function registerFamilyApi(data: any) {
     filedBySpouse?: boolean;
     spouseName?: string;
     spouseRole?: string;
-  }>('/family/register', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+  };
+}
 
-  if (res?.success && res?.registration && !res.alreadyRegistered) {
-    await saveFamilyRegistrationToFirestore(res.registration);
+export async function registerFamilyApi(data: any) {
+  // 1. Validate & check for duplicate registration without locking SQLite prematurely
+  const previewRes = await postRegisterAllowing409({ ...data, validate_only: true });
+
+  if (previewRes.alreadyRegistered) {
+    if (previewRes.registration) {
+      await saveFamilyRegistrationToFirestore(previewRes.registration).catch(() => null);
+    }
+    return previewRes;
   }
 
-  return res;
+  // 2. Persist to Cloud Firestore first so container SQLite is never locked if cloud archive fails
+  if (previewRes?.registration) {
+    await saveFamilyRegistrationToFirestore(previewRes.registration);
+  }
+
+  // 3. Commit to server SQLite using the exact same regId
+  return await postRegisterAllowing409({ ...data, reg_id: previewRes.regId });
 }
 
 function fileToDataUrl(file: Blob): Promise<string> {

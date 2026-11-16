@@ -144,8 +144,6 @@ service cloud.firestore {
         data.status in ['submitted', 'pending_review', 'approved', 'rejected'] &&
         isRequiredStr(data.created_at, 4, 64) &&
         isRequiredStr(data.updated_at, 4, 64) &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp &&
         (!('husband_dob' in data) || isOptionalStr(data.husband_dob, 40)) &&
         (!('husband_qualification' in data) || isOptionalStr(data.husband_qualification, 200)) &&
         (!('husband_occupation' in data) || isOptionalStr(data.husband_occupation, 200)) &&
@@ -202,8 +200,6 @@ service cloud.firestore {
         data.status in ['pending_review', 'approved', 'rejected'] &&
         isRequiredStr(data.created_at, 4, 64) &&
         isRequiredStr(data.updated_at, 4, 64) &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp &&
         (!('other_group_name' in data) || isOptionalStr(data.other_group_name, 200)) &&
         (!('president_name' in data) || isOptionalStr(data.president_name, 150)) &&
         (!('president_mobile' in data) || isOptionalStr(data.president_mobile, 25)) &&
@@ -223,8 +219,7 @@ service cloud.firestore {
         data.size_bytes is number &&
         data.size_bytes > 0 &&
         data.size_bytes <= 650000 &&
-        isRequiredStr(data.created_at, 4, 64) &&
-        data.createdAt is timestamp;
+        isRequiredStr(data.created_at, 4, 64);
     }
 
     // 3. Members collection: Master Year-1 records (Admin managed)
@@ -251,8 +246,7 @@ service cloud.firestore {
     match /submissions/{coupleId} {
       allow get: if isValidCoupleId(coupleId) && isAdmin();
       allow list: if isAdmin();
-      allow create: if isValidCoupleId(coupleId) && isAdmin() && isValidSubmission(incoming(), coupleId) &&
-        !exists(/databases/$(database)/documents/submissions/$(coupleId));
+      allow create: if isValidCoupleId(coupleId) && isAdmin() && isValidSubmission(incoming(), coupleId);
       allow update: if isValidCoupleId(coupleId) && isAdmin() && isValidSubmission(incoming(), coupleId) &&
         incoming().couple_id == existing().couple_id;
       allow delete: if isValidCoupleId(coupleId) && isAdmin();
@@ -263,7 +257,6 @@ service cloud.firestore {
       allow get: if isValidId(regId) && isAdmin();
       allow list: if isAdmin();
       allow create: if isValidId(regId) &&
-        !exists(/databases/$(database)/documents/family_registrations/$(regId)) &&
         isValidFamilyRegistration(incoming(), regId) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
@@ -284,7 +277,6 @@ service cloud.firestore {
       allow get: if isValidId(appId) && isAdmin();
       allow list: if isAdmin();
       allow create: if isValidId(appId) &&
-        !exists(/databases/$(database)/documents/new_member_applications/$(appId)) &&
         isValidNewMemberApplication(incoming(), appId) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
@@ -305,7 +297,6 @@ service cloud.firestore {
       allow get: if isValidPhotoId(photoId) && isAdmin();
       allow list: if isAdmin();
       allow create: if isValidPhotoId(photoId) &&
-        !exists(/databases/$(database)/documents/family_photos/$(photoId)) &&
         isValidFamilyPhoto(incoming(), photoId) &&
         incoming().createdAt == request.time;
       allow update: if false;

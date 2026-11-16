@@ -1015,7 +1015,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       if (res.alreadyRegistered) {
         setExistingRecord(res.registration);
         setSpouseNotificationMessage(res.message);
-        setIsFiledBySpouse(true);
+        setIsFiledBySpouse(Boolean(res.filedBySpouse));
         setSpouseName(res.spouseName || 'Spouse');
         setSpouseRole(res.spouseRole === 'husband' ? 'husband' : 'wife');
         setCurrentView('spouse_celebration');

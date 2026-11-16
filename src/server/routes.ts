@@ -2342,16 +2342,19 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
         filedBySpouse: existing.submitted_by_role !== subRole,
         spouseName,
         spouseRole: spouseTitle,
-        message: `✨ Your ${spouseTitle}, ${spouseName}, has already submitted your family dossier on ${dateFormatted}!`,
-        registration: {
-          ...existing,
-          children: parsedChildren
-        }
+        message:
+          existing.submitted_by_role !== subRole
+            ? `✨ Your ${spouseTitle}, ${spouseName}, has already submitted your family dossier on ${dateFormatted}!`
+            : `✨ Your royal family dossier was already recorded on ${dateFormatted}.`,
+        registration: normalizeFamilyRecordPhotos(existing, parsedChildren, req)
       });
     }
 
     const prefix = membershipType === 'new' ? 'APP' : 'ROYAL';
-    const regId = `${prefix}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const requestedRegId = typeof req.body?.reg_id === 'string' ? req.body.reg_id.trim().toUpperCase() : '';
+    const regId = /^(ROYAL|APP)-[A-Z0-9]{4,12}$/.test(requestedRegId)
+      ? requestedRegId
+      : `${prefix}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const recordStatus = membershipType === 'new' ? 'pending_review' : 'submitted';
     const now = new Date().toISOString();
 
@@ -2378,6 +2381,65 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       } catch (e) {}
     }
     const childrenJson = JSON.stringify(normalizedChildrenArray);
+
+    const previewRecord = {
+      reg_id: regId,
+      submitted_by_role: subRole,
+      submitter_email: subEmail,
+      husband_name: husband_name.trim(),
+      husband_mobile: husband_mobile.trim(),
+      husband_email: hEmail,
+      husband_dob: husband_dob || null,
+      husband_qualification: husband_qualification || null,
+      husband_occupation: husband_occupation || null,
+      husband_organization: husband_organization || null,
+      husband_blood_group: husband_blood_group || null,
+      wife_name: wife_name.trim(),
+      wife_mobile: wife_mobile.trim(),
+      wife_email: wEmail,
+      wife_dob: wife_dob || null,
+      wife_qualification: wife_qualification || null,
+      wife_occupation: wife_occupation || null,
+      wife_organization: wife_organization || null,
+      wife_blood_group: wife_blood_group || null,
+      marriage_anniversary,
+      current_city: current_city.trim(),
+      residential_address: residential_address.trim(),
+      native_place: native_place || null,
+      has_children: has_children ? 1 : 0,
+      children_json: childrenJson,
+      husband_photo_url: normalizedHusbandPhoto,
+      wife_photo_url: normalizedWifePhoto,
+      couple_photo_url: normalizedCouplePhoto,
+      family_photo_url: normalizedFamilyPhoto,
+      contribution_areas: contribution_areas || null,
+      royal_idea: royal_idea || null,
+      jsg_should_be_known_for: jsg_should_be_known_for || null,
+      president_name: cleanPresName,
+      president_mobile: cleanPresMobile || null,
+      secretary_name: cleanSecName,
+      secretary_mobile: cleanSecMobile || null,
+      membership_type: membershipType,
+      other_group_member: membershipType === 'new' ? cleanOtherGroupMember : null,
+      other_group_name: membershipType === 'new' && cleanOtherGroupMember === 'Yes' ? cleanOtherGroupName : null,
+      new_member_contribution: membershipType === 'new' ? cleanNewMemberContribution : null,
+      reference_name: membershipType === 'new' ? cleanRefName : null,
+      reference_mobile: membershipType === 'new' ? cleanRefMobile : null,
+      business_description: membershipType === 'new' ? cleanBusinessDesc : null,
+      status: recordStatus,
+      created_at: now,
+      updated_at: now,
+    };
+
+    if (req.body?.validate_only === true) {
+      return res.json({
+        success: true,
+        validateOnly: true,
+        regId,
+        membershipType,
+        registration: normalizeFamilyRecordPhotos(previewRecord, normalizedChildrenArray, req)
+      });
+    }
 
     const tx = db.transaction(() => {
       db.prepare(`
