@@ -42,11 +42,17 @@ import {
   UserPlus,
   Building2,
   Cloud,
-  CloudOff
+  CloudOff,
+  Trash2
 } from 'lucide-react';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { auth, googleProvider, AUTHORIZED_ADMIN_EMAIL } from '../lib/firebase.ts';
 import {
+  deleteFamilyPhotoFromFirestore,
+  deleteFamilyRegistrationFromFirestore,
+  deleteMemberFromFirestore,
+  deleteNewMemberApplicationFromFirestore,
+  extractPhotoIdFromUrl,
   fetchAllFamilyRegistrationsFromFirestore,
   fetchAllNewMemberApplicationsFromFirestore,
   resolvePhotoFromFirestore,
@@ -82,7 +88,10 @@ import {
   NewMemberApplicationRecord,
   getEmailConfigApi,
   saveEmailConfigApi,
-  sendAdminTestEmailApi
+  sendAdminTestEmailApi,
+  deleteAdminFamilyRegistrationApi,
+  deleteAdminNewMemberApplicationApi,
+  deleteAdminMemberApi
 } from '../lib/api.ts';
 import {
   AdminSession,
@@ -189,6 +198,162 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [loadingNewApplications, setLoadingNewApplications] = useState(false);
   const [newAppFilterSearch, setNewAppFilterSearch] = useState('');
   const [viewingNewAppModal, setViewingNewAppModal] = useState<NewMemberApplicationRecord | null>(null);
+
+  // Permanent DB Entry Removal Confirmation State
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: 'family'; reg: any }
+    | { kind: 'application'; app: NewMemberApplicationRecord }
+    | { kind: 'member'; member: any }
+    | null
+  >(null);
+  const [deletingEntry, setDeletingEntry] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccessMsg, setDeleteSuccessMsg] = useState<string | null>(null);
+
+  const collectUnreferencedPhotoIds = (reg: any, excludeRegId?: string): string[] => {
+    if (!reg) return [];
+    const getIdsFromReg = (r: any): string[] => {
+      const urls: Array<string | null | undefined> = [
+        r?.husband_photo_url,
+        r?.wife_photo_url,
+        r?.couple_photo_url,
+        r?.family_photo_url,
+      ];
+      if (Array.isArray(r?.children)) {
+        for (const c of r.children) {
+          if (c?.photo_url) urls.push(c.photo_url);
+        }
+      }
+      return urls
+        .map((u) => extractPhotoIdFromUrl(u))
+        .filter((id): id is string => Boolean(id));
+    };
+
+    const candidateIds = Array.from(new Set(getIdsFromReg(reg)));
+    if (candidateIds.length === 0) return [];
+
+    const stillReferenced = new Set<string>();
+    for (const other of familyRegistrations) {
+      if (excludeRegId && String(other?.reg_id || '').toUpperCase() === String(excludeRegId).toUpperCase()) {
+        continue;
+      }
+      for (const id of getIdsFromReg(other)) {
+        stillReferenced.add(id);
+      }
+    }
+
+    return candidateIds.filter((id) => !stillReferenced.has(id));
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!adminToken || !deleteTarget) return;
+    setDeletingEntry(true);
+    setDeleteError(null);
+    setDeleteSuccessMsg(null);
+
+    try {
+      if (deleteTarget.kind === 'family') {
+        const reg = deleteTarget.reg;
+        const regId = String(reg?.reg_id || '').trim();
+        if (!regId) throw new Error('Missing registration ID for deletion.');
+
+        const candidatePhotoIds = collectUnreferencedPhotoIds(reg, regId);
+        const hasLinkedApp =
+          reg?.membership_type === 'new' ||
+          newApplications.some((a) => String(a.app_id || '').toUpperCase() === regId.toUpperCase());
+
+        if (isFirebaseAdmin) {
+          await deleteFamilyRegistrationFromFirestore(regId, candidatePhotoIds, hasLinkedApp);
+        }
+
+        const localRes = await deleteAdminFamilyRegistrationApi(adminToken, regId);
+        if (isFirebaseAdmin && Array.isArray(localRes?.deletedPhotoIds) && localRes.deletedPhotoIds.length > 0) {
+          for (const pid of localRes.deletedPhotoIds) {
+            if (!candidatePhotoIds.includes(pid)) {
+              await deleteFamilyPhotoFromFirestore(pid).catch(() => {});
+            }
+          }
+        }
+
+        setFamilyRegistrations((prev) => prev.filter((r) => String(r.reg_id || '').toUpperCase() !== regId.toUpperCase()));
+        if (hasLinkedApp || localRes?.deletedLinkedApp) {
+          setNewApplications((prev) => prev.filter((a) => String(a.app_id || '').toUpperCase() !== regId.toUpperCase()));
+        }
+        if (viewingFamilyModal && String(viewingFamilyModal.reg_id || '').toUpperCase() === regId.toUpperCase()) {
+          setViewingFamilyModal(null);
+        }
+
+        setDeleteTarget(null);
+        setDeleteSuccessMsg(
+          `Permanently removed family registration ${regId} (${reg.husband_name || ''} & ${reg.wife_name || ''}) from the database.`
+        );
+        await Promise.all([loadFamilyRegistrations(), loadNewApplications()]);
+      } else if (deleteTarget.kind === 'application') {
+        const app = deleteTarget.app;
+        const appId = String(app?.app_id || '').trim();
+        if (!appId) throw new Error('Missing application ID for deletion.');
+
+        const linkedReg = familyRegistrations.find(
+          (r) => String(r.reg_id || '').toUpperCase() === appId.toUpperCase()
+        );
+        const candidatePhotoIds = linkedReg ? collectUnreferencedPhotoIds(linkedReg, appId) : [];
+
+        if (isFirebaseAdmin) {
+          await deleteNewMemberApplicationFromFirestore(appId, linkedReg ? appId : null, candidatePhotoIds);
+        }
+
+        const localRes = await deleteAdminNewMemberApplicationApi(adminToken, appId);
+        if (isFirebaseAdmin && Array.isArray(localRes?.deletedPhotoIds) && localRes.deletedPhotoIds.length > 0) {
+          for (const pid of localRes.deletedPhotoIds) {
+            if (!candidatePhotoIds.includes(pid)) {
+              await deleteFamilyPhotoFromFirestore(pid).catch(() => {});
+            }
+          }
+        }
+
+        setNewApplications((prev) => prev.filter((a) => String(a.app_id || '').toUpperCase() !== appId.toUpperCase()));
+        if (linkedReg || localRes?.deletedLinkedReg) {
+          setFamilyRegistrations((prev) => prev.filter((r) => String(r.reg_id || '').toUpperCase() !== appId.toUpperCase()));
+        }
+        if (viewingNewAppModal && String(viewingNewAppModal.app_id || '').toUpperCase() === appId.toUpperCase()) {
+          setViewingNewAppModal(null);
+        }
+
+        setDeleteTarget(null);
+        setDeleteSuccessMsg(
+          `Permanently removed application ${appId} (${app.applicant_name || ''}) from the database.`
+        );
+        await Promise.all([loadNewApplications(), loadFamilyRegistrations()]);
+      } else if (deleteTarget.kind === 'member') {
+        const m = deleteTarget.member;
+        const coupleId = String(m?.couple_id || '').trim().toUpperCase();
+        if (!coupleId) throw new Error('Missing Couple ID for deletion.');
+
+        if (isFirebaseAdmin) {
+          await deleteMemberFromFirestore(coupleId);
+        }
+
+        await deleteAdminMemberApi(adminToken, coupleId);
+
+        setMembers((prev) => prev.filter((row) => String(row.couple_id || '').toUpperCase() !== coupleId));
+        if (selectedCoupleId && selectedCoupleId.toUpperCase() === coupleId) {
+          setSelectedCoupleId(null);
+          setMemberDetail(null);
+        }
+
+        setDeleteTarget(null);
+        setDeleteSuccessMsg(
+          `Permanently removed roster member ${coupleId} (${m.husband_name || ''} & ${m.wife_name || ''}) from the database.`
+        );
+        await Promise.all([loadMembers(), loadOverview(), loadCorrections()]);
+      }
+    } catch (err: any) {
+      if (handleAuthError(err)) return;
+      setDeleteError(err?.message || 'Failed to delete entry from database.');
+    } finally {
+      setDeletingEntry(false);
+    }
+  };
 
   // Central Authentication Error Handler (Auto-logout if session expired or invalid)
   const handleAuthError = (err: any) => {
@@ -1388,6 +1553,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {deleteSuccessMsg && (
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
+            <span>{deleteSuccessMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteSuccessMsg(null)}
+            className="p-1 rounded-lg hover:bg-emerald-100 text-emerald-700 cursor-pointer"
+            aria-label="Dismiss notification"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* KPI Overview Tiles */}
       {overview && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
@@ -2000,14 +2182,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             })}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-right">
-                            <button
-                              type="button"
-                              onClick={() => setViewingFamilyModal(reg)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] border border-[#D9CDB8] font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
-                            >
-                              <Eye className="w-3 h-3 text-[#8C6D2B]" />
-                              <span>View Dossier</span>
-                            </button>
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setViewingFamilyModal(reg)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] border border-[#D9CDB8] font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
+                              >
+                                <Eye className="w-3 h-3 text-[#8C6D2B]" />
+                                <span>View Dossier</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeleteError(null);
+                                  setDeleteTarget({ kind: 'family', reg });
+                                }}
+                                title="Remove entry from database"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2161,14 +2357,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             })}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-right">
-                            <button
-                              type="button"
-                              onClick={() => setViewingNewAppModal(app)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] border border-[#D9CDB8] font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
-                            >
-                              <Eye className="w-3 h-3 text-[#8C6D2B]" />
-                              <span>View</span>
-                            </button>
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setViewingNewAppModal(app)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] border border-[#D9CDB8] font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
+                              >
+                                <Eye className="w-3 h-3 text-[#8C6D2B]" />
+                                <span>View</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeleteError(null);
+                                  setDeleteTarget({ kind: 'application', app });
+                                }}
+                                title="Remove application from database"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2383,14 +2593,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             ? new Date(m.last_activity).toLocaleDateString()
                             : '—'}
                         </td>
-                        <td className="py-3.5 px-3 text-right">
-                          <button
-                            onClick={() => inspectMember(m.couple_id)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#1C1917] hover:bg-[#2A2623] text-white text-[11px] font-medium transition-all cursor-pointer"
-                          >
-                            <Eye className="w-3 h-3 text-[#D4AF37]" />
-                            <span>View Dossier</span>
-                          </button>
+                        <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => inspectMember(m.couple_id)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#1C1917] hover:bg-[#2A2623] text-white text-[11px] font-medium transition-all cursor-pointer"
+                            >
+                              <Eye className="w-3 h-3 text-[#D4AF37]" />
+                              <span>View Dossier</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeleteTarget({ kind: 'member', member: m });
+                              }}
+                              title="Remove member from database"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-[11px] font-semibold transition-all cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -4073,6 +4297,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
+                {/* Member Modal Footer with Remove from DB */}
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#F0E8DC]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleteTarget({ kind: 'member', member: memberDetail.member });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition-all cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Entry from DB</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCoupleId(null);
+                      setMemberDetail(null);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] font-semibold text-xs border border-[#D9CDB8] transition-all cursor-pointer"
+                  >
+                    Close Dossier
+                  </button>
+                </div>
+
               </div>
             )}
           </div>
@@ -4691,7 +4940,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             )}
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 pt-2 border-t border-[#F0E8DC]">
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-[#F0E8DC]">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteTarget({ kind: 'family', reg: viewingFamilyModal });
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remove Entry from DB</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setViewingFamilyModal(null)}
@@ -4775,13 +5035,142 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <p className="text-[#1C1917] leading-relaxed">{viewingNewAppModal.contribution}</p>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-[#F0E8DC]">
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-[#F0E8DC]">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteTarget({ kind: 'application', app: viewingNewAppModal });
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remove Entry from DB</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setViewingNewAppModal(null)}
                 className="px-5 py-2.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] font-semibold text-xs border border-[#D9CDB8] transition-all cursor-pointer"
               >
                 Close Application
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent DB Entry Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-red-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-red-700 block">
+                  Permanent Database Removal
+                </span>
+                <h3 className="font-serif-royal font-bold text-lg text-[#1C1917] mt-0.5">
+                  Remove Entry from DB?
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={deletingEntry}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteError(null);
+                }}
+                className="p-1.5 rounded-lg text-[#78716C] hover:bg-[#FAF7F2] hover:text-[#1C1917] disabled:opacity-40 cursor-pointer"
+                aria-label="Cancel removal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE] text-xs space-y-1">
+              {deleteTarget.kind === 'family' && (
+                <>
+                  <div className="font-mono font-bold text-[#8C6D2B]">{deleteTarget.reg.reg_id}</div>
+                  <div className="font-bold text-[#1C1917]">
+                    {deleteTarget.reg.husband_name} &amp; {deleteTarget.reg.wife_name}
+                  </div>
+                  <div className="text-[11px] text-[#78716C]">{deleteTarget.reg.submitter_email}</div>
+                </>
+              )}
+              {deleteTarget.kind === 'application' && (
+                <>
+                  <div className="font-mono font-bold text-[#8C6D2B]">{deleteTarget.app.app_id}</div>
+                  <div className="font-bold text-[#1C1917]">{deleteTarget.app.applicant_name}</div>
+                  <div className="text-[11px] text-[#78716C]">
+                    {deleteTarget.app.business_name} • {deleteTarget.app.email}
+                  </div>
+                </>
+              )}
+              {deleteTarget.kind === 'member' && (
+                <>
+                  <div className="font-mono font-bold text-[#8C6D2B]">{deleteTarget.member.couple_id}</div>
+                  <div className="font-bold text-[#1C1917]">
+                    {deleteTarget.member.husband_name} &amp; {deleteTarget.member.wife_name}
+                  </div>
+                  <div className="text-[11px] text-[#78716C]">
+                    Includes Year-2 profile, preferences, submissions &amp; notes
+                  </div>
+                </>
+              )}
+            </div>
+
+            <p className="text-xs text-[#57534E] leading-relaxed">
+              This will permanently erase the record
+              {deleteTarget.kind !== 'member' ? ', linked application data, and uploaded photos' : ' and all associated records'} from{' '}
+              <strong>{isFirebaseAdmin ? 'both Cloud Firestore and the server SQLite database' : 'the server SQLite database'}</strong>.
+              This action cannot be undone.
+            </p>
+
+            {!isFirebaseAdmin && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-snug">
+                <strong>Note:</strong> Google Cloud Archive is not connected in this session. Connect with{' '}
+                <span className="font-mono">{AUTHORIZED_ADMIN_EMAIL}</span> first if you also need to remove records synced in Cloud Firestore.
+              </div>
+            )}
+
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                <span className="break-words">{deleteError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F0E8DC]">
+              <button
+                type="button"
+                disabled={deletingEntry}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteError(null);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#1C1917] font-semibold text-xs border border-[#D9CDB8] disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingEntry}
+                onClick={handleConfirmDelete}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs shadow-sm disabled:opacity-50 cursor-pointer transition-all"
+              >
+                {deletingEntry ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Removing from DB...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Permanently</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

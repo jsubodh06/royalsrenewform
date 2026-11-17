@@ -822,6 +822,44 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const [gateError, setGateError] = useState<string | null>(null);
   const [gateSuccessMsg, setGateSuccessMsg] = useState<string | null>(null);
 
+  // Grand Royal Curtain Reveal state on initial homepage entrance
+  const [curtainPhase, setCurtainPhase] = useState<'closed' | 'opening' | 'done'>(() => {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      return 'done';
+    }
+    return 'closed';
+  });
+
+  useEffect(() => {
+    if (currentView !== 'gate') {
+      setCurtainPhase('done');
+      return;
+    }
+    if (curtainPhase === 'done') return;
+
+    if (curtainPhase === 'closed') {
+      const openTimer = window.setTimeout(() => {
+        setCurtainPhase('opening');
+      }, 600);
+      return () => window.clearTimeout(openTimer);
+    }
+
+    if (curtainPhase === 'opening') {
+      const doneTimer = window.setTimeout(() => {
+        setCurtainPhase('done');
+      }, 2450);
+      return () => window.clearTimeout(doneTimer);
+    }
+  }, [curtainPhase, currentView]);
+
+  const replayCurtainReveal = () => {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setCurtainPhase('closed');
+  };
+
   // 30-Second Resend Cooldown Countdown
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -1617,10 +1655,133 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       <div className="absolute bottom-20 right-1/4 text-[#C5A869]/20 text-lg animate-twinkle pointer-events-none select-none" style={{ animationDelay: '0.8s' }}>✧</div>
 
       {/* ========================================================================= */}
+      {/* GRAND ROYAL CURTAIN OPENING REVEAL (HOME ENTRANCE ONLY)                   */}
+      {/* ========================================================================= */}
+      {currentView === 'gate' && curtainPhase !== 'done' && (
+        <div
+          aria-hidden="true"
+          className={`fixed inset-0 z-50 overflow-hidden select-none ${
+            curtainPhase === 'opening' ? 'pointer-events-none' : 'pointer-events-auto'
+          }`}
+        >
+          {/* Ambient golden stage bloom behind parting drapes */}
+          <div
+            className="absolute inset-0 transition-opacity duration-[1800ms] ease-out"
+            style={{
+              opacity: curtainPhase === 'opening' ? 0 : 0.9,
+              background:
+                'radial-gradient(circle at 50% 45%, rgba(212, 175, 55, 0.24) 0%, rgba(18, 15, 13, 0.65) 60%, rgba(12, 10, 8, 0.85) 100%)',
+            }}
+          />
+
+          {/* Top Valance Gilded Pelmet Trim */}
+          <div
+            className="absolute top-0 left-0 right-0 h-3 z-30 transition-all duration-1000 ease-out"
+            style={{
+              opacity: curtainPhase === 'opening' ? 0 : 1,
+              transform: curtainPhase === 'opening' ? 'translate3d(0, -100%, 0)' : 'translate3d(0, 0, 0)',
+              background: 'linear-gradient(180deg, #1A1411 0%, #2C2118 65%, #D4AF37 100%)',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+            }}
+          />
+
+          {/* Left Velvet Curtain Panel */}
+          <div
+            className="royal-curtain-drape royal-curtain-drape-left absolute top-0 bottom-0 left-0 w-1/2 z-20"
+            style={{
+              transform:
+                curtainPhase === 'opening'
+                  ? 'translate3d(-104%, 0, 0) scaleX(0.92)'
+                  : 'translate3d(0%, 0, 0) scaleX(1)',
+            }}
+          >
+            {/* Gilded inner edge bullion cord */}
+            <div className="royal-curtain-seam absolute top-0 bottom-0 right-0 w-[3px]" />
+          </div>
+
+          {/* Right Velvet Curtain Panel */}
+          <div
+            className="royal-curtain-drape royal-curtain-drape-right absolute top-0 bottom-0 right-0 w-1/2 z-20"
+            style={{
+              transform:
+                curtainPhase === 'opening'
+                  ? 'translate3d(104%, 0, 0) scaleX(0.92)'
+                  : 'translate3d(0%, 0, 0) scaleX(1)',
+            }}
+          >
+            {/* Gilded inner edge bullion cord */}
+            <div className="royal-curtain-seam absolute top-0 bottom-0 left-0 w-[3px]" />
+          </div>
+
+          {/* Center Royal Crest Seal (fades upward gracefully as curtains part) */}
+          <div
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center px-6 text-center transition-all duration-1000 ease-out"
+            style={{
+              opacity: curtainPhase === 'opening' ? 0 : 1,
+              transform:
+                curtainPhase === 'opening'
+                  ? 'translate3d(0, -14px, 0) scale(1.06)'
+                  : 'translate3d(0, 0, 0) scale(1)',
+            }}
+          >
+            <div className="relative p-1 rounded-3xl bg-gradient-to-br from-[#F7E8B0] via-[#D4AF37] to-[#8C6D2B] shadow-[0_0_50px_rgba(212,175,55,0.35)]">
+              <div className="rounded-[20px] bg-[#14110F] px-7 py-6 sm:px-9 sm:py-7 border border-[#D4AF37]/40 flex flex-col items-center gap-3">
+                <div className="relative inline-flex items-center justify-center">
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -inset-2 rounded-full bg-[#D4AF37]/30 blur-lg animate-twinkle"
+                  />
+                  <RoyalLogo className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-[#D4AF37] shadow-xl p-1" />
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -top-2 -right-2 text-xs text-[#F7E8B0] animate-twinkle"
+                  >
+                    ✦
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -bottom-1.5 -left-2 text-[10px] text-[#D4AF37] animate-twinkle"
+                    style={{ animationDelay: '1.1s' }}
+                  >
+                    ✦
+                  </span>
+                </div>
+                <div>
+                  <div className="font-serif-royal font-bold text-lg sm:text-xl tracking-[0.16em] royal-foil-name">
+                    JSG ROYALS
+                  </div>
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-[#C5A869] mt-1">
+                    Chapter 2 · 2027
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Optional immediate Skip trigger while closed */}
+          {curtainPhase === 'closed' && (
+            <button
+              type="button"
+              onClick={() => setCurtainPhase('opening')}
+              className="pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2 z-40 text-[11px] font-medium tracking-[0.14em] uppercase text-[#C5A869]/80 hover:text-[#F3DF9C] transition-colors cursor-pointer px-3 py-1.5"
+            >
+              Skip Intro
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* COMPACT ANIMATED ROYAL LEADERSHIP BANNER (PRESIDENT & SECRETARY)          */}
       {/* ========================================================================= */}
       {currentView === 'gate' && (
-        <div className="max-w-2xl mx-auto px-4 pt-5 sm:pt-7 relative z-10 animate-fade-in-up">
+        <div
+          className="max-w-2xl mx-auto px-4 pt-5 sm:pt-7 relative z-10 transition-all duration-[1800ms] ease-out"
+          style={{
+            opacity: curtainPhase === 'closed' ? 0.35 : 1,
+            transform: curtainPhase === 'closed' ? 'scale(0.985) translate3d(0, 8px, 0)' : 'scale(1) translate3d(0, 0, 0)',
+          }}
+        >
           <div className="relative rounded-2xl p-[1px] overflow-hidden royal-box-shadow">
             {/* Orbiting metallic gold border sheen */}
             <div
@@ -1663,8 +1824,9 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#C5A869]">
-                        President
+                      <span className="inline-flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#C5A869]">
+                        <span aria-hidden="true" className="text-[9px] text-[#F7E8B0] animate-twinkle">✦</span>
+                        <span>President</span>
                       </span>
                       <a
                         href={`tel:${ROYAL_LEADERSHIP.presidentPhone.replace(/\s+/g, '')}`}
@@ -1697,8 +1859,15 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#C5A869]">
-                        Secretary
+                      <span className="inline-flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#C5A869]">
+                        <span
+                          aria-hidden="true"
+                          className="text-[9px] text-[#F7E8B0] animate-twinkle"
+                          style={{ animationDelay: '0.9s' }}
+                        >
+                          ✦
+                        </span>
+                        <span>Secretary</span>
                       </span>
                       <a
                         href={`tel:${ROYAL_LEADERSHIP.secretaryPhone.replace(/\s+/g, '')}`}
@@ -1723,16 +1892,55 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       {/* VIEW 1: FIRST-FOLD ENTRANCE GATE (MEMBER TYPE + EMAIL ENTRY)              */}
       {/* ========================================================================= */}
       {currentView === 'gate' && (
-        <div className="max-w-2xl mx-auto px-4 pt-4 pb-12 sm:pb-16 relative z-10 animate-fade-in-up">
+        <div
+          className="max-w-2xl mx-auto px-4 pt-4 pb-12 sm:pb-16 relative z-10 transition-all duration-[1800ms] ease-out"
+          style={{
+            opacity: curtainPhase === 'closed' ? 0.35 : 1,
+            transform: curtainPhase === 'closed' ? 'scale(0.985) translate3d(0, 10px, 0)' : 'scale(1) translate3d(0, 0, 0)',
+          }}
+        >
           <div className="bg-[#FFFFFF]/96 backdrop-blur-md border border-[#DFD1B4] rounded-3xl p-6 sm:p-9 relative overflow-hidden royal-box-shadow">
             
             {/* Gilded Top Shimmer Accent */}
             <div className="absolute top-0 left-0 right-0 h-1 shimmer-gold-bg" />
             <RoyalCornerBrackets />
 
-            {/* Centered Royal Crest Emblem */}
+            {/* Centered Royal Crest Emblem with Luxury Twinkle Sparkle */}
             <div className="text-center pt-1 pb-2">
-              <RoyalLogo className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-2 border-[#D4AF37] mx-auto shadow-xl p-1" />
+              <div className="relative inline-flex items-center justify-center">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -inset-3 rounded-3xl bg-[#D4AF37]/25 blur-xl animate-twinkle"
+                />
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -top-2.5 -left-3 text-sm text-[#D4AF37] animate-twinkle"
+                >
+                  ✦
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -top-2 -right-3 text-xs text-[#B89748] animate-twinkle"
+                  style={{ animationDelay: '0.7s' }}
+                >
+                  ✧
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -bottom-2 -right-2.5 text-sm text-[#D4AF37] animate-twinkle"
+                  style={{ animationDelay: '1.4s' }}
+                >
+                  ✦
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -bottom-1.5 -left-3 text-xs text-[#C5A869] animate-twinkle"
+                  style={{ animationDelay: '2.1s' }}
+                >
+                  ✧
+                </span>
+                <RoyalLogo className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-2 border-[#D4AF37] shadow-xl p-1 animate-pulse-gold" />
+              </div>
               <RoyalFlourish className="mt-4 mb-2" />
             </div>
 
@@ -1757,10 +1965,11 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 
                 {/* Mandatory Membership Type Selection */}
                 <div>
-                  <label className={`block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2 ${
+                  <label className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] mb-2 ${
                     gateFieldError === 'membership' ? 'text-red-700' : 'text-[#44403C]'
                   }`}>
-                    Membership Type *
+                    <span aria-hidden="true" className="text-[#D4AF37] animate-twinkle">✦</span>
+                    <span>Membership Type *</span>
                   </label>
                   <div className={`grid grid-cols-2 gap-2 p-1.5 rounded-2xl border ${
                     gateFieldError === 'membership'
@@ -1818,8 +2027,15 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
                 {/* Role Selection (Compact Single Row) */}
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#44403C] mb-2">
-                    Your Role
+                  <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#44403C] mb-2">
+                    <span
+                      aria-hidden="true"
+                      className="text-[#D4AF37] animate-twinkle"
+                      style={{ animationDelay: '0.6s' }}
+                    >
+                      ✦
+                    </span>
+                    <span>Your Role</span>
                   </label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
@@ -1852,10 +2068,17 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
                 {/* Email Input */}
                 <div>
-                  <label className={`block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2 ${
+                  <label className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] mb-2 ${
                     gateFieldError === 'email' ? 'text-red-700' : 'text-[#44403C]'
                   }`}>
-                    Email Address *
+                    <span
+                      aria-hidden="true"
+                      className="text-[#D4AF37] animate-twinkle"
+                      style={{ animationDelay: '1.2s' }}
+                    >
+                      ✦
+                    </span>
+                    <span>Email Address *</span>
                   </label>
                   <div className="relative">
                     <Mail className={`w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 ${
@@ -1938,8 +2161,10 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
                 {/* 6-Digit Verification Code Input */}
                 <div className="text-center space-y-3">
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[#44403C]">
-                    Enter 6-Digit Royal Verification Code
+                  <label className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#44403C]">
+                    <span aria-hidden="true" className="text-[#D4AF37] animate-twinkle">✦</span>
+                    <span>Enter 6-Digit Royal Verification Code</span>
+                    <span aria-hidden="true" className="text-[#D4AF37] animate-twinkle" style={{ animationDelay: '0.8s' }}>✦</span>
                   </label>
                   <div className="relative max-w-xs mx-auto">
                     <input
@@ -2024,8 +2249,15 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 <ShieldCheck className="w-3.5 h-3.5 text-[#8C6D2B]" />
                 <span>Zero Duplicate Entries · Automated Cross-Spouse Synchronization</span>
               </p>
-              {onOpenAdmin && (
-                <div className="pt-0.5">
+              <div className="pt-0.5 flex flex-wrap items-center justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={replayCurtainReveal}
+                  className="text-[10px] text-[#A8A29E] hover:text-[#8C6D2B] tracking-[0.14em] uppercase transition-colors cursor-pointer"
+                >
+                  Replay Curtain Reveal
+                </button>
+                {onOpenAdmin && (
                   <button
                     type="button"
                     onClick={onOpenAdmin}
@@ -2033,8 +2265,8 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   >
                     Secretariat &amp; Gateway Console
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -2444,7 +2676,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         required
                         data-field-error={fieldErrors.husbandName ? 'true' : undefined}
                         aria-invalid={Boolean(fieldErrors.husbandName)}
-                        placeholder="e.g. Subodh Samota"
+                        placeholder="e.g. Aarav Jain"
                         value={husbandName}
                         onChange={(e) => {
                           setHusbandName(e.target.value);
@@ -2615,7 +2847,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                             required
                             data-field-error={fieldErrors.husbandOrganization ? 'true' : undefined}
                             aria-invalid={Boolean(fieldErrors.husbandOrganization)}
-                            placeholder="e.g. Samota Industries"
+                            placeholder="e.g. Arihant Industries"
                             value={husbandOrganization}
                             onChange={(e) => {
                               setHusbandOrganization(e.target.value);
@@ -2637,7 +2869,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         required
                         data-field-error={fieldErrors.husbandInstagram ? 'true' : undefined}
                         aria-invalid={Boolean(fieldErrors.husbandInstagram)}
-                        placeholder="e.g. @subodh_samota"
+                        placeholder="e.g. @aarav_jain"
                         value={husbandInstagram}
                         onChange={(e) => {
                           setHusbandInstagram(e.target.value);
@@ -2682,7 +2914,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         required
                         data-field-error={fieldErrors.wifeName ? 'true' : undefined}
                         aria-invalid={Boolean(fieldErrors.wifeName)}
-                        placeholder="e.g. Shaily Agrawal"
+                        placeholder="e.g. Ananya Jain"
                         value={wifeName}
                         onChange={(e) => {
                           setWifeName(e.target.value);
@@ -2875,7 +3107,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         required
                         data-field-error={fieldErrors.wifeInstagram ? 'true' : undefined}
                         aria-invalid={Boolean(fieldErrors.wifeInstagram)}
-                        placeholder="e.g. @shaily_agrawal"
+                        placeholder="e.g. @ananya_jain"
                         value={wifeInstagram}
                         onChange={(e) => {
                           setWifeInstagram(e.target.value);

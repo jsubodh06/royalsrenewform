@@ -3156,5 +3156,224 @@ apiRouter.get('/admin/new-member-applications', requireAdmin, (req: Authenticate
   }
 });
 
+function extractFamilyPhotoFilenameFromUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const trimmed = String(url).trim();
+  const marker = '/api/family/photo/';
+  const idx = trimmed.indexOf(marker);
+  if (idx !== -1) {
+    const filename = path.basename(trimmed.slice(idx + marker.length).split('?')[0].trim());
+    if (/^[a-zA-Z0-9_\-.]+$/.test(filename) && filename.length >= 3 && filename.length <= 160) {
+      return filename;
+    }
+  }
+  return null;
+}
 
+function collectFamilyRegistrationPhotoFilenames(row: any): string[] {
+  if (!row) return [];
+  const urls: Array<string | null | undefined> = [
+    row.husband_photo_url,
+    row.wife_photo_url,
+    row.couple_photo_url,
+    row.family_photo_url,
+  ];
+  let children: any[] = [];
+  if (Array.isArray(row.children)) {
+    children = row.children;
+  } else if (typeof row.children_json === 'string' && row.children_json.trim()) {
+    try {
+      const parsed = JSON.parse(row.children_json);
+      if (Array.isArray(parsed)) children = parsed;
+    } catch {}
+  }
+  for (const child of children) {
+    if (child?.photo_url) urls.push(child.photo_url);
+  }
+  const names = urls
+    .map((u) => extractFamilyPhotoFilenameFromUrl(u))
+    .filter((f): f is string => Boolean(f));
+  return Array.from(new Set(names));
+}
 
+function cleanupUnreferencedFamilyPhotos(candidateFilenames: string[]): string[] {
+  if (candidateFilenames.length === 0) return [];
+  const remainingRows = db
+    .prepare(
+      'SELECT husband_photo_url, wife_photo_url, couple_photo_url, family_photo_url, children_json FROM family_registrations'
+    )
+    .all() as any[];
+
+  const stillReferenced = new Set<string>();
+  for (const row of remainingRows) {
+    for (const fname of collectFamilyRegistrationPhotoFilenames(row)) {
+      stillReferenced.add(fname);
+    }
+  }
+
+  const deletedPhotoIds: string[] = [];
+  const familyPhotoDir = path.resolve(photosBaseDir, 'family');
+
+  for (const filename of candidateFilenames) {
+    if (stillReferenced.has(filename)) continue;
+    db.prepare('DELETE FROM family_photos WHERE filename = ?').run(filename);
+    const filePath = path.resolve(familyPhotoDir, filename);
+    if (filePath.startsWith(familyPhotoDir) && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch {}
+    }
+    deletedPhotoIds.push(filename);
+  }
+  return deletedPhotoIds;
+}
+
+// 7. Admin DELETE Family Registration (and linked new member application + orphaned photos)
+apiRouter.delete('/admin/family-registrations/:regId', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const regId = String(req.params.regId || '').trim();
+    if (!regId || !/^[a-zA-Z0-9_-]{2,128}$/.test(regId)) {
+      return res.status(400).json({ error: 'Invalid registration ID.' });
+    }
+
+    const existingReg = db.prepare('SELECT * FROM family_registrations WHERE reg_id = ?').get(regId) as any;
+    const candidatePhotos = collectFamilyRegistrationPhotoFilenames(existingReg);
+
+    let deletedLocal = false;
+    let deletedLinkedApp = false;
+    let deletedPhotoIds: string[] = [];
+
+    const tx = db.transaction(() => {
+      const regRes = db.prepare('DELETE FROM family_registrations WHERE reg_id = ?').run(regId);
+      deletedLocal = regRes.changes > 0;
+
+      const appRes = db.prepare('DELETE FROM new_member_applications WHERE app_id = ?').run(regId);
+      deletedLinkedApp = appRes.changes > 0;
+
+      deletedPhotoIds = cleanupUnreferencedFamilyPhotos(candidatePhotos);
+    });
+
+    tx();
+
+    const label = existingReg
+      ? `${existingReg.husband_name || ''} & ${existingReg.wife_name || ''} (${existingReg.submitter_email || ''})`
+      : regId;
+    logAdminAudit(
+      req.admin!.email,
+      'DELETE_FAMILY_REGISTRATION',
+      regId,
+      `Removed family registration from database: ${label}`
+    );
+
+    res.json({
+      success: true,
+      regId,
+      deletedLocal,
+      deletedLinkedApp,
+      deletedPhotoIds,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to delete family registration.' });
+  }
+});
+
+// 8. Admin DELETE New Member Application (and mirrored family registration if same ID)
+apiRouter.delete('/admin/new-member-applications/:appId', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const appId = String(req.params.appId || '').trim();
+    if (!appId || !/^[a-zA-Z0-9_-]{2,128}$/.test(appId)) {
+      return res.status(400).json({ error: 'Invalid application ID.' });
+    }
+
+    const existingApp = db.prepare('SELECT * FROM new_member_applications WHERE app_id = ?').get(appId) as any;
+    const linkedReg = db.prepare('SELECT * FROM family_registrations WHERE reg_id = ?').get(appId) as any;
+    const candidatePhotos = collectFamilyRegistrationPhotoFilenames(linkedReg);
+
+    let deletedLocal = false;
+    let deletedLinkedReg = false;
+    let deletedPhotoIds: string[] = [];
+
+    const tx = db.transaction(() => {
+      const appRes = db.prepare('DELETE FROM new_member_applications WHERE app_id = ?').run(appId);
+      deletedLocal = appRes.changes > 0;
+
+      const regRes = db.prepare('DELETE FROM family_registrations WHERE reg_id = ?').run(appId);
+      deletedLinkedReg = regRes.changes > 0;
+
+      deletedPhotoIds = cleanupUnreferencedFamilyPhotos(candidatePhotos);
+    });
+
+    tx();
+
+    const label = existingApp
+      ? `${existingApp.applicant_name || ''} (${existingApp.email || ''})`
+      : appId;
+    logAdminAudit(
+      req.admin!.email,
+      'DELETE_NEW_MEMBER_APPLICATION',
+      appId,
+      `Removed new member application from database: ${label}`
+    );
+
+    res.json({
+      success: true,
+      appId,
+      deletedLocal,
+      deletedLinkedReg,
+      deletedPhotoIds,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to delete new member application.' });
+  }
+});
+
+// 9. Admin DELETE Year-1 / Year-2 Roster Member (cascades profile, preferences, submissions, notes, photos)
+apiRouter.delete('/admin/member/:coupleId', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const coupleId = String(req.params.coupleId || '').trim().toUpperCase();
+    if (!coupleId || !/^[a-zA-Z0-9_-]{2,64}$/.test(coupleId)) {
+      return res.status(400).json({ error: 'Invalid Couple ID.' });
+    }
+
+    const existingMember = db.prepare('SELECT * FROM members WHERE couple_id = ?').get(coupleId) as any;
+    const existingPhotos = db.prepare('SELECT storage_path FROM photos WHERE couple_id = ?').all(coupleId) as any[];
+
+    let deletedLocal = false;
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM otp_codes WHERE couple_id = ?').run(coupleId);
+      const resDel = db.prepare('DELETE FROM members WHERE couple_id = ?').run(coupleId);
+      deletedLocal = resDel.changes > 0;
+    });
+    tx();
+
+    const coupleDir = path.resolve(photosBaseDir, coupleId);
+    for (const p of existingPhotos) {
+      if (p?.storage_path) {
+        const filePath = path.resolve(process.cwd(), p.storage_path);
+        if (filePath.startsWith(coupleDir) && fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+          } catch {}
+        }
+      }
+    }
+
+    const label = existingMember
+      ? `${existingMember.husband_name || ''} & ${existingMember.wife_name || ''}`
+      : coupleId;
+    logAdminAudit(
+      req.admin!.email,
+      'DELETE_MEMBER',
+      coupleId,
+      `Removed roster member and linked records from database: ${label}`
+    );
+
+    res.json({
+      success: true,
+      coupleId,
+      deletedLocal,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to delete member record.' });
+  }
+});

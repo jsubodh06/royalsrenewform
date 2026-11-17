@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -531,3 +532,114 @@ export async function syncLocalOnlyRecordsToFirestore(
 
   return { syncedRegistrations, syncedApplications };
 }
+
+function isValidFirestoreDocId(id: string): boolean {
+  return id.length > 0 && id.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(id);
+}
+
+function isValidFirestorePhotoId(id: string): boolean {
+  return id.length >= 3 && id.length <= 160 && /^[a-zA-Z0-9_.\-]+$/.test(id);
+}
+
+export async function deleteFamilyPhotoFromFirestore(photoId: string): Promise<void> {
+  if (!isAuthorizedFirebaseAdmin() || !isValidFirestorePhotoId(photoId)) {
+    return;
+  }
+  const path = `family_photos/${photoId}`;
+  try {
+    await deleteDoc(doc(db, 'family_photos', photoId));
+    photoMemoryCache.delete(photoId);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function deleteFamilyRegistrationFromFirestore(
+  regId: string,
+  photoIdsToClean: string[] = [],
+  alsoDeleteMirroredApp = false
+): Promise<void> {
+  if (!isAuthorizedFirebaseAdmin()) {
+    return;
+  }
+  const cleanRegId = clampStr(regId, 128);
+  if (!isValidFirestoreDocId(cleanRegId)) {
+    throw new Error(`Invalid Firestore registration ID: ${cleanRegId}`);
+  }
+
+  const regPath = `family_registrations/${cleanRegId}`;
+  try {
+    await deleteDoc(doc(db, 'family_registrations', cleanRegId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, regPath);
+  }
+
+  if (alsoDeleteMirroredApp) {
+    const appPath = `new_member_applications/${cleanRegId}`;
+    try {
+      await deleteDoc(doc(db, 'new_member_applications', cleanRegId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, appPath);
+    }
+  }
+
+  const uniquePhotoIds = Array.from(new Set(photoIdsToClean.filter(isValidFirestorePhotoId)));
+  for (const photoId of uniquePhotoIds) {
+    await deleteFamilyPhotoFromFirestore(photoId);
+  }
+}
+
+export async function deleteNewMemberApplicationFromFirestore(
+  appId: string,
+  linkedRegId?: string | null,
+  photoIdsToClean: string[] = []
+): Promise<void> {
+  if (!isAuthorizedFirebaseAdmin()) {
+    return;
+  }
+  const cleanAppId = clampStr(appId, 128);
+  if (!isValidFirestoreDocId(cleanAppId)) {
+    throw new Error(`Invalid Firestore application ID: ${cleanAppId}`);
+  }
+
+  const appPath = `new_member_applications/${cleanAppId}`;
+  try {
+    await deleteDoc(doc(db, 'new_member_applications', cleanAppId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, appPath);
+  }
+
+  if (linkedRegId && isValidFirestoreDocId(linkedRegId)) {
+    const regPath = `family_registrations/${linkedRegId}`;
+    try {
+      await deleteDoc(doc(db, 'family_registrations', linkedRegId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, regPath);
+    }
+  }
+
+  const uniquePhotoIds = Array.from(new Set(photoIdsToClean.filter(isValidFirestorePhotoId)));
+  for (const photoId of uniquePhotoIds) {
+    await deleteFamilyPhotoFromFirestore(photoId);
+  }
+}
+
+export async function deleteMemberFromFirestore(coupleId: string): Promise<void> {
+  if (!isAuthorizedFirebaseAdmin()) {
+    return;
+  }
+  const cleanId = clampStr(coupleId, 20).toUpperCase();
+  if (!/^JR[0-9]{3}$/.test(cleanId)) {
+    return;
+  }
+
+  for (const colName of ['submissions', 'year2_profiles', 'members'] as const) {
+    const docPath = `${colName}/${cleanId}`;
+    try {
+      await deleteDoc(doc(db, colName, cleanId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, docPath);
+    }
+  }
+}
+

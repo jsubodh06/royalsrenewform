@@ -898,4 +898,39 @@ export async function getAdminNewMemberApplicationsApi(adminToken: string) {
   });
 }
 
+export async function deleteAdminFamilyRegistrationApi(adminToken: string, regId: string) {
+  return apiRequest<{
+    success: boolean;
+    regId: string;
+    deletedLocal: boolean;
+    deletedLinkedApp: boolean;
+    deletedPhotoIds: string[];
+  }>(`/admin/family-registrations/${encodeURIComponent(regId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+}
 
+export async function deleteAdminNewMemberApplicationApi(adminToken: string, appId: string) {
+  return apiRequest<{
+    success: boolean;
+    appId: string;
+    deletedLocal: boolean;
+    deletedLinkedReg: boolean;
+    deletedPhotoIds: string[];
+  }>(`/admin/new-member-applications/${encodeURIComponent(appId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+}
+
+export async function deleteAdminMemberApi(adminToken: string, coupleId: string) {
+  return apiRequest<{
+    success: boolean;
+    coupleId: string;
+    deletedLocal: boolean;
+  }>(`/admin/member/${encodeURIComponent(coupleId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+}

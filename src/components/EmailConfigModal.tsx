@@ -212,7 +212,7 @@ export const EmailConfigModal: React.FC<EmailConfigModalProps> = ({ isOpen, onCl
                 <input
                   type="email"
                   required
-                  placeholder="e.g. subodhjain2007777@gmail.com"
+                  placeholder="e.g. yourname@gmail.com"
                   value={gmailUser}
                   onChange={(e) => setGmailUser(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
