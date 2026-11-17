@@ -108,15 +108,16 @@
 
 /* Royal parchment & luxury gradient backgrounds */
 .bg-royal-parchment {
-  background-color: #FAF6EF;
-  background-image: 
-    radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.08) 0%, transparent 60%),
-    radial-gradient(circle at 80% 90%, rgba(197, 168, 105, 0.06) 0%, transparent 50%),
-    radial-gradient(circle at 10% 80%, rgba(140, 109, 43, 0.05) 0%, transparent 40%);
+  background-color: #F9F5EC;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(212, 175, 55, 0.10) 0%, transparent 65%),
+    radial-gradient(circle at 88% 85%, rgba(197, 168, 105, 0.08) 0%, transparent 48%),
+    radial-gradient(circle at 12% 72%, rgba(140, 109, 43, 0.06) 0%, transparent 44%),
+    linear-gradient(180deg, rgba(255, 252, 245, 0.65) 0%, rgba(247, 241, 229, 0.45) 100%);
 }
 
 .bg-royal-obsidian {
-  background: linear-gradient(145deg, #181513 0%, #110F0E 50%, #1A1715 100%);
+  background: linear-gradient(145deg, #1A1614 0%, #110E0C 52%, #1D1814 100%);
 }
 
 .gold-embossed-text {
@@ -124,7 +125,11 @@
 }
 
 .royal-box-shadow {
-  box-shadow: 0 10px 30px -10px rgba(28, 25, 23, 0.08), 0 0 0 1px rgba(197, 168, 105, 0.25), 0 20px 40px -15px rgba(212, 175, 55, 0.07);
+  box-shadow:
+    inset 0 0 0 1px rgba(197, 168, 105, 0.16),
+    0 1px 2px rgba(28, 25, 23, 0.04),
+    0 14px 36px -14px rgba(28, 25, 23, 0.12),
+    0 24px 52px -18px rgba(140, 109, 43, 0.11);
 }
 
 .royal-glow-active {
@@ -134,6 +139,11 @@
 .gilded-frame {
   border: 2px solid #C5A869;
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.8), 0 8px 24px -6px rgba(140, 109, 43, 0.25);
+}
+
+.royal-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(197, 168, 105, 0.48) 50%, transparent 100%);
 }
 
 /* Page Transition: Smooth Fade-In and Slide-Up */

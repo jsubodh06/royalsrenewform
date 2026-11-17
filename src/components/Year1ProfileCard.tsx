@@ -282,7 +282,7 @@ export const Year1ProfileCard: React.FC<Year1ProfileCardProps> = ({
                 onClick={onGoToYear2 || onConfirmYear1}
                 className="w-full py-3 px-4 rounded-xl bg-[#FAF7F2] hover:bg-[#EFE6D5] text-[#8C6D2B] font-semibold text-xs tracking-wider uppercase transition-all border border-[#DFCFAE] flex items-center justify-center gap-2"
               >
-                <span>Proceed to Year-2 Form</span>
+                <span>Proceed to Chapter-2 Form</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

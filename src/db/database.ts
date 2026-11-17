@@ -269,6 +269,7 @@ export function initDatabase() {
       husband_occupation TEXT,
       husband_organization TEXT,
       husband_blood_group TEXT,
+      husband_instagram TEXT,
 
       wife_name TEXT NOT NULL,
       wife_mobile TEXT NOT NULL,
@@ -278,6 +279,7 @@ export function initDatabase() {
       wife_occupation TEXT,
       wife_organization TEXT,
       wife_blood_group TEXT,
+      wife_instagram TEXT,
 
       marriage_anniversary TEXT NOT NULL,
       current_city TEXT NOT NULL,
@@ -447,6 +449,12 @@ function ensureFamilyRegistrationColumns() {
     }
     if (!columnNames.includes('business_description')) {
       db.exec('ALTER TABLE family_registrations ADD COLUMN business_description TEXT');
+    }
+    if (!columnNames.includes('husband_instagram')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN husband_instagram TEXT');
+    }
+    if (!columnNames.includes('wife_instagram')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN wife_instagram TEXT');
     }
   } catch (e) {
     console.error('ensureFamilyRegistrationColumns error:', e);

@@ -104,10 +104,10 @@ service cloud.firestore {
           'reg_id', 'membership_type', 'submitted_by_role', 'submitter_email',
           'husband_name', 'husband_mobile', 'husband_email', 'husband_dob',
           'husband_qualification', 'husband_occupation', 'husband_organization',
-          'husband_blood_group', 'husband_photo_url',
+          'husband_blood_group', 'husband_instagram', 'husband_photo_url',
           'wife_name', 'wife_mobile', 'wife_email', 'wife_dob',
           'wife_qualification', 'wife_occupation', 'wife_organization',
-          'wife_blood_group', 'wife_photo_url',
+          'wife_blood_group', 'wife_instagram', 'wife_photo_url',
           'marriage_anniversary', 'current_city', 'residential_address', 'native_place',
           'has_children', 'children', 'couple_photo_url', 'family_photo_url',
           'contribution_areas', 'royal_idea', 'jsg_should_be_known_for',
@@ -141,16 +141,18 @@ service cloud.firestore {
         (data.husband_occupation == null || (data.husband_occupation is string && data.husband_occupation.size() <= 200)) &&
         (data.husband_organization == null || (data.husband_organization is string && data.husband_organization.size() <= 200)) &&
         (data.husband_blood_group == null || (data.husband_blood_group is string && data.husband_blood_group.size() <= 10)) &&
-        (data.husband_photo_url == null || (data.husband_photo_url is string && data.husband_photo_url.size() <= 1000)) &&
+        (data.husband_instagram == null || (data.husband_instagram is string && data.husband_instagram.size() <= 120)) &&
+        ((data.husband_photo_url == null && data.membership_type == 'existing') || (data.husband_photo_url is string && data.husband_photo_url.size() >= 1 && data.husband_photo_url.size() <= 1000)) &&
         (data.wife_dob == null || (data.wife_dob is string && data.wife_dob.size() <= 40)) &&
         (data.wife_qualification == null || (data.wife_qualification is string && data.wife_qualification.size() <= 200)) &&
         (data.wife_occupation == null || (data.wife_occupation is string && data.wife_occupation.size() <= 200)) &&
         (data.wife_organization == null || (data.wife_organization is string && data.wife_organization.size() <= 200)) &&
         (data.wife_blood_group == null || (data.wife_blood_group is string && data.wife_blood_group.size() <= 10)) &&
-        (data.wife_photo_url == null || (data.wife_photo_url is string && data.wife_photo_url.size() <= 1000)) &&
+        (data.wife_instagram == null || (data.wife_instagram is string && data.wife_instagram.size() <= 120)) &&
+        ((data.wife_photo_url == null && data.membership_type == 'existing') || (data.wife_photo_url is string && data.wife_photo_url.size() >= 1 && data.wife_photo_url.size() <= 1000)) &&
         (data.native_place == null || (data.native_place is string && data.native_place.size() <= 200)) &&
-        (data.couple_photo_url == null || (data.couple_photo_url is string && data.couple_photo_url.size() <= 1000)) &&
-        (data.family_photo_url == null || (data.family_photo_url is string && data.family_photo_url.size() <= 1000)) &&
+        ((data.couple_photo_url == null && data.membership_type == 'existing') || (data.couple_photo_url is string && data.couple_photo_url.size() >= 1 && data.couple_photo_url.size() <= 1000)) &&
+        ((data.family_photo_url == null && data.membership_type == 'existing') || (data.family_photo_url is string && data.family_photo_url.size() >= 1 && data.family_photo_url.size() <= 1000)) &&
         (data.contribution_areas == null || (data.contribution_areas is string && data.contribution_areas.size() <= 1000)) &&
         (data.royal_idea == null || (data.royal_idea is string && data.royal_idea.size() <= 2000)) &&
         (data.jsg_should_be_known_for == null || (data.jsg_should_be_known_for is string && data.jsg_should_be_known_for.size() <= 2000)) &&

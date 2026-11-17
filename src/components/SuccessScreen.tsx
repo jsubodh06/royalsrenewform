@@ -41,12 +41,12 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
           </h1>
 
           <p className="font-serif italic text-base sm:text-lg text-[#78716C] mb-6">
-            Your Year-2 details have been successfully submitted.
+            Your Chapter-2 details have been successfully submitted.
           </p>
 
           <div className="bg-[#FAF7F2] border border-[#E7DDCE] rounded-2xl p-4 mb-6 max-w-sm mx-auto text-xs text-[#57534E] space-y-1">
             <div className="font-serif-royal font-bold text-sm text-[#1C1917]">
-              JSG Royals — Year 2 • 2027
+              JSG Royals — Chapter 2 • 2027
             </div>
             <div className="text-[#8C6D2B] font-semibold">
               One Royal Family.
@@ -68,7 +68,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
           <div className="bg-[#FAF4E6] border border-[#DFCFAE] rounded-2xl p-3.5 mb-6 text-xs text-[#8C6D2B] flex items-center justify-center gap-2">
             <Lock className="w-4 h-4 shrink-0" />
             <span>
-              Your Year-2 membership update has already been submitted for Couple ID <strong>{member.couple_id}</strong>.
+              Your Chapter-2 membership update has already been submitted for Couple ID <strong>{member.couple_id}</strong>.
             </span>
           </div>
 
@@ -78,7 +78,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
             className="inline-flex items-center gap-2 text-xs font-bold text-[#1C1917] hover:text-[#8C6D2B] underline decoration-[#D4AF37] transition-colors"
           >
             <Eye className="w-4 h-4" />
-            <span>{showSummary ? 'Hide Submitted Details' : 'View Your Submitted Year-2 Details'}</span>
+            <span>{showSummary ? 'Hide Submitted Details' : 'View Your Submitted Chapter-2 Details'}</span>
           </button>
 
           {/* Expanded Summary */}
@@ -148,10 +148,10 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
 
                 {profile?.photo_id && (
                   <div className="pt-2 border-t border-[#EBE1D0]">
-                    <span className="text-[#78716C] block text-[11px] mb-1">Year-2 Royal Photograph</span>
+                    <span className="text-[#78716C] block text-[11px] mb-1">Chapter-2 Royal Photograph</span>
                     <img
                       src={`/api/member/photo/${profile.photo_id}?token=${token}`}
-                      alt="Year-2 Photograph"
+                      alt="Chapter-2 Photograph"
                       className="max-h-48 w-auto rounded-lg border border-[#DFCFAE] shadow-xs"
                     />
                   </div>

@@ -511,6 +511,10 @@ export async function requestFamilyEmailOtpApi(
 ) {
   return apiRequest<{
     success: boolean;
+    bypassOtp?: boolean;
+    verified?: boolean;
+    alreadyRegistered?: boolean;
+    registration?: any;
     email: string;
     role: 'husband' | 'wife';
     expiresInSeconds: number;

@@ -437,7 +437,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
       await submitYear2Api(token);
       onSuccessSubmit();
     } catch (err: any) {
-      setSubmitErrorMessage(err.message || 'Failed to submit Year-2 update.');
+      setSubmitErrorMessage(err.message || 'Failed to submit Chapter-2 update.');
     } finally {
       setSubmitting(false);
     }
@@ -486,10 +486,10 @@ export const Year2Form: React.FC<Year2FormProps> = ({
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <h2 className="font-serif-royal text-2xl font-bold text-[#1C1917]">
-            Your Year-2 update has already been submitted.
+            Your Chapter-2 update has already been submitted.
           </h2>
           <p className="text-sm text-[#78716C] max-w-md mx-auto">
-            Thank you, Royals! Your Year-2 membership details for {member.couple_id} are safely recorded in the registry and locked from duplicate submissions.
+            Thank you, Royals! Your Chapter-2 membership details for {member.couple_id} are safely recorded in the registry and locked from duplicate submissions.
           </p>
           {submissionDate && (
             <p className="text-xs font-mono text-[#8C6D2B]">
@@ -520,7 +520,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
           <span>{member.couple_id} • {member.husband_name} &amp; {member.wife_name}</span>
         </div>
         <h1 className="font-serif-royal text-2xl sm:text-3xl font-extrabold text-[#1C1917] tracking-tight">
-          Welcome to JSG Royals — Year 2 👑
+          Welcome to JSG Royals — Chapter 2 👑
         </h1>
         <p className="font-serif italic text-base sm:text-lg text-[#78716C]">
           Let&apos;s make 2027 another year to remember.
@@ -539,7 +539,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
                 Welcome back, Royals 👑
               </h3>
               <p className="text-xs text-[#78716C]">
-                You&apos;ve already started your Year-2 update. We saved your draft so you can easily continue.
+                You&apos;ve already started your Chapter-2 update. We saved your draft so you can easily continue.
               </p>
             </div>
           </div>
@@ -825,7 +825,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
                 Step 3 of 7
               </span>
               <h2 className="font-serif-royal text-xl sm:text-2xl font-bold text-[#1C1917]">
-                What would make Year 2 special?
+                What would make Chapter 2 special?
               </h2>
               <p className="text-xs text-[#78716C]">
                 Select the gatherings, retreats, and experiences you would love to enjoy with JSG Royals in 2027.
@@ -877,7 +877,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
                     type="text"
                     value={wishlistOther}
                     onChange={(e) => setWishlistOther(e.target.value)}
-                    placeholder="What else would you love to see happen in Year 2?"
+                    placeholder="What else would you love to see happen in Chapter 2?"
                     className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] bg-[#FFFFFF] text-sm text-[#1C1917] focus:outline-none focus:ring-2 focus:ring-[#8C6D2B]/30"
                   />
                 </div>
@@ -1085,7 +1085,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
                 Step 6 of 7
               </span>
               <h2 className="font-serif-royal text-xl sm:text-2xl font-bold text-[#1C1917] flex items-center gap-2">
-                <span>One picture for Year 2 📸</span>
+                <span>One picture for Chapter 2 📸</span>
               </h2>
               <p className="text-xs text-[#78716C]">
                 Let&apos;s capture one more Royal memory.
@@ -1128,7 +1128,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
                 <div className="relative group rounded-xl overflow-hidden bg-black/5 border border-[#DFCFAE] flex items-center justify-center p-2">
                   <img
                     src={`/api/member/photo/${photoData.id}?token=${token}`}
-                    alt="Year 2 Royal Memory"
+                    alt="Chapter 2 Royal Memory"
                     className="max-h-72 w-auto object-contain rounded-lg shadow-sm"
                   />
                 </div>
@@ -1187,10 +1187,10 @@ export const Year2Form: React.FC<Year2FormProps> = ({
 
                 <div className="space-y-1">
                   <h3 className="font-serif-royal font-bold text-base text-[#1C1917]">
-                    {uploadingPhoto ? 'Validating and uploading photo...' : 'Click to select your Year-2 photograph'}
+                    {uploadingPhoto ? 'Validating and uploading photo...' : 'Click to select your Chapter-2 photograph'}
                   </h3>
                   <p className="text-xs text-[#78716C] max-w-sm mx-auto">
-                    Choose one high-resolution family or couple photograph to be treasured in the JSG Royals Year-2 registry.
+                    Choose one high-resolution family or couple photograph to be treasured in the JSG Royals Chapter-2 registry.
                   </p>
                 </div>
 
@@ -1214,7 +1214,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
                 Step 7 of 7 • Final Review
               </span>
               <h2 className="font-serif-royal text-xl sm:text-2xl font-bold text-[#1C1917]">
-                Review Your Year-2 Dossier
+                Review Your Chapter-2 Dossier
               </h2>
               <p className="text-xs text-[#78716C]">
                 Please review your responses before final submission. You can click Edit to change any section.
@@ -1402,7 +1402,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
               <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EFEAE1] space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-bold uppercase tracking-wider text-[#8C6D2B] flex items-center gap-1.5">
-                    <Camera className="w-3.5 h-3.5" /> 6. Year-2 Royal Photograph
+                    <Camera className="w-3.5 h-3.5" /> 6. Chapter-2 Royal Photograph
                   </span>
                   <button
                     type="button"
@@ -1463,7 +1463,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
                 ) : (
                   <>
                     <Crown className="w-4 h-4 text-[#D4AF37]" />
-                    <span>Submit Year-2 Update</span>
+                    <span>Submit Chapter-2 Update</span>
                   </>
                 )}
               </button>
@@ -1519,7 +1519,7 @@ export const Year2Form: React.FC<Year2FormProps> = ({
                 Start over from beginning?
               </h3>
               <p className="text-xs text-[#78716C] mt-1 leading-relaxed">
-                This will clear all your currently entered Year-2 draft answers and reset the form to Step 1. Your permanent Year-1 club records will not be affected.
+                This will clear all your currently entered Chapter-2 draft answers and reset the form to Step 1. Your permanent Year-1 club records will not be affected.
               </p>
             </div>
             <div className="flex items-center justify-end gap-3 pt-2">

@@ -23,7 +23,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onBegin, onOpenAdm
         {/* Brand Typography */}
         <div className="space-y-2 mb-6">
           <div className="inline-block px-3 py-1 rounded-full bg-[#EFE6D5] border border-[#DFCFAE] text-[#8C6D2B] text-xs font-semibold tracking-widest uppercase">
-            Year 2 • 2027
+            Chapter 2 • 2027
           </div>
           <h1 className="font-serif-royal text-3xl sm:text-4xl font-extrabold tracking-wide text-[#1C1917]">
             JSG ROYALS
@@ -40,8 +40,8 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onBegin, onOpenAdm
             Private Member Portal
           </div>
           <p className="text-sm text-[#44403C] leading-relaxed">
-            Welcome to the official Year-2 portal for our 110 esteemed Royal couples.
-            Please verify your registered mobile number to review your Year-1 profile and complete your Year-2 membership details.
+            Welcome to the official Chapter-2 portal for our 110 esteemed Royal couples.
+            Please verify your registered mobile number to review your Year-1 profile and complete your Chapter-2 membership details.
           </p>
 
           <div className="border-t border-[#F0E8DC] pt-3 grid grid-cols-2 gap-3 text-xs text-[#57534E]">
@@ -69,7 +69,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onBegin, onOpenAdm
           onClick={onBegin}
           className="w-full py-4 px-6 rounded-2xl bg-[#1C1917] hover:bg-[#2A2623] active:scale-[0.99] text-[#FAF7F2] font-semibold text-base shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 border border-[#C5A869]/30 group"
         >
-          <span>Begin Year 2</span>
+          <span>Begin Chapter 2</span>
           <ArrowRight className="w-5 h-5 text-[#D4AF37] group-hover:translate-x-1 transition-transform" />
         </button>
 

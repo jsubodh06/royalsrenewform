@@ -242,7 +242,7 @@ export const VerificationScreen: React.FC<VerificationScreenProps> = ({
                 <span className="font-semibold text-[#1C1917]">OTP Verification Code</span>
               </div>
               <p className="text-[12px] text-[#78716C] leading-relaxed">
-                Enter the 6-digit code received on your registered phone <strong className="text-[#1C1917]">+91 {mobile}</strong> to access your Year-2 renewal form.
+                Enter the 6-digit code received on your registered phone <strong className="text-[#1C1917]">+91 {mobile}</strong> to access your Chapter-2 renewal form.
               </p>
             </div>
 

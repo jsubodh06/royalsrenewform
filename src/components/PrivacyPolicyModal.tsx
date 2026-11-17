@@ -26,7 +26,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
                 Privacy & Data Security Policy
               </h2>
               <p className="text-xs text-[#78716C]">
-                JSG Royals Year 2 • 2027 Official Member Policy
+                JSG Royals Chapter 2 • 2027 Official Member Policy
               </p>
             </div>
           </div>
@@ -73,7 +73,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
               <span>3. Private Membership Photo Storage</span>
             </div>
             <p className="text-xs text-[#57534E] pl-6 leading-relaxed">
-              Year-2 family/couple photographs are stored in private cloud storage. They are never published to open public URLs
+              Chapter-2 family/couple photographs are stored in private cloud storage. They are never published to open public URLs
               or indexable web pages. Photos are validated for genuine file headers (magic bytes) up to a 10 MB limit and can only
               be accessed through secure, authenticated member or committee administrator tokens.
             </p>

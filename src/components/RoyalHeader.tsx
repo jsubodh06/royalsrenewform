@@ -21,49 +21,51 @@ export const RoyalHeader: React.FC<RoyalHeaderProps> = ({
   activeView,
 }) => {
   return (
-    <header className="sticky top-0 z-40 bg-[#FAF7F2]/95 backdrop-blur-md border-b border-[#E2D5BE] shadow-xs">
-      <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
+    <header className="sticky top-0 z-40 bg-[#FAF6EE]/95 backdrop-blur-md border-b border-[#DFD1B4] shadow-[0_1px_12px_rgba(28,25,23,0.04)]">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-3.5 flex items-center justify-between gap-4">
         {/* Brand Crest */}
-        <div 
+        <div
           onClick={onBackToPortal}
-          className="flex items-center gap-3.5 cursor-pointer group select-none"
+          className="flex items-center gap-3.5 cursor-pointer group select-none min-w-0"
         >
-          <RoyalLogo className="w-12 h-12 rounded-2xl border border-[#C5A869]/80 shadow-md p-0.5 transition-all group-hover:scale-105 group-hover:border-[#D4AF37]" />
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-serif-royal font-bold text-lg sm:text-xl tracking-wider text-[#1C1917]">
+          <RoyalLogo className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl border border-[#C5A869]/80 shadow-sm p-0.5 transition-all duration-200 group-hover:scale-[1.03] group-hover:border-[#D4AF37]" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+              <span className="font-serif-royal font-bold text-base sm:text-lg tracking-[0.08em] text-[#1C1917] whitespace-nowrap shrink-0">
                 JSG ROYALS
               </span>
-              <span className="text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-md bg-[#1C1917] text-[#D4AF37] border border-[#C5A869]/40 shadow-2xs">
-                Year 2 • 2027
+              <span aria-hidden="true" className="hidden sm:inline-block h-3.5 w-px bg-[#C5A869]/60" />
+              <span className="text-[11px] uppercase tracking-[0.16em] font-semibold text-[#8C6D2B] whitespace-nowrap shrink-0">
+                Chapter 2 · 2027
               </span>
             </div>
-            <p className="text-[11px] text-[#8C6D2B] font-medium tracking-wide flex items-center gap-1.5">
-              <span>✦</span>
-              <span>One Royal Family</span>
-              <span>✦</span>
-              <span className="text-[#A8A29E]">Master Directory</span>
+            <p className="text-[11px] text-[#78716C] font-medium tracking-wide flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
+              <span className="text-[#C5A869]">✦</span>
+              <span className="text-[#8C6D2B]">One Royal Family</span>
+              <span aria-hidden="true" className="text-[#C5A869]">·</span>
+              <span>Master Directory</span>
             </p>
           </div>
         </div>
 
         {/* Right Action / Profile */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           {memberSession && activeView !== 'admin' && (
-            <div className="flex items-center gap-2 bg-[#F1E9DA] border border-[#DFD1BD] px-3.5 py-1.5 rounded-xl text-xs font-medium text-[#1C1917]">
-              <span className="font-serif font-bold text-[#8C6D2B]">
+            <div className="flex items-center gap-2.5 bg-[#F3EBDC] border border-[#DECFAF] px-3.5 py-2 rounded-xl text-xs font-medium text-[#1C1917] whitespace-nowrap shrink-0">
+              <span className="font-serif-royal font-bold text-[#8C6D2B] tracking-wide">
                 {memberSession.coupleId}
               </span>
-              <span className="hidden sm:inline text-[#A8A29E]">/</span>
+              <span className="hidden sm:inline text-[#C5A869]">·</span>
               <span className="hidden sm:inline font-medium text-[#44403C]">
                 {memberSession.spouseType === 'husband'
                   ? (memberSession.husbandName?.trim() ? memberSession.husbandName.split(' ')[0] : 'Husband')
                   : (memberSession.wifeName?.trim() ? memberSession.wifeName.split(' ')[0] : 'Wife')}
               </span>
               <button
+                type="button"
                 onClick={onLogout}
                 title="Sign out"
-                className="ml-1 p-1 hover:text-red-700 transition-colors text-[#78716C] cursor-pointer"
+                className="ml-0.5 p-1 rounded-md hover:bg-red-50 hover:text-red-700 transition-colors text-[#78716C] cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
               </button>
@@ -72,8 +74,9 @@ export const RoyalHeader: React.FC<RoyalHeaderProps> = ({
 
           {activeView === 'admin' && (
             <button
+              type="button"
               onClick={onBackToPortal}
-              className="text-xs font-semibold px-4 py-2 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] text-[#FAF7F2] border border-[#C5A869]/40 transition-all cursor-pointer shadow-xs"
+              className="text-xs font-semibold px-4 py-2 min-h-[38px] rounded-xl bg-[#1C1917] hover:bg-[#2A2623] text-[#FAF7F2] border border-[#C5A869]/50 transition-all cursor-pointer shadow-xs whitespace-nowrap shrink-0"
             >
               ← Return to Royal Portal
             </button>

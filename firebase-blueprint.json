@@ -191,6 +191,11 @@
           "description": "Husband blood group",
           "maxLength": 10
         },
+        "husband_instagram": {
+          "type": "string",
+          "description": "Husband Instagram handle",
+          "maxLength": 120
+        },
         "husband_photo_url": {
           "type": "string",
           "description": "Husband photo URL or Drive link",
@@ -238,6 +243,11 @@
           "type": "string",
           "description": "Wife blood group",
           "maxLength": 10
+        },
+        "wife_instagram": {
+          "type": "string",
+          "description": "Wife Instagram handle",
+          "maxLength": 120
         },
         "wife_photo_url": {
           "type": "string",

@@ -307,7 +307,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'How Can You Contribute',
       'Reference Name',
       'Reference Mobile',
-      'Business Description',
+      'Business/Job',
       'President Name',
       'President Mobile',
       'Secretary Name',
@@ -373,6 +373,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'Husband Occupation',
       'Husband Organization',
       'Husband Blood Group',
+      'Husband Instagram',
       'Husband Photo / Drive URL',
       'Wife Name',
       'Wife Mobile',
@@ -382,6 +383,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'Wife Occupation',
       'Wife Organization',
       'Wife Blood Group',
+      'Wife Instagram',
       'Wife Photo / Drive URL',
       'Couple Photo / Drive URL',
       'Family Photo / Drive URL',
@@ -404,7 +406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'Other Group Name',
       'Reference Name',
       'Reference Mobile',
-      'Business Description',
+      'Business/Job',
       'Contribution to Group',
       'Status',
       'Registered At'
@@ -441,6 +443,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         escapeCsv(r.husband_occupation),
         escapeCsv(r.husband_organization),
         escapeCsv(r.husband_blood_group),
+        escapeCsv(r.husband_instagram || ''),
         escapeCsv(resolveFullMediaUrl(r.husband_photo_url)),
         escapeCsv(r.wife_name),
         escapeCsv(r.wife_mobile),
@@ -450,6 +453,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         escapeCsv(r.wife_occupation),
         escapeCsv(r.wife_organization),
         escapeCsv(r.wife_blood_group),
+        escapeCsv(r.wife_instagram || ''),
         escapeCsv(resolveFullMediaUrl(r.wife_photo_url)),
         escapeCsv(resolveFullMediaUrl(r.couple_photo_url)),
         escapeCsv(resolveFullMediaUrl(r.family_photo_url)),
@@ -1235,7 +1239,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 JSG Royals Administration
               </span>
             <span className="px-2.5 py-0.5 rounded-full bg-[#1C1917] text-[#D4AF37] text-[10px] font-bold uppercase tracking-wider border border-[#C5A869]/30">
-              Year 2 • 2027
+              Chapter 2 • 2027
             </span>
             {adminSession?.role && (
               <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold uppercase tracking-wider border border-amber-300">
@@ -1330,7 +1334,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span className="font-serif-royal text-2xl font-black text-white">
               {familyRegistrations.length}
             </span>
-            <span className="text-[10px] text-[#C5A869] block mt-0.5">Year 2 Renewals</span>
+            <span className="text-[10px] text-[#C5A869] block mt-0.5">Chapter 2 Renewals</span>
           </div>
 
           <div className="bg-[#FAF7F2] p-4 rounded-2xl border-2 border-[#C5A869]/70 shadow-xs">
@@ -1647,6 +1651,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           (reg.wife_mobile || '').includes(term) ||
                           (reg.husband_email || '').toLowerCase().includes(term) ||
                           (reg.wife_email || '').toLowerCase().includes(term) ||
+                          (reg.husband_instagram || '').toLowerCase().includes(term) ||
+                          (reg.wife_instagram || '').toLowerCase().includes(term) ||
                           (reg.current_city || '').toLowerCase().includes(term) ||
                           (reg.reg_id || '').toLowerCase().includes(term)
                         );
@@ -1677,11 +1683,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="font-bold text-[#1C1917]">{reg.husband_name}</div>
                             <div className="text-[11px] text-[#78716C]">{reg.husband_mobile}</div>
                             <div className="text-[11px] text-[#78716C] truncate max-w-[140px]">{reg.husband_email}</div>
+                            {reg.husband_instagram && <div className="text-[11px] text-[#8C6D2B] truncate max-w-[140px]">📷 {reg.husband_instagram}</div>}
                           </td>
                           <td className="px-4 py-3">
                             <div className="font-bold text-[#1C1917]">{reg.wife_name}</div>
                             <div className="text-[11px] text-[#78716C]">{reg.wife_mobile}</div>
                             <div className="text-[11px] text-[#78716C] truncate max-w-[140px]">{reg.wife_email}</div>
+                            {reg.wife_instagram && <div className="text-[11px] text-rose-700 truncate max-w-[140px]">📷 {reg.wife_instagram}</div>}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <div className="font-semibold text-[#1C1917]">{reg.marriage_anniversary}</div>
@@ -1920,7 +1928,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   New Member Applications (Pending Review)
                 </h3>
                 <p className="text-xs text-[#78716C]">
-                  Prospective member applications submitted for Year 2 review &amp; committee approval
+                  Prospective member applications submitted for Chapter 2 review &amp; committee approval
                 </p>
               </div>
             </div>
@@ -2106,9 +2114,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </select>
                 </div>
 
-                {/* Year 2 Status Filter */}
+                {/* Chapter 2 Status Filter */}
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] uppercase font-bold text-[#78716C]">Year 2:</span>
+                  <span className="text-[10px] uppercase font-bold text-[#78716C]">Chapter 2:</span>
                   <select
                     value={year2Filter}
                     onChange={(e) => {
@@ -2117,7 +2125,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }}
                     className="text-xs bg-[#FAF8F5] border border-[#D9CDB8] rounded-lg px-2.5 py-1.5 text-[#1C1917] outline-hidden focus:ring-2 focus:ring-[#C5A869]"
                   >
-                    <option value="all">All Year-2 Status</option>
+                    <option value="all">All Chapter-2 Status</option>
                     <option value="submitted">Submitted Only</option>
                     <option value="draft">Draft / Incomplete</option>
                     <option value="not_started">Not Started</option>
@@ -2171,7 +2179,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <th className="py-3 px-3">Husband & Wife</th>
                   <th className="py-3 px-3">Registered Mobile</th>
                   <th className="py-3 px-3">Auth Status</th>
-                  <th className="py-3 px-3">Year-2 Status</th>
+                  <th className="py-3 px-3">Chapter-2 Status</th>
                   <th className="py-3 px-3">Correction Status</th>
                   <th className="py-3 px-3">Last Activity</th>
                   <th className="py-3 px-3 text-right">Actions</th>
@@ -2607,7 +2615,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="w-6 h-6 text-[#8C6D2B]" />
               <h3 className="font-serif-royal font-bold text-xl text-[#1C1917]">
-                Export Year-2 Submissions & Registry
+                Export Chapter-2 Submissions & Registry
               </h3>
             </div>
             <p className="text-xs text-[#78716C] mt-1">
@@ -2625,7 +2633,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="space-y-2">
                 {[
                   { id: 'all', label: 'All 110 Royal Couples (Full Registry)' },
-                  { id: 'submitted', label: 'Submitted Only (Completed Year 2 Updates)' },
+                  { id: 'submitted', label: 'Submitted Only (Completed Chapter 2 Updates)' },
                   { id: 'not_submitted', label: 'Not Submitted (Incomplete Drafts + Not Started)' },
                   { id: 'verified', label: 'Verified Only (OTP Authenticated)' },
                   { id: 'corrections', label: 'Couples with Correction Requests' },
@@ -2919,7 +2927,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <ul className="space-y-1 list-disc list-inside text-[11px]">
               <li><strong>Zero Aadhaar:</strong> Aadhaar numbers or URLs are strictly blocked at ingestion and cannot be stored or exposed anywhere in the portal.</li>
               <li><strong>Protected Identity Master:</strong> Couple IDs, names, registered mobiles, DOBs, and anniversaries are immutable for members; discrepancies must be routed through the correction workflow.</li>
-              <li><strong>Shared Couple Mapping:</strong> Both the husband&apos;s and wife&apos;s registered mobiles authenticate to the exact same Couple ID and the same Year-2 dossier.</li>
+              <li><strong>Shared Couple Mapping:</strong> Both the husband&apos;s and wife&apos;s registered mobiles authenticate to the exact same Couple ID and the same Chapter-2 dossier.</li>
               <li><strong>RLS &amp; Isolation:</strong> Authenticated sessions can query only their own Couple ID, preventing cross-couple data leakage.</li>
             </ul>
           </div>
@@ -3757,7 +3765,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     {memberDetail.submission ? (
                       <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
-                        Year-2 Submitted ✓ ({new Date(memberDetail.submission.submitted_at).toLocaleDateString()})
+                        Chapter-2 Submitted ✓ ({new Date(memberDetail.submission.submitted_at).toLocaleDateString()})
                       </span>
                     ) : memberDetail.verifications && memberDetail.verifications.length > 0 ? (
                       <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-semibold">
@@ -3783,7 +3791,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[11px] font-bold text-[#8C6D2B] uppercase tracking-wider flex items-center gap-1.5">
                         <Camera className="w-3.5 h-3.5" />
-                        Year-2 Family / Couple Photograph
+                        Chapter-2 Family / Couple Photograph
                       </span>
                       <span className="text-[10px] text-[#78716C]">
                         Photo ID: {memberDetail.year2Profile.photo_id}
@@ -3823,11 +3831,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <p><strong>Business:</strong> {memberDetail.member.year1_business || '—'}</p>
                   </div>
 
-                  {/* Year 2 Updates */}
+                  {/* Chapter 2 Updates */}
                   <div className="p-4 bg-[#F5EFE6] rounded-2xl border border-[#DFCFAE] space-y-2">
                     <div className="flex items-center justify-between border-b border-[#DFCFAE] pb-1.5">
                       <span className="text-[11px] font-bold text-[#8C6D2B] uppercase tracking-wider">
-                        Year-2 Member Updates
+                        Chapter-2 Member Updates
                       </span>
                       <span className="text-[10px] text-[#8C6D2B] font-semibold">
                         {memberDetail.submission ? 'Submitted' : 'Draft'}
@@ -3841,11 +3849,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Year 2 Preferences & Vision */}
+                {/* Chapter 2 Preferences & Vision */}
                 {memberDetail.year2Preferences && (
                   <div className="p-4 bg-[#FAF8F5] rounded-2xl border border-[#E7DDCE] space-y-3">
                     <span className="text-[11px] font-bold text-[#8C6D2B] uppercase tracking-wider block">
-                      Year-2 Wishlist & Royals Vision
+                      Chapter-2 Wishlist & Royals Vision
                     </span>
                     <div>
                       <strong className="block text-[11px] text-[#78716C] mb-1">Wishlist Interests:</strong>
@@ -3917,7 +3925,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <form onSubmit={handleAddAdminNote} className="pt-2 flex gap-2">
                     <input
                       type="text"
-                      placeholder="Add an internal note (e.g. Verified via WhatsApp; sent Year 2 kit)..."
+                      placeholder="Add an internal note (e.g. Verified via WhatsApp; sent Chapter 2 kit)..."
                       value={newNoteText}
                       onChange={(e) => setNewNoteText(e.target.value)}
                       className="flex-1 px-3 py-1.5 rounded-lg border border-stone-300 bg-white text-xs text-stone-900 outline-hidden focus:ring-2 focus:ring-[#8C6D2B]"
@@ -3954,7 +3962,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="flex items-center gap-1.5 text-emerald-800 font-semibold">
                         <Check className="w-3 h-3 text-emerald-700 shrink-0" />
                         <span>
-                          Final Year-2 submission recorded on {new Date(memberDetail.submission.submitted_at).toLocaleString()}
+                          Final Chapter-2 submission recorded on {new Date(memberDetail.submission.submitted_at).toLocaleString()}
                         </span>
                       </div>
                     )}
@@ -4046,6 +4054,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {viewingFamilyModal.husband_occupation && <div>💼 Profession: <span className="text-[#1C1917]">{viewingFamilyModal.husband_occupation}</span></div>}
                   {viewingFamilyModal.husband_organization && <div>🏢 Organization: <span className="text-[#1C1917]">{viewingFamilyModal.husband_organization}</span></div>}
                   {viewingFamilyModal.husband_blood_group && <div>🩸 Blood Group: <strong className="text-rose-700">{viewingFamilyModal.husband_blood_group}</strong></div>}
+                  {viewingFamilyModal.husband_instagram && <div>📷 Instagram: <span className="text-[#1C1917] font-medium">{viewingFamilyModal.husband_instagram}</span></div>}
                   {viewingFamilyModal.husband_photo_url && (
                     <div className="pt-2 border-t border-[#E2D5BE] space-y-2">
                       <span className="text-[10px] font-bold uppercase text-[#8C6D2B] block">Husband Photo / Drive URL</span>
@@ -4131,6 +4140,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {viewingFamilyModal.wife_occupation && <div>💼 Profession: <span className="text-[#1C1917]">{viewingFamilyModal.wife_occupation}</span></div>}
                   {viewingFamilyModal.wife_organization && <div>🏢 Organization: <span className="text-[#1C1917]">{viewingFamilyModal.wife_organization}</span></div>}
                   {viewingFamilyModal.wife_blood_group && <div>🩸 Blood Group: <strong className="text-rose-700">{viewingFamilyModal.wife_blood_group}</strong></div>}
+                  {viewingFamilyModal.wife_instagram && <div>📷 Instagram: <span className="text-[#1C1917] font-medium">{viewingFamilyModal.wife_instagram}</span></div>}
                   {viewingFamilyModal.wife_photo_url && (
                     <div className="pt-2 border-t border-[#E2D5BE] space-y-2">
                       <span className="text-[10px] font-bold uppercase text-rose-800 block">Wife Photo / Drive URL</span>
@@ -4436,7 +4446,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {(viewingFamilyModal.contribution_areas || viewingFamilyModal.royal_idea || viewingFamilyModal.jsg_should_be_known_for) && (
               <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#E7DDCE] space-y-2.5 text-xs">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C6D2B] block">
-                  Contributions &amp; Year 2 Vision
+                  Contributions &amp; Chapter 2 Vision
                 </span>
                 {viewingFamilyModal.contribution_areas && (
                   <div>
@@ -4446,7 +4456,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 )}
                 {viewingFamilyModal.royal_idea && (
                   <div>
-                    <span className="text-[10px] text-[#78716C] block">Royal Year 2 Idea:</span>
+                    <span className="text-[10px] text-[#78716C] block">Royal Chapter 2 Idea:</span>
                     <p className="italic bg-white p-2.5 rounded-xl border border-[#E2D5BE] mt-0.5 text-[#1C1917]">
                       &ldquo;{viewingFamilyModal.royal_idea}&rdquo;
                     </p>
@@ -4517,7 +4527,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 {viewingFamilyModal.business_description && (
                   <div className="p-3 rounded-xl bg-white border border-amber-200/70">
-                    <span className="text-[10px] text-[#78716C] block mb-0.5">Business Description</span>
+                    <span className="text-[10px] text-[#78716C] block mb-0.5">Business/Job</span>
                     <p className="text-[#1C1917] whitespace-pre-wrap leading-relaxed">
                       {viewingFamilyModal.business_description}
                     </p>
@@ -4610,7 +4620,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div className="p-4 rounded-2xl bg-white border border-[#E7DDCE] space-y-2 text-xs">
-              <span className="text-[10px] uppercase font-bold text-[#8C6D2B] block">Business Description</span>
+              <span className="text-[10px] uppercase font-bold text-[#8C6D2B] block">Business/Job</span>
               <p className="text-[#1C1917] leading-relaxed">{viewingNewAppModal.business_description}</p>
             </div>
 

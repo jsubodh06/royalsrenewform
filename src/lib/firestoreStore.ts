@@ -134,6 +134,7 @@ export function buildFirestoreFamilyRegistrationPayload(reg: any) {
     husband_occupation: clampOptionalStr(reg?.husband_occupation, 200),
     husband_organization: clampOptionalStr(reg?.husband_organization, 200),
     husband_blood_group: clampOptionalStr(reg?.husband_blood_group, 10),
+    husband_instagram: clampOptionalStr(reg?.husband_instagram, 120),
     husband_photo_url: clampOptionalStr(reg?.husband_photo_url, 1000),
 
     wife_name: clampStr(reg?.wife_name, 150) || 'Spouse',
@@ -144,6 +145,7 @@ export function buildFirestoreFamilyRegistrationPayload(reg: any) {
     wife_occupation: clampOptionalStr(reg?.wife_occupation, 200),
     wife_organization: clampOptionalStr(reg?.wife_organization, 200),
     wife_blood_group: clampOptionalStr(reg?.wife_blood_group, 10),
+    wife_instagram: clampOptionalStr(reg?.wife_instagram, 120),
     wife_photo_url: clampOptionalStr(reg?.wife_photo_url, 1000),
 
     marriage_anniversary: clampRequiredStr(reg?.marriage_anniversary, 4, 40, '2000-01-01'),

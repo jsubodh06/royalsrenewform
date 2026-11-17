@@ -9,9 +9,83 @@ const ROYALS_LOGO_DISK_PATH = path.resolve(
   'public/assets/aistudio/file_00000000679071f5a5e7d2bf243a4828__1__fe221d87.png'
 );
 
+const OTP_BYPASS_EMAILS = new Set(['jsubodh06@gmail.com']);
+
+function buildExistingRegistrationCheck(email: string) {
+  const existingRecord = db.prepare(`
+    SELECT * FROM family_registrations 
+    WHERE LOWER(husband_email) = ? OR LOWER(wife_email) = ?
+    ORDER BY id DESC LIMIT 1
+  `).get(email, email) as any;
+
+  if (!existingRecord) {
+    return {
+      isAlreadyRegistered: false,
+      alreadyRegistered: false,
+      filedBySpouse: false,
+      spouseName: '',
+      spouseRole: 'husband' as 'husband' | 'wife',
+      message: 'Email address verified successfully!',
+      registration: undefined as any,
+    };
+  }
+
+  const isHusbandEmail = existingRecord.husband_email.toLowerCase() === email;
+  const isWifeEmail = existingRecord.wife_email.toLowerCase() === email;
+  const submittedByRole = existingRecord.submitted_by_role;
+
+  let filedBySpouse = false;
+  let spouseName = '';
+  let spouseRole: 'husband' | 'wife' = 'husband';
+  let message = '';
+
+  const dateFormatted = new Date(existingRecord.created_at).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+
+  if (isWifeEmail && submittedByRole === 'husband') {
+    filedBySpouse = true;
+    spouseName = existingRecord.husband_name;
+    spouseRole = 'husband';
+    message = `✨ Your husband, ${existingRecord.husband_name}, has already registered your royal household on ${dateFormatted}!`;
+  } else if (isHusbandEmail && submittedByRole === 'wife') {
+    filedBySpouse = true;
+    spouseName = existingRecord.wife_name;
+    spouseRole = 'wife';
+    message = `✨ Your wife, ${existingRecord.wife_name}, has already registered your royal household on ${dateFormatted}!`;
+  } else {
+    filedBySpouse = false;
+    spouseName = submittedByRole === 'husband' ? existingRecord.wife_name : existingRecord.husband_name;
+    spouseRole = submittedByRole === 'husband' ? 'wife' : 'husband';
+    message = `✨ Your royal family dossier was already recorded on ${dateFormatted}.`;
+  }
+
+  let parsedChildren = [];
+  try {
+    parsedChildren = existingRecord.children_json ? JSON.parse(existingRecord.children_json) : [];
+  } catch (e) {
+    parsedChildren = [];
+  }
+
+  return {
+    isAlreadyRegistered: true,
+    alreadyRegistered: true,
+    filedBySpouse,
+    spouseName,
+    spouseRole,
+    message,
+    registration: {
+      ...existingRecord,
+      children: parsedChildren
+    }
+  };
+}
+
 function generateRoyalEmailText(otp: string): string {
   return [
-    'JSG Royals Year 2 - Member Portal',
+    'JSG Royals Chapter 2 - Member Portal',
     '',
     'Hello,',
     '',
@@ -37,7 +111,7 @@ function generateRoyalEmailHtml(otp: string, useCidLogo = false) {
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Georgia, serif; max-width: 540px; margin: 0 auto; background: #FAF6EF; border: 1px solid #C5A869; border-radius: 16px; overflow: hidden;">
       <div style="background: #122619; padding: 24px; text-align: center; border-bottom: 2px solid #D4AF37;">
         ${logoHtml}
-        <h1 style="color: #FAF7F2; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">JSG Royals Year 2</h1>
+        <h1 style="color: #FAF7F2; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">JSG Royals Chapter 2</h1>
         <p style="color: #C5A869; margin: 4px 0 0; font-size: 12px;">Member Portal Verification</p>
       </div>
       <div style="padding: 28px 24px; text-align: center; color: #1C1917; background: #FFFFFF;">
@@ -406,6 +480,29 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
     throw new Error('Please enter a valid email address.');
   }
 
+  // Bypass OTP verification completely for allowlisted email
+  if (OTP_BYPASS_EMAILS.has(email)) {
+    const existingInfo = buildExistingRegistrationCheck(email);
+    return {
+      success: true,
+      bypassOtp: true,
+      verified: true,
+      email,
+      role,
+      expiresInSeconds: 0,
+      cooldownSeconds: 0,
+      emailSentReal: false,
+      providerUsed: 'bypass',
+      isAlreadyRegistered: existingInfo.isAlreadyRegistered,
+      alreadyRegistered: existingInfo.alreadyRegistered,
+      spouseName: existingInfo.spouseName,
+      spouseRole: existingInfo.spouseRole,
+      filedBySpouse: existingInfo.filedBySpouse,
+      message: existingInfo.alreadyRegistered ? existingInfo.message : 'Verification bypassed — access granted.',
+      registration: existingInfo.registration,
+    };
+  }
+
   const now = Date.now();
   const cooldownMs = 30 * 1000; // 30 seconds cooldown
 
@@ -553,11 +650,30 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
 }
 
 // 2. Verify 6-digit Email OTP
-export function verifyEmailOtp(rawEmail: string, rawOtp: string) {
+export function verifyEmailOtp(rawEmail: string, rawOtp: string, role: 'husband' | 'wife' = 'husband') {
   const email = (rawEmail || '').trim().toLowerCase();
   const otp = (rawOtp || '').trim();
 
-  if (!email || !otp) {
+  if (!email) {
+    throw new Error('Email address is required.');
+  }
+
+  if (OTP_BYPASS_EMAILS.has(email)) {
+    const existingInfo = buildExistingRegistrationCheck(email);
+    return {
+      verified: true,
+      email,
+      role,
+      alreadyRegistered: existingInfo.alreadyRegistered,
+      filedBySpouse: existingInfo.filedBySpouse,
+      spouseName: existingInfo.spouseName,
+      spouseRole: existingInfo.spouseRole,
+      message: existingInfo.message,
+      registration: existingInfo.registration,
+    };
+  }
+
+  if (!otp) {
     throw new Error('Email address and 6-digit verification code are required.');
   }
 
@@ -598,75 +714,17 @@ export function verifyEmailOtp(rawEmail: string, rawOtp: string) {
   // Mark as verified
   db.prepare('UPDATE email_otp_codes SET verified = 1 WHERE id = ?').run(record.id);
 
-  // Check if family dossier is already registered
-  const existingRecord = db.prepare(`
-    SELECT * FROM family_registrations 
-    WHERE LOWER(husband_email) = ? OR LOWER(wife_email) = ?
-    ORDER BY id DESC LIMIT 1
-  `).get(email, email) as any;
-
-  if (existingRecord) {
-    const isHusbandEmail = existingRecord.husband_email.toLowerCase() === email;
-    const isWifeEmail = existingRecord.wife_email.toLowerCase() === email;
-    const submittedByRole = existingRecord.submitted_by_role;
-
-    let filedBySpouse = false;
-    let spouseName = '';
-    let spouseRole: 'husband' | 'wife' = 'husband';
-    let message = '';
-
-    const dateFormatted = new Date(existingRecord.created_at).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
-
-    if (isWifeEmail && submittedByRole === 'husband') {
-      filedBySpouse = true;
-      spouseName = existingRecord.husband_name;
-      spouseRole = 'husband';
-      message = `✨ Your husband, ${existingRecord.husband_name}, has already registered your royal household on ${dateFormatted}!`;
-    } else if (isHusbandEmail && submittedByRole === 'wife') {
-      filedBySpouse = true;
-      spouseName = existingRecord.wife_name;
-      spouseRole = 'wife';
-      message = `✨ Your wife, ${existingRecord.wife_name}, has already registered your royal household on ${dateFormatted}!`;
-    } else {
-      filedBySpouse = false;
-      spouseName = submittedByRole === 'husband' ? existingRecord.wife_name : existingRecord.husband_name;
-      spouseRole = submittedByRole === 'husband' ? 'wife' : 'husband';
-      message = `✨ Your royal family dossier was already recorded on ${dateFormatted}.`;
-    }
-
-    let parsedChildren = [];
-    try {
-      parsedChildren = existingRecord.children_json ? JSON.parse(existingRecord.children_json) : [];
-    } catch (e) {
-      parsedChildren = [];
-    }
-
-    return {
-      verified: true,
-      email,
-      role: record.role,
-      alreadyRegistered: true,
-      filedBySpouse,
-      spouseName,
-      spouseRole,
-      message,
-      registration: {
-        ...existingRecord,
-        children: parsedChildren
-      }
-    };
-  }
-
+  const existingInfo = buildExistingRegistrationCheck(email);
   return {
     verified: true,
     email,
     role: record.role,
-    alreadyRegistered: false,
-    message: 'Email address verified successfully!'
+    alreadyRegistered: existingInfo.alreadyRegistered,
+    filedBySpouse: existingInfo.filedBySpouse,
+    spouseName: existingInfo.spouseName,
+    spouseRole: existingInfo.spouseRole,
+    message: existingInfo.message,
+    registration: existingInfo.registration,
   };
 }
 
