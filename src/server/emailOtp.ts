@@ -14,9 +14,9 @@ const OTP_BYPASS_EMAILS = new Set(['jsubodh06@gmail.com']);
 function buildExistingRegistrationCheck(email: string) {
   const existingRecord = db.prepare(`
     SELECT * FROM family_registrations 
-    WHERE LOWER(husband_email) = ? OR LOWER(wife_email) = ?
+    WHERE LOWER(submitter_email) = ? OR LOWER(husband_email) = ? OR LOWER(wife_email) = ?
     ORDER BY id DESC LIMIT 1
-  `).get(email, email) as any;
+  `).get(email, email, email) as any;
 
   if (!existingRecord) {
     return {

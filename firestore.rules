@@ -114,6 +114,8 @@ service cloud.firestore {
           'president_name', 'president_mobile', 'secretary_name', 'secretary_mobile',
           'other_group_member', 'other_group_name', 'new_member_contribution',
           'reference_name', 'reference_mobile', 'business_description',
+          'exp_rating', 'exp_favourite_event', 'exp_international_trip',
+          'exp_trip_month_destination', 'exp_missing',
           'status', 'created_at', 'updated_at', 'createdAt', 'updatedAt'
         ]) &&
         data.reg_id == regId &&
@@ -165,7 +167,12 @@ service cloud.firestore {
         (data.new_member_contribution == null || (data.new_member_contribution is string && data.new_member_contribution.size() <= 2000)) &&
         (data.reference_name == null || (data.reference_name is string && data.reference_name.size() <= 150)) &&
         (data.reference_mobile == null || (data.reference_mobile is string && data.reference_mobile.size() <= 20)) &&
-        (data.business_description == null || (data.business_description is string && data.business_description.size() <= 2000));
+        (data.business_description == null || (data.business_description is string && data.business_description.size() <= 2000)) &&
+        (data.exp_rating == null || (data.exp_rating is number && data.exp_rating >= 1 && data.exp_rating <= 10)) &&
+        (data.exp_favourite_event == null || (data.exp_favourite_event is string && data.exp_favourite_event.size() <= 1000)) &&
+        (data.exp_international_trip == null || data.exp_international_trip in ['Yes', 'No']) &&
+        (data.exp_trip_month_destination == null || (data.exp_trip_month_destination is string && data.exp_trip_month_destination.size() <= 300)) &&
+        (data.exp_missing == null || (data.exp_missing is string && data.exp_missing.size() <= 2000));
     }
 
     function isValidNewMemberApplication(data, appId) {
@@ -241,7 +248,7 @@ service cloud.firestore {
       allow delete: if isValidCoupleId(coupleId) && isAdmin();
     }
 
-    // 6. Family Registrations: Strict write-once dossier dropbox; Admin-only read/list/update/delete
+    // 6. Family Registrations: Dossier upsert by registered household email; Admin-only read/list/delete & status updates
     match /family_registrations/{regId} {
       allow get: if isValidId(regId) && isAdmin();
       allow list: if isAdmin();
@@ -251,17 +258,26 @@ service cloud.firestore {
         request.resource.data.updatedAt == request.time &&
         request.resource.data.status in ['submitted', 'pending_review'];
       allow update: if isValidId(regId) &&
-        isAdmin() &&
         isValidFamilyRegistration(request.resource.data, regId) &&
         request.resource.data.reg_id == existing().reg_id &&
         request.resource.data.createdAt == existing().createdAt &&
         request.resource.data.created_at == existing().created_at &&
         request.resource.data.updatedAt == request.time &&
-        request.resource.data.diff(existing()).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']);
+        (
+          isAdmin() || (
+            existing().status in ['submitted', 'pending_review'] &&
+            request.resource.data.status in ['submitted', 'pending_review'] &&
+            (
+              request.resource.data.submitter_email == existing().submitter_email ||
+              request.resource.data.submitter_email == existing().husband_email ||
+              request.resource.data.submitter_email == existing().wife_email
+            )
+          )
+        );
       allow delete: if isValidId(regId) && isAdmin();
     }
 
-    // 7. New Member Applications: Strict write-once application dropbox; Admin-only read/list/update/delete
+    // 7. New Member Applications: Upsert by applicant email; Admin-only read/list/delete & status updates
     match /new_member_applications/{appId} {
       allow get: if isValidId(appId) && isAdmin();
       allow list: if isAdmin();
@@ -271,13 +287,18 @@ service cloud.firestore {
         request.resource.data.updatedAt == request.time &&
         request.resource.data.status == 'pending_review';
       allow update: if isValidId(appId) &&
-        isAdmin() &&
         isValidNewMemberApplication(request.resource.data, appId) &&
         request.resource.data.app_id == existing().app_id &&
         request.resource.data.createdAt == existing().createdAt &&
         request.resource.data.created_at == existing().created_at &&
         request.resource.data.updatedAt == request.time &&
-        request.resource.data.diff(existing()).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']);
+        (
+          isAdmin() || (
+            existing().status == 'pending_review' &&
+            request.resource.data.status == 'pending_review' &&
+            request.resource.data.email == existing().email
+          )
+        );
       allow delete: if isValidId(appId) && isAdmin();
     }
 

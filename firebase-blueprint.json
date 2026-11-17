@@ -360,6 +360,30 @@
           "description": "Business description for new applicants",
           "maxLength": 2000
         },
+        "exp_rating": {
+          "type": "number",
+          "description": "Overall experience rating with JSG Royals in last tenure (1-10)"
+        },
+        "exp_favourite_event": {
+          "type": "string",
+          "description": "Favourite event or experience from the last tenure",
+          "maxLength": 1000
+        },
+        "exp_international_trip": {
+          "type": "string",
+          "description": "Interest in an international trip with JSG Royals (Yes/No)",
+          "enum": ["Yes", "No"]
+        },
+        "exp_trip_month_destination": {
+          "type": "string",
+          "description": "Preferred month & destination for international trip",
+          "maxLength": 300
+        },
+        "exp_missing": {
+          "type": "string",
+          "description": "Feedback on what was missing from the last tenure",
+          "maxLength": 2000
+        },
         "status": {
           "type": "string",
           "description": "Registration review status",

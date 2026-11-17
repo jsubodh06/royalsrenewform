@@ -310,6 +310,12 @@ export function initDatabase() {
       reference_mobile TEXT,
       business_description TEXT,
 
+      exp_rating INTEGER,
+      exp_favourite_event TEXT,
+      exp_international_trip TEXT,
+      exp_trip_month_destination TEXT,
+      exp_missing TEXT,
+
       status TEXT NOT NULL DEFAULT 'submitted',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -455,6 +461,21 @@ function ensureFamilyRegistrationColumns() {
     }
     if (!columnNames.includes('wife_instagram')) {
       db.exec('ALTER TABLE family_registrations ADD COLUMN wife_instagram TEXT');
+    }
+    if (!columnNames.includes('exp_rating')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN exp_rating INTEGER');
+    }
+    if (!columnNames.includes('exp_favourite_event')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN exp_favourite_event TEXT');
+    }
+    if (!columnNames.includes('exp_international_trip')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN exp_international_trip TEXT');
+    }
+    if (!columnNames.includes('exp_trip_month_destination')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN exp_trip_month_destination TEXT');
+    }
+    if (!columnNames.includes('exp_missing')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN exp_missing TEXT');
     }
   } catch (e) {
     console.error('ensureFamilyRegistrationColumns error:', e);

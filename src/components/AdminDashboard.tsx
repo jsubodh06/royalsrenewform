@@ -209,6 +209,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onAdminLogout();
   };
 
+  const getRecordTimestamp = (item: any): number => {
+    return new Date(item?.updated_at || item?.created_at || 0).getTime() || 0;
+  };
+
   const mergeByUniqueKey = <T extends Record<string, any>>(
     primaryCloud: T[],
     secondaryLocal: T[],
@@ -221,13 +225,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     for (const item of primaryCloud) {
       const k = String(item?.[keyField] || item?.id || '').toUpperCase();
-      if (k) mergedMap.set(k, item);
+      if (!k) continue;
+      const existing = mergedMap.get(k);
+      if (!existing || getRecordTimestamp(item) >= getRecordTimestamp(existing)) {
+        mergedMap.set(k, item);
+      }
     }
-    return Array.from(mergedMap.values()).sort((a, b) => {
-      const tA = new Date(a?.created_at || 0).getTime();
-      const tB = new Date(b?.created_at || 0).getTime();
-      return tB - tA;
-    });
+    return Array.from(mergedMap.values()).sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a));
+  };
+
+  const deduplicateByEmailFields = <T extends Record<string, any>>(
+    records: T[],
+    emailFields: string[]
+  ): T[] => {
+    const sorted = [...records].sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a));
+    const seenEmails = new Set<string>();
+    const result: T[] = [];
+
+    for (const rec of sorted) {
+      const emails = emailFields
+        .map((field) => String(rec?.[field] || '').trim().toLowerCase())
+        .filter((e) => e.includes('@'));
+      if (emails.some((e) => seenEmails.has(e))) {
+        continue;
+      }
+      emails.forEach((e) => seenEmails.add(e));
+      result.push(rec);
+    }
+    return result;
   };
 
   const loadFamilyRegistrations = async () => {
@@ -247,13 +272,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const localList = Array.isArray(localData?.registrations) ? localData.registrations : [];
 
       if (Array.isArray(cloudRegs)) {
-        setCloudRegCount(cloudRegs.length);
         const merged = mergeByUniqueKey(cloudRegs, localList, 'reg_id');
-        setFamilyRegistrations(merged);
-        // Backfill any local-only SQLite rows up to Cloud Firestore
-        syncLocalOnlyRecordsToFirestore(localList, cloudRegs, [], []).catch(() => {});
+        const deduped = deduplicateByEmailFields(merged, ['submitter_email', 'husband_email', 'wife_email']);
+        setCloudRegCount(deduplicateByEmailFields(cloudRegs, ['submitter_email', 'husband_email', 'wife_email']).length);
+        setFamilyRegistrations(deduped);
+
+        // Backfill only genuinely missing emails/IDs from local SQLite up to Cloud Firestore
+        const cloudEmails = new Set<string>();
+        for (const cr of cloudRegs) {
+          [cr?.submitter_email, cr?.husband_email, cr?.wife_email]
+            .map((e) => String(e || '').trim().toLowerCase())
+            .filter((e) => e.includes('@'))
+            .forEach((e) => cloudEmails.add(e));
+        }
+        const localUnsynced = localList.filter((lr: any) => {
+          const lrEmails = [lr?.submitter_email, lr?.husband_email, lr?.wife_email]
+            .map((e) => String(e || '').trim().toLowerCase())
+            .filter((e) => e.includes('@'));
+          return !lrEmails.some((e) => cloudEmails.has(e));
+        });
+        if (localUnsynced.length > 0) {
+          syncLocalOnlyRecordsToFirestore(localUnsynced, cloudRegs, [], []).catch(() => {});
+        }
       } else {
-        setFamilyRegistrations(localList);
+        setFamilyRegistrations(
+          deduplicateByEmailFields(localList, ['submitter_email', 'husband_email', 'wife_email'])
+        );
       }
     } catch (err: any) {
       if (handleAuthError(err)) return;
@@ -279,12 +323,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const localList = Array.isArray(localData?.applications) ? localData.applications : [];
 
       if (Array.isArray(cloudApps)) {
-        setCloudAppCount(cloudApps.length);
         const merged = mergeByUniqueKey(cloudApps, localList, 'app_id');
-        setNewApplications(merged as NewMemberApplicationRecord[]);
-        syncLocalOnlyRecordsToFirestore([], [], localList, cloudApps).catch(() => {});
+        const deduped = deduplicateByEmailFields(merged, ['email']);
+        setCloudAppCount(deduplicateByEmailFields(cloudApps, ['email']).length);
+        setNewApplications(deduped as NewMemberApplicationRecord[]);
+
+        const cloudEmails = new Set(
+          cloudApps.map((ca: any) => String(ca?.email || '').trim().toLowerCase()).filter((e: string) => e.includes('@'))
+        );
+        const localUnsynced = localList.filter(
+          (la: any) => !cloudEmails.has(String(la?.email || '').trim().toLowerCase())
+        );
+        if (localUnsynced.length > 0) {
+          syncLocalOnlyRecordsToFirestore([], [], localUnsynced, cloudApps).catch(() => {});
+        }
       } else {
-        setNewApplications(localList);
+        setNewApplications(deduplicateByEmailFields(localList, ['email']) as NewMemberApplicationRecord[]);
       }
     } catch (err: any) {
       if (handleAuthError(err)) return;
@@ -398,6 +452,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'Contribution Areas',
       'Royal Idea',
       'JSG Vision',
+      'Experience Rating (1-10)',
+      'Favourite Event',
+      'International Trip Interest',
+      'Preferred Month & Destination',
+      'What Was Missing',
       'President Name',
       'President Mobile',
       'Secretary Name',
@@ -468,6 +527,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         escapeCsv(r.contribution_areas),
         escapeCsv(r.royal_idea),
         escapeCsv(r.jsg_should_be_known_for),
+        escapeCsv(r.exp_rating ?? ''),
+        escapeCsv(r.exp_favourite_event || ''),
+        escapeCsv(r.exp_international_trip || ''),
+        escapeCsv(r.exp_trip_month_destination || ''),
+        escapeCsv(r.exp_missing || ''),
         escapeCsv(r.president_name || ''),
         escapeCsv(r.president_mobile || ''),
         escapeCsv(r.secretary_name || ''),
@@ -1634,6 +1698,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="px-4 py-3">Wife Details</th>
                       <th className="px-4 py-3">Anniversary & City</th>
                       <th className="px-4 py-3">Children</th>
+                      <th className="px-4 py-3">Experience Feedback</th>
                       <th className="px-4 py-3">Photos &amp; Drive URLs</th>
                       <th className="px-4 py-3">Submitted At</th>
                       <th className="px-4 py-3 text-right">Action</th>
@@ -1654,6 +1719,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           (reg.husband_instagram || '').toLowerCase().includes(term) ||
                           (reg.wife_instagram || '').toLowerCase().includes(term) ||
                           (reg.current_city || '').toLowerCase().includes(term) ||
+                          (reg.exp_favourite_event || '').toLowerCase().includes(term) ||
+                          (reg.exp_trip_month_destination || '').toLowerCase().includes(term) ||
+                          (reg.exp_missing || '').toLowerCase().includes(term) ||
                           (reg.reg_id || '').toLowerCase().includes(term)
                         );
                       })
@@ -1706,6 +1774,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </div>
                             ) : (
                               <span className="text-[#78716C] italic">None</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 min-w-[180px] max-w-[230px]">
+                            {(reg.exp_rating !== null && reg.exp_rating !== undefined) ||
+                            reg.exp_favourite_event ||
+                            reg.exp_international_trip ||
+                            reg.exp_missing ? (
+                              <div className="space-y-1 text-[11px]">
+                                {reg.exp_rating !== null && reg.exp_rating !== undefined && (
+                                  <div>
+                                    <span className="inline-block px-2 py-0.5 rounded bg-[#1C1917] text-[#F3DF9C] font-bold text-[10px]">
+                                      Rating: {reg.exp_rating}/10
+                                    </span>
+                                  </div>
+                                )}
+                                {reg.exp_favourite_event && (
+                                  <div className="text-[#1C1917] truncate" title={reg.exp_favourite_event}>
+                                    <span className="text-[#78716C] font-semibold">Fav:</span> {reg.exp_favourite_event}
+                                  </div>
+                                )}
+                                {reg.exp_international_trip && (
+                                  <div className="text-[#44403C] truncate" title={reg.exp_trip_month_destination || reg.exp_international_trip}>
+                                    <span className="text-[#78716C] font-semibold">Intl Trip:</span>{' '}
+                                    {reg.exp_international_trip === 'Yes' && reg.exp_trip_month_destination
+                                      ? `Yes (${reg.exp_trip_month_destination})`
+                                      : reg.exp_international_trip}
+                                  </div>
+                                )}
+                                {reg.exp_missing && (
+                                  <div className="text-[#57534E] truncate" title={reg.exp_missing}>
+                                    <span className="text-[#78716C] font-semibold">Missing:</span> {reg.exp_missing}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[#A8A29E] italic">—</span>
                             )}
                           </td>
                           <td className="px-4 py-3">
@@ -4441,6 +4545,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <p className="text-[#A8A29E] italic">No children listed in this household registration.</p>
               )}
             </div>
+
+            {/* Existing Member Experience Feedback (Q1-Q4) */}
+            {(viewingFamilyModal.exp_rating !== null && viewingFamilyModal.exp_rating !== undefined ||
+              viewingFamilyModal.exp_favourite_event ||
+              viewingFamilyModal.exp_international_trip ||
+              viewingFamilyModal.exp_missing) && (
+              <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#E7DDCE] space-y-2.5 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C6D2B] block">
+                  JSG Royals – Experience Feedback
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-white border border-[#E2D5BE]">
+                    <span className="text-[10px] text-[#78716C] block">Q1. Overall Experience Rating (1–10)</span>
+                    <strong className="text-[#1C1917] text-sm">
+                      {viewingFamilyModal.exp_rating !== null && viewingFamilyModal.exp_rating !== undefined
+                        ? `${viewingFamilyModal.exp_rating} / 10`
+                        : '—'}
+                    </strong>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white border border-[#E2D5BE]">
+                    <span className="text-[10px] text-[#78716C] block">Q3. International Trip Interest</span>
+                    <strong className="text-[#1C1917] block">
+                      {viewingFamilyModal.exp_international_trip === 'Yes'
+                        ? `Yes${viewingFamilyModal.exp_trip_month_destination ? ` — ${viewingFamilyModal.exp_trip_month_destination}` : ''}`
+                        : viewingFamilyModal.exp_international_trip || '—'}
+                    </strong>
+                  </div>
+                </div>
+                {viewingFamilyModal.exp_favourite_event && (
+                  <div className="p-3 rounded-xl bg-white border border-[#E2D5BE]">
+                    <span className="text-[10px] text-[#78716C] block mb-0.5">Q2. Absolute Favourite Event / Experience</span>
+                    <p className="text-[#1C1917] whitespace-pre-wrap">{viewingFamilyModal.exp_favourite_event}</p>
+                  </div>
+                )}
+                {viewingFamilyModal.exp_missing && (
+                  <div className="p-3 rounded-xl bg-white border border-[#E2D5BE]">
+                    <span className="text-[10px] text-[#78716C] block mb-0.5">Q4. What Was Missing From Last Tenure</span>
+                    <p className="text-[#1C1917] whitespace-pre-wrap">{viewingFamilyModal.exp_missing}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Vision & Contributions */}
             {(viewingFamilyModal.contribution_areas || viewingFamilyModal.royal_idea || viewingFamilyModal.jsg_should_be_known_for) && (

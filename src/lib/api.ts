@@ -624,6 +624,7 @@ async function postRegisterAllowing409(body: any) {
   if (response.status === 409 && resData?.alreadyRegistered) {
     return resData as {
       success?: boolean;
+      updated?: boolean;
       regId?: string;
       membershipType?: 'existing' | 'new';
       notice?: string;
@@ -642,6 +643,7 @@ async function postRegisterAllowing409(body: any) {
 
   return resData as {
     success: boolean;
+    updated?: boolean;
     validateOnly?: boolean;
     regId: string;
     membershipType?: 'existing' | 'new';

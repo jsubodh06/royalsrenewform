@@ -43,6 +43,19 @@ function sanitizeMobile(val: unknown): string {
   return cleaned.padEnd(10, '0');
 }
 
+function sanitizeExpRating(val: unknown): number | null {
+  if (val === null || val === undefined || val === '') return null;
+  const num = Number(val);
+  if (!Number.isFinite(num)) return null;
+  const intVal = Math.round(num);
+  return intVal >= 1 && intVal <= 10 ? intVal : null;
+}
+
+function sanitizeYesNoOptional(val: unknown): 'Yes' | 'No' | null {
+  if (val === 'Yes' || val === 'No') return val;
+  return null;
+}
+
 function sanitizeChildrenList(children: unknown): Array<Record<string, string | null>> {
   let list: any[] = [];
   if (Array.isArray(children)) {
@@ -148,9 +161,9 @@ export function buildFirestoreFamilyRegistrationPayload(reg: any) {
     wife_instagram: clampOptionalStr(reg?.wife_instagram, 120),
     wife_photo_url: clampOptionalStr(reg?.wife_photo_url, 1000),
 
-    marriage_anniversary: clampRequiredStr(reg?.marriage_anniversary, 4, 40, '2000-01-01'),
-    current_city: clampStr(reg?.current_city, 120) || 'Indore',
-    residential_address: clampStr(reg?.residential_address, 600) || 'Indore',
+    marriage_anniversary: clampStr(reg?.marriage_anniversary, 40),
+    current_city: clampStr(reg?.current_city, 120),
+    residential_address: clampStr(reg?.residential_address, 600),
     native_place: clampOptionalStr(reg?.native_place, 200),
 
     has_children: Boolean(reg?.has_children),
@@ -173,6 +186,12 @@ export function buildFirestoreFamilyRegistrationPayload(reg: any) {
     reference_name: clampOptionalStr(reg?.reference_name, 150),
     reference_mobile: clampOptionalStr(reg?.reference_mobile, 20),
     business_description: clampOptionalStr(reg?.business_description, 2000),
+
+    exp_rating: sanitizeExpRating(reg?.exp_rating),
+    exp_favourite_event: clampOptionalStr(reg?.exp_favourite_event, 1000),
+    exp_international_trip: sanitizeYesNoOptional(reg?.exp_international_trip),
+    exp_trip_month_destination: clampOptionalStr(reg?.exp_trip_month_destination, 300),
+    exp_missing: clampOptionalStr(reg?.exp_missing, 2000),
 
     status,
     created_at: createdAtIso,
@@ -218,16 +237,40 @@ export function buildFirestoreNewMemberApplicationPayload(app: any) {
   };
 }
 
+function isFirestorePermissionOrExistsError(error: any): boolean {
+  const code = String(error?.code || '').toLowerCase();
+  const msg = String(error?.message || '').toLowerCase();
+  return (
+    code === 'permission-denied' ||
+    code === 'firestore/permission-denied' ||
+    code === 'already-exists' ||
+    code === 'firestore/already-exists' ||
+    msg.includes('missing or insufficient permissions') ||
+    msg.includes('already exists')
+  );
+}
+
 export async function saveFamilyRegistrationToFirestore(reg: any): Promise<void> {
   const payload = buildFirestoreFamilyRegistrationPayload(reg);
   const path = `family_registrations/${payload.reg_id}`;
+  const docRef = doc(db, 'family_registrations', payload.reg_id);
+  const { reg_id: _omitRegId, created_at: _omitCreatedStr, createdAt: _omitCreatedTs, ...updatePayload } = payload;
+
   try {
-    await setDoc(doc(db, 'family_registrations', payload.reg_id), payload);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, path);
+    await setDoc(docRef, payload);
+  } catch (createErr) {
+    if (isFirestorePermissionOrExistsError(createErr)) {
+      try {
+        await updateDoc(docRef, updatePayload);
+      } catch (updateErr) {
+        handleFirestoreError(updateErr, OperationType.UPDATE, path);
+      }
+    } else {
+      handleFirestoreError(createErr, OperationType.CREATE, path);
+    }
   }
 
-  // Also mirror new member applications in dedicated Firestore collection
+  // Also mirror/update new member applications in dedicated Firestore collection
   if (payload.membership_type === 'new') {
     const subRole = payload.submitted_by_role;
     const applicantName = subRole === 'wife' ? payload.wife_name : payload.husband_name;
@@ -264,10 +307,21 @@ export async function saveFamilyRegistrationToFirestore(reg: any): Promise<void>
 export async function saveNewMemberApplicationToFirestore(appRecord: any): Promise<void> {
   const payload = buildFirestoreNewMemberApplicationPayload(appRecord);
   const path = `new_member_applications/${payload.app_id}`;
+  const docRef = doc(db, 'new_member_applications', payload.app_id);
+  const { app_id: _omitAppId, created_at: _omitCreatedStr, createdAt: _omitCreatedTs, ...updatePayload } = payload;
+
   try {
-    await setDoc(doc(db, 'new_member_applications', payload.app_id), payload);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, path);
+    await setDoc(docRef, payload);
+  } catch (createErr) {
+    if (isFirestorePermissionOrExistsError(createErr)) {
+      try {
+        await updateDoc(docRef, updatePayload);
+      } catch (updateErr) {
+        handleFirestoreError(updateErr, OperationType.UPDATE, path);
+      }
+    } else {
+      handleFirestoreError(createErr, OperationType.CREATE, path);
+    }
   }
 }
 

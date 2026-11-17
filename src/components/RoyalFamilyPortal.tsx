@@ -42,7 +42,6 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
-  checkFamilyEmailApi,
   registerFamilyApi,
   uploadFamilyPhotoApi,
   requestFamilyEmailOtpApi,
@@ -64,6 +63,7 @@ export interface ChildItem {
 
 interface PhotoUploadOrDriveLinkProps {
   label: string;
+  labelNote?: string;
   subtitle?: string;
   guideline?: string;
   value: string | null;
@@ -74,6 +74,7 @@ interface PhotoUploadOrDriveLinkProps {
 
 function PhotoUploadOrDriveLink({
   label,
+  labelNote,
   subtitle,
   guideline,
   value,
@@ -141,7 +142,13 @@ function PhotoUploadOrDriveLink({
               fieldError ? 'text-red-700' : 'text-[#44403C]'
             }`}
           >
-            {label} {required && <span className="text-red-500">*</span>}
+            {label}{' '}
+            {labelNote && (
+              <span className="font-medium normal-case tracking-normal text-[#78716C]">
+                {labelNote}
+              </span>
+            )}{' '}
+            {required && <span className="text-red-500">*</span>}
           </label>
           {subtitle && <p className="text-[10px] text-[#78716C]">{subtitle}</p>}
         </div>
@@ -844,7 +851,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const [husbandQualification, setHusbandQualification] = useState('');
   const [husbandOccupation, setHusbandOccupation] = useState('');
   const [husbandOrganization, setHusbandOrganization] = useState('');
-  const [husbandBloodGroup, setHusbandBloodGroup] = useState('O+');
+  const [husbandBloodGroup, setHusbandBloodGroup] = useState('');
   const [husbandInstagram, setHusbandInstagram] = useState('');
 
   const [wifeName, setWifeName] = useState('');
@@ -854,11 +861,11 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const [wifeQualification, setWifeQualification] = useState('');
   const [wifeOccupation, setWifeOccupation] = useState('');
   const [wifeOrganization, setWifeOrganization] = useState('');
-  const [wifeBloodGroup, setWifeBloodGroup] = useState('O+');
+  const [wifeBloodGroup, setWifeBloodGroup] = useState('');
   const [wifeInstagram, setWifeInstagram] = useState('');
 
   const [marriageAnniversary, setMarriageAnniversary] = useState('');
-  const [currentCity, setCurrentCity] = useState('Indore');
+  const [currentCity, setCurrentCity] = useState('');
   const [residentialAddress, setResidentialAddress] = useState('');
   const [nativePlace, setNativePlace] = useState('');
 
@@ -872,10 +879,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const [couplePhotoUrl, setCouplePhotoUrl] = useState<string | null>(null);
   const [familyPhotoUrl, setFamilyPhotoUrl] = useState<string | null>(null);
 
-  const [contributionAreas, setContributionAreas] = useState<string[]>([
-    'Cultural & Stage Programs',
-    'Sports & Fitness Events'
-  ]);
+  const [contributionAreas, setContributionAreas] = useState<string[]>([]);
   const [royalIdea, setRoyalIdea] = useState('');
   const [jsgShouldBeKnownFor, setJsgShouldBeKnownFor] = useState('');
 
@@ -886,9 +890,14 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const [appRefName, setAppRefName] = useState('');
   const [appRefMobile, setAppRefMobile] = useState('');
   const [appBusinessDesc, setAppBusinessDesc] = useState('');
+  const [expRating, setExpRating] = useState<number | null>(null);
+  const [expFavouriteEvent, setExpFavouriteEvent] = useState('');
+  const [expInternationalTrip, setExpInternationalTrip] = useState<'' | 'Yes' | 'No'>('');
+  const [expTripMonthDestination, setExpTripMonthDestination] = useState('');
+  const [expMissing, setExpMissing] = useState('');
   const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
   const [declarationAccepted, setDeclarationAccepted] = useState(false);
-  const [showConfirmSubmitModal, setShowConfirmSubmitModal] = useState(false);
+  const [isUpdatedSubmission, setIsUpdatedSubmission] = useState(false);
 
   // Clean Entrance Reset Helper (always lands back on initial Email gate screen)
   const resetToEntrance = () => {
@@ -913,7 +922,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     setHusbandQualification('');
     setHusbandOccupation('');
     setHusbandOrganization('');
-    setHusbandBloodGroup('O+');
+    setHusbandBloodGroup('');
     setHusbandInstagram('');
     setHusbandPhotoUrl(null);
 
@@ -924,12 +933,12 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     setWifeQualification('');
     setWifeOccupation('');
     setWifeOrganization('');
-    setWifeBloodGroup('O+');
+    setWifeBloodGroup('');
     setWifeInstagram('');
     setWifePhotoUrl(null);
 
     setMarriageAnniversary('');
-    setCurrentCity('Indore');
+    setCurrentCity('');
     setResidentialAddress('');
     setNativePlace('');
 
@@ -937,6 +946,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     setChildren([{ id: '1', name: '', gender: 'son', dob: '', education: '', interests: '', photo_url: '' }]);
     setCouplePhotoUrl(null);
     setFamilyPhotoUrl(null);
+    setContributionAreas([]);
     setRoyalIdea('');
     setJsgShouldBeKnownFor('');
     setAppOtherGroup('No');
@@ -945,12 +955,109 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     setAppRefName('');
     setAppRefMobile('');
     setAppBusinessDesc('');
+    setExpRating(null);
+    setExpFavouriteEvent('');
+    setExpInternationalTrip('');
+    setExpTripMonthDestination('');
+    setExpMissing('');
     setDeclarationAccepted(false);
-    setShowConfirmSubmitModal(false);
+    setIsUpdatedSubmission(false);
     setSubmitError(null);
     setFieldErrors({});
 
     setCurrentView('gate');
+  };
+
+  // Pre-fill form from existing dossier so user can update instead of creating a new entry
+  const handleEditExistingRecord = () => {
+    if (!existingRecord) return;
+    const rec = existingRecord;
+    const recType = rec.membership_type === 'new' ? 'new' : 'existing';
+    setMembershipChoice(recType);
+    setGateRole(rec.submitted_by_role === 'wife' ? 'wife' : 'husband');
+    setIsEmailVerified(true);
+
+    setHusbandName(rec.husband_name || '');
+    setHusbandMobile(rec.husband_mobile || '');
+    setHusbandEmail(rec.husband_email || '');
+    setHusbandDob(rec.husband_dob || '');
+    setHusbandQualification(rec.husband_qualification || '');
+    setHusbandOccupation(rec.husband_occupation || '');
+    setHusbandOrganization(rec.husband_organization || '');
+    setHusbandBloodGroup(rec.husband_blood_group || '');
+    setHusbandInstagram(rec.husband_instagram || '');
+    setHusbandPhotoUrl(rec.husband_photo_url || null);
+
+    setWifeName(rec.wife_name || '');
+    setWifeMobile(rec.wife_mobile || '');
+    setWifeEmail(rec.wife_email || '');
+    setWifeDob(rec.wife_dob || '');
+    setWifeQualification(rec.wife_qualification || '');
+    setWifeOccupation(rec.wife_occupation || '');
+    setWifeOrganization(rec.wife_organization || '');
+    setWifeBloodGroup(rec.wife_blood_group || '');
+    setWifeInstagram(rec.wife_instagram || '');
+    setWifePhotoUrl(rec.wife_photo_url || null);
+
+    setMarriageAnniversary(rec.marriage_anniversary || '');
+    setCurrentCity(rec.current_city || '');
+    setResidentialAddress(rec.residential_address || '');
+    setNativePlace(rec.native_place || '');
+
+    const kidsList = Array.isArray(rec.children) ? rec.children : [];
+    setHasChildren(Boolean(rec.has_children) || kidsList.length > 0);
+    setChildren(
+      kidsList.length > 0
+        ? kidsList.map((c: any, idx: number) => ({
+            id: c.id || String(idx + 1),
+            name: c.name || '',
+            gender: c.gender === 'daughter' ? 'daughter' : 'son',
+            dob: c.dob || '',
+            education: c.education || '',
+            interests: c.interests || '',
+            photo_url: c.photo_url || '',
+          }))
+        : [{ id: '1', name: '', gender: 'son', dob: '', education: '', interests: '', photo_url: '' }]
+    );
+
+    setCouplePhotoUrl(rec.couple_photo_url || null);
+    setFamilyPhotoUrl(rec.family_photo_url || null);
+
+    const areas = typeof rec.contribution_areas === 'string' && rec.contribution_areas.trim()
+      ? rec.contribution_areas.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : [];
+    setContributionAreas(areas);
+    setRoyalIdea(rec.royal_idea || '');
+    setJsgShouldBeKnownFor(rec.jsg_should_be_known_for || '');
+
+    setAppOtherGroup(rec.other_group_member === 'Yes' ? 'Yes' : 'No');
+    setAppOtherGroupName(rec.other_group_name || '');
+    setAppContribution(rec.new_member_contribution || '');
+    setAppRefName(rec.reference_name || '');
+    setAppRefMobile(rec.reference_mobile || '');
+    setAppBusinessDesc(rec.business_description || '');
+
+    setExpRating(
+      typeof rec.exp_rating === 'number' && rec.exp_rating >= 1 && rec.exp_rating <= 10
+        ? rec.exp_rating
+        : null
+    );
+    setExpFavouriteEvent(rec.exp_favourite_event || '');
+    setExpInternationalTrip(
+      rec.exp_international_trip === 'Yes'
+        ? 'Yes'
+        : rec.exp_international_trip === 'No'
+          ? 'No'
+          : ''
+    );
+    setExpTripMonthDestination(rec.exp_trip_month_destination || '');
+    setExpMissing(rec.exp_missing || '');
+
+    setDeclarationAccepted(false);
+    setSubmitError(null);
+    setFieldErrors({});
+    setActiveStep(1);
+    setCurrentView('form');
   };
 
   // Submission State
@@ -1160,23 +1267,9 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     setGateSuccessMsg(null);
   };
 
-  // Real-time check if the spouse's email is already registered when typing in form
-  const handleCheckSpouseEmailOnBlur = async (emailToCheck: string, expectedRole: 'husband' | 'wife') => {
-    if (!emailToCheck || !emailToCheck.includes('@') || emailToCheck.length < 5) return;
-    try {
-      const res = await checkFamilyEmailApi(emailToCheck.trim().toLowerCase(), expectedRole);
-      if (res.exists && res.registration) {
-        setExistingRecord(res.registration);
-        setSpouseNotificationMessage(res.message || 'Your spouse has already registered your family household!');
-        setIsFiledBySpouse(Boolean(res.filedBySpouse));
-        setSpouseName(res.spouseName || (expectedRole === 'husband' ? res.registration.husband_name : res.registration.wife_name));
-        setSpouseRole(res.spouseRole || expectedRole);
-        setCurrentView('spouse_celebration');
-        triggerConfettiFanfare();
-      }
-    } catch (e) {
-      // Non-blocking on blur
-    }
+  // Non-blocking spouse email blur handler (submissions update matching existing dossiers)
+  const handleCheckSpouseEmailOnBlur = async (_emailToCheck: string, _expectedRole: 'husband' | 'wife') => {
+    // Re-submissions update any matching household record in place.
   };
 
   // 2. Child management helpers
@@ -1200,20 +1293,22 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
   // 3. Contribution areas toggle
   const toggleContributionArea = (area: string) => {
-    setContributionAreas((prev) =>
-      prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
-    );
+    setContributionAreas((prev) => {
+      const next = prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area];
+      if (next.length > 0) clearFieldError('contributionAreas');
+      return next;
+    });
   };
 
-  // 5a. Pre-Submission Validation + Open Explicit Review Confirmation
-  const handlePrepareSubmitReview = () => {
+  // 5. Final Multi-Step Submission Handler (directly seals after Declaration is checked)
+  const executeSubmitForm = async () => {
     if (!isEmailVerified) {
       setSubmitError('Email verification is required before accessing or submitting the royal dossier.');
       setCurrentView('gate');
       return;
     }
 
-    const mandatorySteps = membershipType === 'new' ? [1, 2, 3, 4, 5] : [1, 2, 3];
+    const mandatorySteps = [1, 2, 3, 4, 5];
     for (const stepNum of mandatorySteps) {
       const errs = validateStepFields(stepNum);
       if (Object.keys(errs).length > 0) {
@@ -1234,43 +1329,6 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       return;
     }
 
-    setFieldErrors({});
-    setSubmitError(null);
-    setShowConfirmSubmitModal(true);
-  };
-
-  // 5b. Confirmed Final Submit Handler
-  const executeSubmitForm = async () => {
-    if (!isEmailVerified) {
-      setShowConfirmSubmitModal(false);
-      setSubmitError('Email verification is required before accessing or submitting the royal dossier.');
-      setCurrentView('gate');
-      return;
-    }
-
-    const mandatorySteps = membershipType === 'new' ? [1, 2, 3, 4, 5] : [1, 2, 3];
-    for (const stepNum of mandatorySteps) {
-      const errs = validateStepFields(stepNum);
-      if (Object.keys(errs).length > 0) {
-        setShowConfirmSubmitModal(false);
-        setFieldErrors(errs);
-        setSubmitError(`Some mandatory fields in Step ${stepNum} were missed or invalid. Highlighted in red below.`);
-        setActiveStep(stepNum);
-        scrollToFirstError();
-        return;
-      }
-    }
-
-    if (!declarationAccepted) {
-      setShowConfirmSubmitModal(false);
-      setFieldErrors({
-        declarationAccepted: 'Please read and accept the Member Declaration before proceeding.'
-      });
-      setSubmitError('Please accept the Member Declaration before submitting.');
-      scrollToFirstError();
-      return;
-    }
-
     setSubmitting(true);
     setSubmitError(null);
     setFieldErrors({});
@@ -1286,7 +1344,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       husband_qualification: husbandQualification.trim() || null,
       husband_occupation: husbandOccupation.trim() || null,
       husband_organization: husbandOrganization.trim() || null,
-      husband_blood_group: husbandBloodGroup,
+      husband_blood_group: husbandBloodGroup || null,
       husband_instagram: husbandInstagram.trim() || null,
       husband_photo_url: husbandPhotoUrl || null,
       wife_name: wifeName.trim(),
@@ -1296,10 +1354,10 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       wife_qualification: wifeQualification.trim() || null,
       wife_occupation: wifeOccupation.trim() || null,
       wife_organization: wifeOrganization.trim() || null,
-      wife_blood_group: wifeBloodGroup,
+      wife_blood_group: wifeBloodGroup || null,
       wife_instagram: wifeInstagram.trim() || null,
       wife_photo_url: wifePhotoUrl || null,
-      marriage_anniversary: marriageAnniversary,
+      marriage_anniversary: marriageAnniversary.trim(),
       current_city: currentCity.trim(),
       residential_address: residentialAddress.trim(),
       native_place: nativePlace.trim() || null,
@@ -1329,6 +1387,16 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       contribution_areas: contributionAreas.join(', '),
       royal_idea: royalIdea.trim() || null,
       jsg_should_be_known_for: jsgShouldBeKnownFor.trim() || null,
+      ...(membershipType === 'existing'
+        ? {
+            exp_rating: expRating,
+            exp_favourite_event: expFavouriteEvent.trim() || null,
+            exp_international_trip: expInternationalTrip || null,
+            exp_trip_month_destination:
+              expInternationalTrip === 'Yes' ? expTripMonthDestination.trim() || null : null,
+            exp_missing: expMissing.trim() || null,
+          }
+        : {}),
       ...(membershipType === 'new'
         ? {
             other_group_member: appOtherGroup,
@@ -1343,19 +1411,8 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
     try {
       const res = await registerFamilyApi(payload);
-      setShowConfirmSubmitModal(false);
 
-      if (res.alreadyRegistered) {
-        setExistingRecord(res.registration);
-        setSpouseNotificationMessage(res.message);
-        setIsFiledBySpouse(Boolean(res.filedBySpouse));
-        setSpouseName(res.spouseName || 'Spouse');
-        setSpouseRole(res.spouseRole === 'husband' ? 'husband' : 'wife');
-        setCurrentView('spouse_celebration');
-        triggerConfettiFanfare();
-        return;
-      }
-
+      setIsUpdatedSubmission(Boolean(res.updated));
       setSubmissionNotice(
         res.notice ||
           (membershipType === 'new'
@@ -1366,7 +1423,6 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       setCurrentView('success');
       triggerConfettiFanfare();
     } catch (err: any) {
-      setShowConfirmSubmitModal(false);
       setSubmitError(err?.message || 'Failed to submit family registration. Please try again.');
     } finally {
       setSubmitting(false);
@@ -1376,6 +1432,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const validateStepFields = (step: number): Record<string, string> => {
     const errors: Record<string, string> = {};
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const isNew = membershipType === 'new';
 
     if (step === 1) {
       if (!husbandName.trim()) {
@@ -1392,14 +1449,30 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       } else if (!emailRegex.test(husbandEmail.trim())) {
         errors.husbandEmail = 'Please enter a valid email address.';
       }
-      if (husbandDob && husbandDob < '1988-01-01') {
-        errors.husbandDob = 'Date of Birth must be on or after 01 Jan 1988 (1987 and earlier not allowed).';
+      if (!husbandInstagram.trim()) {
+        errors.husbandInstagram = 'This field was missed — please enter Husband Instagram Handle.';
       }
-      if (membershipType === 'new' && gateRole === 'husband' && !husbandOrganization.trim()) {
-        errors.husbandOrganization = 'This field was missed — Company / Business / Organization is required for new members.';
-      }
-      if (membershipType === 'new' && !husbandPhotoUrl?.trim()) {
-        errors.husbandPhotoUrl = 'This field was missed — please upload Husband Photo or attach a Google Drive photo link.';
+      if (isNew) {
+        if (!husbandDob) {
+          errors.husbandDob = 'This field was missed — please select Date of Birth.';
+        } else if (husbandDob < '1988-01-01') {
+          errors.husbandDob = 'Date of Birth must be on or after 01 Jan 1988 (1987 and earlier not allowed).';
+        }
+        if (!husbandBloodGroup.trim()) {
+          errors.husbandBloodGroup = 'This field was missed — please select Blood Group.';
+        }
+        if (!husbandQualification.trim()) {
+          errors.husbandQualification = 'This field was missed — please enter Highest Educational Qualification.';
+        }
+        if (!husbandOccupation.trim()) {
+          errors.husbandOccupation = 'This field was missed — please enter Occupation / Profession.';
+        }
+        if (!husbandOrganization.trim()) {
+          errors.husbandOrganization = 'This field was missed — please enter Company / Business / Organization.';
+        }
+        if (!husbandPhotoUrl?.trim()) {
+          errors.husbandPhotoUrl = 'This field was missed — please upload Husband Photo or attach a Google Drive photo link.';
+        }
       }
     } else if (step === 2) {
       if (!wifeName.trim()) {
@@ -1416,54 +1489,81 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       } else if (!emailRegex.test(wifeEmail.trim())) {
         errors.wifeEmail = 'Please enter a valid email address.';
       }
-      if (wifeDob && wifeDob < '1988-01-01') {
-        errors.wifeDob = 'Date of Birth must be on or after 01 Jan 1988 (1987 and earlier not allowed).';
+      if (!wifeInstagram.trim()) {
+        errors.wifeInstagram = 'This field was missed — please enter Wife Instagram Handle.';
       }
-      if (membershipType === 'new' && gateRole === 'wife' && !wifeOrganization.trim()) {
-        errors.wifeOrganization = 'This field was missed — Company / Business / Organization is required for new members.';
-      }
-      if (membershipType === 'new' && !wifePhotoUrl?.trim()) {
-        errors.wifePhotoUrl = 'This field was missed — please upload Wife Photo or attach a Google Drive photo link.';
+      if (isNew) {
+        if (!wifeDob) {
+          errors.wifeDob = 'This field was missed — please select Date of Birth.';
+        } else if (wifeDob < '1988-01-01') {
+          errors.wifeDob = 'Date of Birth must be on or after 01 Jan 1988 (1987 and earlier not allowed).';
+        }
+        if (!wifeBloodGroup.trim()) {
+          errors.wifeBloodGroup = 'This field was missed — please select Blood Group.';
+        }
+        if (!wifeQualification.trim()) {
+          errors.wifeQualification = 'This field was missed — please enter Highest Educational Qualification.';
+        }
+        if (!wifeOccupation.trim()) {
+          errors.wifeOccupation = 'This field was missed — please enter Occupation / Profession.';
+        }
+        if (!wifeOrganization.trim()) {
+          errors.wifeOrganization = 'This field was missed — please enter Company / Business / Organization.';
+        }
+        if (!wifePhotoUrl?.trim()) {
+          errors.wifePhotoUrl = 'This field was missed — please upload Wife Photo or attach a Google Drive photo link.';
+        }
       }
     } else if (step === 3) {
-      if (!marriageAnniversary) {
-        errors.marriageAnniversary = 'This field was missed — please select Marriage Anniversary Date.';
-      }
-      if (membershipType === 'new' && !couplePhotoUrl?.trim()) {
-        errors.couplePhotoUrl = 'This field was missed — please upload Couple Photo or attach a Google Drive photo link.';
-      }
-      if (!currentCity.trim()) {
-        errors.currentCity = 'This field was missed — please enter Current City of Residence.';
-      }
-      if (!residentialAddress.trim()) {
-        errors.residentialAddress = 'This field was missed — please enter Complete Residential Address.';
+      if (isNew) {
+        if (!marriageAnniversary) {
+          errors.marriageAnniversary = 'This field was missed — please select Marriage Anniversary Date.';
+        }
+        if (!couplePhotoUrl?.trim()) {
+          errors.couplePhotoUrl = 'This field was missed — please upload Couple Photo or attach a Google Drive photo link.';
+        }
+        if (!currentCity.trim()) {
+          errors.currentCity = 'This field was missed — please enter Current City of Residence.';
+        }
+        if (!nativePlace.trim()) {
+          errors.nativePlace = 'This field was missed — please enter Native Place / Hometown.';
+        }
+        if (!residentialAddress.trim()) {
+          errors.residentialAddress = 'This field was missed — please enter Complete Residential Address.';
+        }
       }
     } else if (step === 4) {
       if (hasChildren) {
+        if (isNew && children.length === 0) {
+          errors.childrenList = 'Please add at least one child or toggle "Have children?" off.';
+        }
         children.forEach((child, index) => {
+          const childLabel = child.name.trim() || `Royal Heir #${index + 1}`;
           if (child.dob && child.dob < '1988-01-01') {
-            errors[`childDob_${child.id}`] = `Date of Birth for ${
-              child.name.trim() || `Royal Heir #${index + 1}`
-            } must be on or after 01 Jan 1988 (1987 and earlier not allowed).`;
+            errors[`childDob_${child.id}`] = `Date of Birth for ${childLabel} must be on or after 01 Jan 1988 (1987 and earlier not allowed).`;
+          } else if (isNew && !child.dob) {
+            errors[`childDob_${child.id}`] = `This field was missed — please select Date of Birth for ${childLabel}.`;
           }
-          if (membershipType === 'new') {
-            const hasChildDetails =
-              child.name.trim().length > 0 ||
-              Boolean(child.dob) ||
-              child.education.trim().length > 0 ||
-              Boolean(child.interests?.trim());
-            if (hasChildDetails && !child.photo_url?.trim()) {
-              errors[`childPhoto_${child.id}`] = `This field was missed — please upload Kid Photo with Parents for ${
-                child.name.trim() || `Royal Heir #${index + 1}`
-              }.`;
+          if (isNew) {
+            if (!child.name.trim()) {
+              errors[`childName_${child.id}`] = `This field was missed — please enter Full Name for Royal Heir #${index + 1}.`;
+            }
+            if (!child.education.trim()) {
+              errors[`childEducation_${child.id}`] = `This field was missed — please enter School / College / Profession for ${childLabel}.`;
+            }
+            if (!child.photo_url?.trim()) {
+              errors[`childPhoto_${child.id}`] = `This field was missed — please upload Kid Photo with Parents for ${childLabel}.`;
             }
           }
         });
       }
     } else if (step === 5) {
-      if (membershipType === 'new') {
-        if (!familyPhotoUrl?.trim()) {
-          errors.familyPhotoUrl = 'This field was missed — please upload Royal Family Group Portrait or attach a Google Drive photo link.';
+      if (isNew) {
+        if (contributionAreas.length === 0) {
+          errors.contributionAreas = 'This field was missed — please select at least one contribution area.';
+        }
+        if (!royalIdea.trim()) {
+          errors.royalIdea = 'This field was missed — please share One Grand Idea for JSG Royals Chapter 2 (2027).';
         }
         if (appOtherGroup === 'Yes' && !appOtherGroupName.trim()) {
           errors.appOtherGroupName = 'This field was missed — please enter the Group Name.';
@@ -2188,14 +2288,22 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
+              <button
+                type="button"
+                onClick={handleEditExistingRecord}
+                className="w-full sm:w-auto min-h-[44px] px-6 py-3 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] text-[#FAF7F2] font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-[#C5A869]/60 cursor-pointer shadow-md"
+              >
+                <Crown className="w-4 h-4 text-[#D4AF37]" />
+                <span>Update Existing Registration</span>
+              </button>
 
               <button
                 type="button"
                 onClick={triggerConfettiFanfare}
-                className="w-full sm:w-auto min-h-[44px] px-6 py-3 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] text-[#FAF7F2] font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-[#C5A869]/50 cursor-pointer shadow-md"
+                className="w-full sm:w-auto min-h-[44px] px-6 py-3 rounded-xl bg-[#FAF7F2] hover:bg-[#F3ECE0] text-[#1C1917] font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-[#D8CAAF] cursor-pointer"
               >
-                <PartyPopper className="w-4 h-4 text-[#D4AF37]" />
-                <span>Launch Confetti Celebration!</span>
+                <PartyPopper className="w-4 h-4 text-[#8C6D2B]" />
+                <span>Launch Confetti Celebration</span>
               </button>
 
               <button
@@ -2214,31 +2322,38 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
       {/* VIEW 3: UNIFIED MULTI-STEP FAMILY DOSSIER FORM (EXISTING & NEW MEMBERS)   */}
       {/* ========================================================================= */}
       {currentView === 'form' && isEmailVerified && (membershipType === 'new' || !feeStatus.isRenewalClosed) && (
-        <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12 space-y-6 relative z-10 animate-fade-in-up">
+        <div className="max-w-3xl mx-auto px-4 py-6 sm:py-9 space-y-5 relative z-10 animate-fade-in-up">
           
-          <div className="bg-[#FFFFFF]/96 backdrop-blur-md border border-[#DFD1B4] rounded-3xl p-6 sm:p-10 space-y-7 royal-box-shadow relative overflow-hidden">
+          <div className="bg-[#FFFFFF]/96 backdrop-blur-md border border-[#DFD1B4] rounded-3xl p-5 sm:p-8 space-y-5 royal-box-shadow relative overflow-hidden">
             
             <div className="absolute top-0 left-0 right-0 h-1 shimmer-gold-bg" />
             <RoyalCornerBrackets />
 
-            {/* Stepper Header with Regal Medals */}
-            <div className="space-y-5 pb-5 border-b border-[#EAE0CE]">
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2.5">
+            {/* Stepper Header */}
+            <div className="space-y-4 pb-4 border-b border-[#EAE0CE]">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#8C6D2B] flex items-center gap-1.5">
                     <span className="text-[#D4AF37]">✦</span>
                     <span>
                       Step {activeStep} of {totalSteps} ·{' '}
-                      {membershipType === 'new' ? 'New Member Application' : 'Existing Member Renewal'}
+                      {membershipType === 'new' ? 'New Member Application' : 'Existing Member Update'}
                     </span>
                   </span>
-                  <h2 className="font-serif-royal text-xl sm:text-[26px] font-bold text-[#1C1917] mt-1 tracking-tight">
-                    {activeStep === 1 && "🤵 Husband's Royal Dossier"}
-                    {activeStep === 2 && "👰 Wife's Royal Dossier"}
-                    {activeStep === 3 && "💍 Royal Union & Residence"}
-                    {activeStep === 4 && "👶 Royal Heirs & Children"}
-                    {activeStep === 5 && (membershipType === 'new' ? "📸 Vision, Reference & Portrait" : "📸 Family Portrait & Vision")}
-                    {activeStep === 6 && "📜 Review & Royal Seal"}
+                  <h2 className="font-serif-royal text-xl sm:text-2xl font-bold text-[#1C1917] mt-1 tracking-tight">
+                    {activeStep === 1 && 'Husband Details'}
+                    {activeStep === 2 && 'Wife Details'}
+                    {activeStep === 3 &&
+                      (membershipType === 'existing'
+                        ? 'Address & Couple Photo (Optional)'
+                        : 'Marriage & Residence Details')}
+                    {activeStep === 4 &&
+                      (membershipType === 'existing' ? 'Children Details (Optional)' : 'Children Details')}
+                    {activeStep === 5 &&
+                      (membershipType === 'existing'
+                        ? 'JSG Royals – Your Experience Matters!'
+                        : 'Ideas & Reference')}
+                    {activeStep === 6 && 'Review & Submit'}
                   </h2>
                 </div>
 
@@ -2247,15 +2362,15 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 </div>
               </div>
 
-              {/* Regal Step Navigation Bar */}
-              <div className="grid grid-cols-6 gap-1.5 sm:gap-2 pt-0.5">
+              {/* Step Navigation Bar */}
+              <div className="grid grid-cols-6 gap-1.5 sm:gap-2">
                 {[
                   { num: 1, label: 'Husband' },
                   { num: 2, label: 'Wife' },
-                  { num: 3, label: 'Union' },
+                  { num: 3, label: membershipType === 'existing' ? 'Address' : 'Residence' },
                   { num: 4, label: 'Children' },
-                  { num: 5, label: 'Portrait' },
-                  { num: 6, label: 'Seal' }
+                  { num: 5, label: membershipType === 'existing' ? 'Feedback' : 'Ideas' },
+                  { num: 6, label: 'Review' }
                 ].map((s) => {
                   const isCurrent = s.num === activeStep;
                   const isCompleted = s.num < activeStep;
@@ -2285,7 +2400,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         setSubmitError(null);
                         setActiveStep(s.num);
                       }}
-                      className={`min-h-[40px] flex items-center justify-center sm:justify-start gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                      className={`min-h-[38px] flex items-center justify-center sm:justify-start gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                         isCurrent
                           ? 'bg-[#1C1917] text-[#F3DF9C] border border-[#D4AF37]/80 shadow-xs'
                           : isCompleted
@@ -2306,26 +2421,18 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
             </div>
 
             {submitError && (
-              <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-3">
+              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-3">
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
                 <span>{submitError}</span>
               </div>
             )}
 
             {/* Form Step Contents */}
-            <form onSubmit={(e) => e.preventDefault()} className="space-y-7">
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-5">
               
-              {/* STEP 1: HUSBAND DOSSIER */}
+              {/* STEP 1: HUSBAND DETAILS */}
               {activeStep === 1 && (
-                <div key={1} className="space-y-5 animate-fade-in-up">
-                  <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E5D8C0] flex items-center gap-3.5">
-                    <div className="w-9 h-9 rounded-xl bg-[#1C1917] text-[#D4AF37] flex items-center justify-center shrink-0 border border-[#C5A869]/40">
-                      <User className="w-4 h-4" />
-                    </div>
-                    <p className="text-xs text-[#57534E] leading-relaxed">
-                      Record the gentleman&apos;s personal and professional identity in the Master Directory.
-                    </p>
-                  </div>
+                <div key={1} className="space-y-4 animate-fade-in-up">
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
                     <div>
@@ -2407,107 +2514,149 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       {renderFieldError('husbandEmail')}
                     </div>
 
-                    <div>
-                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandDob')}`}>
-                        Date of Birth
-                      </label>
-                      <input
-                        type="date"
-                        min="1988-01-01"
-                        data-field-error={fieldErrors.husbandDob ? 'true' : undefined}
-                        aria-invalid={Boolean(fieldErrors.husbandDob)}
-                        value={husbandDob}
-                        onChange={(e) => {
-                          setHusbandDob(e.target.value);
-                          clearFieldError('husbandDob');
-                        }}
-                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandDob')}`}
-                      />
-                      <span className="block mt-1 text-[10px] text-[#78716C]">
-                        Born on or after 1 Jan 1988 (age limit)
-                      </span>
-                      {renderFieldError('husbandDob')}
-                    </div>
+                    {membershipType === 'new' && (
+                      <>
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandDob')}`}>
+                            Date of Birth *
+                          </label>
+                          <input
+                            type="date"
+                            min="1988-01-01"
+                            required
+                            data-field-error={fieldErrors.husbandDob ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.husbandDob)}
+                            value={husbandDob}
+                            onChange={(e) => {
+                              setHusbandDob(e.target.value);
+                              clearFieldError('husbandDob');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandDob')}`}
+                          />
+                          <span className="block mt-1 text-[10px] text-[#78716C]">
+                            Born on or after 1 Jan 1988 (age limit)
+                          </span>
+                          {renderFieldError('husbandDob')}
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandBloodGroup')}`}>
+                            Blood Group *
+                          </label>
+                          <select
+                            required
+                            data-field-error={fieldErrors.husbandBloodGroup ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.husbandBloodGroup)}
+                            value={husbandBloodGroup}
+                            onChange={(e) => {
+                              setHusbandBloodGroup(e.target.value);
+                              clearFieldError('husbandBloodGroup');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandBloodGroup')}`}
+                          >
+                            <option value="">Select Blood Group</option>
+                            {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => (
+                              <option key={bg} value={bg}>{bg}</option>
+                            ))}
+                          </select>
+                          {renderFieldError('husbandBloodGroup')}
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandQualification')}`}>
+                            Highest Educational Qualification *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            data-field-error={fieldErrors.husbandQualification ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.husbandQualification)}
+                            placeholder="e.g. MBA / B.Tech / CA"
+                            value={husbandQualification}
+                            onChange={(e) => {
+                              setHusbandQualification(e.target.value);
+                              clearFieldError('husbandQualification');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandQualification')}`}
+                          />
+                          {renderFieldError('husbandQualification')}
+                        </div>
+                      </>
+                    )}
+
+                    {membershipType === 'new' && (
+                      <>
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandOccupation')}`}>
+                            Occupation / Profession *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            data-field-error={fieldErrors.husbandOccupation ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.husbandOccupation)}
+                            placeholder="e.g. Business / Software Architect"
+                            value={husbandOccupation}
+                            onChange={(e) => {
+                              setHusbandOccupation(e.target.value);
+                              clearFieldError('husbandOccupation');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandOccupation')}`}
+                          />
+                          {renderFieldError('husbandOccupation')}
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandOrganization')}`}>
+                            Company / Business / Organization *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            data-field-error={fieldErrors.husbandOrganization ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.husbandOrganization)}
+                            placeholder="e.g. Samota Industries"
+                            value={husbandOrganization}
+                            onChange={(e) => {
+                              setHusbandOrganization(e.target.value);
+                              clearFieldError('husbandOrganization');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandOrganization')}`}
+                          />
+                          {renderFieldError('husbandOrganization')}
+                        </div>
+                      </>
+                    )}
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Blood Group
-                      </label>
-                      <select
-                        value={husbandBloodGroup}
-                        onChange={(e) => setHusbandBloodGroup(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
-                      >
-                        {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => (
-                          <option key={bg} value={bg}>{bg}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Highest Educational Qualification
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandInstagram')}`}>
+                        Instagram Handle *
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. MBA / B.Tech / CA"
-                        value={husbandQualification}
-                        onChange={(e) => setHusbandQualification(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Occupation / Profession
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Business / Software Architect"
-                        value={husbandOccupation}
-                        onChange={(e) => setHusbandOccupation(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('husbandOrganization')}`}>
-                        Company / Business / Organization {membershipType === 'new' && gateRole === 'husband' ? '*' : ''}
-                      </label>
-                      <input
-                        type="text"
-                        required={membershipType === 'new' && gateRole === 'husband'}
-                        data-field-error={fieldErrors.husbandOrganization ? 'true' : undefined}
-                        aria-invalid={Boolean(fieldErrors.husbandOrganization)}
-                        placeholder="e.g. Samota Industries"
-                        value={husbandOrganization}
-                        onChange={(e) => {
-                          setHusbandOrganization(e.target.value);
-                          clearFieldError('husbandOrganization');
-                        }}
-                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandOrganization')}`}
-                      />
-                      {renderFieldError('husbandOrganization')}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Instagram Handle
-                      </label>
-                      <input
-                        type="text"
+                        required
+                        data-field-error={fieldErrors.husbandInstagram ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.husbandInstagram)}
                         placeholder="e.g. @subodh_samota"
                         value={husbandInstagram}
-                        onChange={(e) => setHusbandInstagram(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                        onChange={(e) => {
+                          setHusbandInstagram(e.target.value);
+                          clearFieldError('husbandInstagram');
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('husbandInstagram')}`}
                       />
+                      {renderFieldError('husbandInstagram')}
                     </div>
                   </div>
 
-                  {/* Husband Portrait Photo / Google Drive Link */}
+                  {/* Husband Photo */}
                   <PhotoUploadOrDriveLink
-                    label="📸 Husband Photo / Google Drive Link"
-                    subtitle="Upload a portrait of the husband or paste a Google Drive photo URL"
+                    label="Husband Photo"
+                    labelNote={
+                      membershipType === 'existing'
+                        ? '(Upload new photo if you want to update previous photo)'
+                        : undefined
+                    }
                     value={husbandPhotoUrl}
                     required={membershipType === 'new'}
                     fieldError={fieldErrors.husbandPhotoUrl}
@@ -2519,17 +2668,9 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 </div>
               )}
 
-              {/* STEP 2: WIFE DOSSIER */}
+              {/* STEP 2: WIFE DETAILS */}
               {activeStep === 2 && (
-                <div key={2} className="space-y-5 animate-fade-in-up">
-                  <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E5D8C0] flex items-center gap-3.5">
-                    <div className="w-9 h-9 rounded-xl bg-[#1C1917] text-[#D4AF37] flex items-center justify-center shrink-0 border border-[#C5A869]/40">
-                      <Heart className="w-4 h-4" />
-                    </div>
-                    <p className="text-xs text-[#57534E] leading-relaxed">
-                      Record the royal lady&apos;s personal and professional identity in the Master Directory.
-                    </p>
-                  </div>
+                <div key={2} className="space-y-4 animate-fade-in-up">
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
                     <div>
@@ -2611,107 +2752,149 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       {renderFieldError('wifeEmail')}
                     </div>
 
-                    <div>
-                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeDob')}`}>
-                        Date of Birth
-                      </label>
-                      <input
-                        type="date"
-                        min="1988-01-01"
-                        data-field-error={fieldErrors.wifeDob ? 'true' : undefined}
-                        aria-invalid={Boolean(fieldErrors.wifeDob)}
-                        value={wifeDob}
-                        onChange={(e) => {
-                          setWifeDob(e.target.value);
-                          clearFieldError('wifeDob');
-                        }}
-                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeDob')}`}
-                      />
-                      <span className="block mt-1 text-[10px] text-[#78716C]">
-                        Born on or after 1 Jan 1988 (age limit)
-                      </span>
-                      {renderFieldError('wifeDob')}
-                    </div>
+                    {membershipType === 'new' && (
+                      <>
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeDob')}`}>
+                            Date of Birth *
+                          </label>
+                          <input
+                            type="date"
+                            min="1988-01-01"
+                            required
+                            data-field-error={fieldErrors.wifeDob ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.wifeDob)}
+                            value={wifeDob}
+                            onChange={(e) => {
+                              setWifeDob(e.target.value);
+                              clearFieldError('wifeDob');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeDob')}`}
+                          />
+                          <span className="block mt-1 text-[10px] text-[#78716C]">
+                            Born on or after 1 Jan 1988 (age limit)
+                          </span>
+                          {renderFieldError('wifeDob')}
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeBloodGroup')}`}>
+                            Blood Group *
+                          </label>
+                          <select
+                            required
+                            data-field-error={fieldErrors.wifeBloodGroup ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.wifeBloodGroup)}
+                            value={wifeBloodGroup}
+                            onChange={(e) => {
+                              setWifeBloodGroup(e.target.value);
+                              clearFieldError('wifeBloodGroup');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeBloodGroup')}`}
+                          >
+                            <option value="">Select Blood Group</option>
+                            {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => (
+                              <option key={bg} value={bg}>{bg}</option>
+                            ))}
+                          </select>
+                          {renderFieldError('wifeBloodGroup')}
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeQualification')}`}>
+                            Highest Educational Qualification *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            data-field-error={fieldErrors.wifeQualification ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.wifeQualification)}
+                            placeholder="e.g. MBA / MSc / B.Arch"
+                            value={wifeQualification}
+                            onChange={(e) => {
+                              setWifeQualification(e.target.value);
+                              clearFieldError('wifeQualification');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeQualification')}`}
+                          />
+                          {renderFieldError('wifeQualification')}
+                        </div>
+                      </>
+                    )}
+
+                    {membershipType === 'new' && (
+                      <>
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeOccupation')}`}>
+                            Occupation / Profession *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            data-field-error={fieldErrors.wifeOccupation ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.wifeOccupation)}
+                            placeholder="e.g. Product Manager / Homemaker"
+                            value={wifeOccupation}
+                            onChange={(e) => {
+                              setWifeOccupation(e.target.value);
+                              clearFieldError('wifeOccupation');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeOccupation')}`}
+                          />
+                          {renderFieldError('wifeOccupation')}
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeOrganization')}`}>
+                            Company / Business / Organization *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            data-field-error={fieldErrors.wifeOrganization ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.wifeOrganization)}
+                            placeholder="e.g. Swiggy / Entrepreneur"
+                            value={wifeOrganization}
+                            onChange={(e) => {
+                              setWifeOrganization(e.target.value);
+                              clearFieldError('wifeOrganization');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeOrganization')}`}
+                          />
+                          {renderFieldError('wifeOrganization')}
+                        </div>
+                      </>
+                    )}
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Blood Group
-                      </label>
-                      <select
-                        value={wifeBloodGroup}
-                        onChange={(e) => setWifeBloodGroup(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
-                      >
-                        {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => (
-                          <option key={bg} value={bg}>{bg}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Highest Educational Qualification
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeInstagram')}`}>
+                        Instagram Handle *
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. MBA / MSc / B.Arch"
-                        value={wifeQualification}
-                        onChange={(e) => setWifeQualification(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Occupation / Profession
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Product Manager / Homemaker"
-                        value={wifeOccupation}
-                        onChange={(e) => setWifeOccupation(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('wifeOrganization')}`}>
-                        Company / Business / Organization {membershipType === 'new' && gateRole === 'wife' ? '*' : ''}
-                      </label>
-                      <input
-                        type="text"
-                        required={membershipType === 'new' && gateRole === 'wife'}
-                        data-field-error={fieldErrors.wifeOrganization ? 'true' : undefined}
-                        aria-invalid={Boolean(fieldErrors.wifeOrganization)}
-                        placeholder="e.g. Swiggy / Entrepreneur"
-                        value={wifeOrganization}
-                        onChange={(e) => {
-                          setWifeOrganization(e.target.value);
-                          clearFieldError('wifeOrganization');
-                        }}
-                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeOrganization')}`}
-                      />
-                      {renderFieldError('wifeOrganization')}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Instagram Handle
-                      </label>
-                      <input
-                        type="text"
+                        required
+                        data-field-error={fieldErrors.wifeInstagram ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.wifeInstagram)}
                         placeholder="e.g. @shaily_agrawal"
                         value={wifeInstagram}
-                        onChange={(e) => setWifeInstagram(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
+                        onChange={(e) => {
+                          setWifeInstagram(e.target.value);
+                          clearFieldError('wifeInstagram');
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('wifeInstagram')}`}
                       />
+                      {renderFieldError('wifeInstagram')}
                     </div>
                   </div>
 
-                  {/* Wife Portrait Photo / Google Drive Link */}
+                  {/* Wife Photo */}
                   <PhotoUploadOrDriveLink
-                    label="📸 Wife Photo / Google Drive Link"
-                    subtitle="Upload a portrait of the wife or paste a Google Drive photo URL"
+                    label="Wife Photo"
+                    labelNote={
+                      membershipType === 'existing'
+                        ? '(Upload new photo if you want to update previous photo)'
+                        : undefined
+                    }
                     value={wifePhotoUrl}
                     required={membershipType === 'new'}
                     fieldError={fieldErrors.wifePhotoUrl}
@@ -2723,53 +2906,58 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 </div>
               )}
 
-              {/* STEP 3: ROYAL UNION & RESIDENCE */}
+              {/* STEP 3: ADDRESS & COUPLE PHOTO / MARRIAGE & RESIDENCE */}
               {activeStep === 3 && (
-                <div key={3} className="space-y-5 animate-fade-in-up">
-                  
-                  {/* Anniversary Spotlight */}
-                  <div className={`p-5 sm:p-6 rounded-2xl border space-y-3.5 shadow-2xs ${
-                    fieldErrors.marriageAnniversary
-                      ? 'bg-red-50/60 border-red-400'
-                      : 'bg-gradient-to-br from-[#FAF7F2] to-[#F4ECE0] border-[#E0D2B8]'
-                  }`}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Gem className={`w-4 h-4 ${fieldErrors.marriageAnniversary ? 'text-red-600' : 'text-[#8C6D2B]'}`} />
-                        <label className={`text-xs font-semibold uppercase tracking-wider ${getLabelColorClass('marriageAnniversary')}`}>
-                          💍 Marriage Anniversary Date *
-                        </label>
+                <div key={3} className="space-y-4 animate-fade-in-up">
+
+                  {/* Anniversary Spotlight (fixed data — New Members only) */}
+                  {membershipType === 'new' && (
+                    <div className={`p-5 sm:p-6 rounded-2xl border space-y-3.5 shadow-2xs ${
+                      fieldErrors.marriageAnniversary
+                        ? 'bg-red-50/60 border-red-400'
+                        : 'bg-gradient-to-br from-[#FAF7F2] to-[#F4ECE0] border-[#E0D2B8]'
+                    }`}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Gem className={`w-4 h-4 ${fieldErrors.marriageAnniversary ? 'text-red-600' : 'text-[#8C6D2B]'}`} />
+                          <label className={`text-xs font-semibold uppercase tracking-wider ${getLabelColorClass('marriageAnniversary')}`}>
+                            💍 Marriage Anniversary Date *
+                          </label>
+                        </div>
+                        {yearsTogether !== null && (
+                          <span className="px-3 py-1 rounded-lg bg-[#1C1917] text-[#F3DF9C] font-serif-royal font-bold text-[11px] border border-[#C5A869]/50 tabular-nums">
+                            {yearsTogether} Glorious Years Together
+                          </span>
+                        )}
                       </div>
-                      {yearsTogether !== null && (
-                        <span className="px-3 py-1 rounded-lg bg-[#1C1917] text-[#F3DF9C] font-serif-royal font-bold text-[11px] border border-[#C5A869]/50 tabular-nums">
-                          {yearsTogether} Glorious Years Together
-                        </span>
-                      )}
+
+                      <input
+                        type="date"
+                        required
+                        data-field-error={fieldErrors.marriageAnniversary ? 'true' : undefined}
+                        aria-invalid={Boolean(fieldErrors.marriageAnniversary)}
+                        value={marriageAnniversary}
+                        onChange={(e) => {
+                          setMarriageAnniversary(e.target.value);
+                          clearFieldError('marriageAnniversary');
+                          if (e.target.value) {
+                            triggerConfettiFanfare();
+                          }
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('marriageAnniversary')}`}
+                      />
+                      {renderFieldError('marriageAnniversary')}
                     </div>
+                  )}
 
-                    <input
-                      type="date"
-                      required
-                      data-field-error={fieldErrors.marriageAnniversary ? 'true' : undefined}
-                      aria-invalid={Boolean(fieldErrors.marriageAnniversary)}
-                      value={marriageAnniversary}
-                      onChange={(e) => {
-                        setMarriageAnniversary(e.target.value);
-                        clearFieldError('marriageAnniversary');
-                        if (e.target.value) {
-                          triggerConfettiFanfare();
-                        }
-                      }}
-                      className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('marriageAnniversary')}`}
-                    />
-                    {renderFieldError('marriageAnniversary')}
-                  </div>
-
-                  {/* Couple Photo on Anniversary Page */}
+                  {/* Couple Photo */}
                   <PhotoUploadOrDriveLink
-                    label="💑 Couple Photo / Google Drive Link"
-                    subtitle="Upload a couple photo of Husband & Wife together or paste a Google Drive photo URL"
-                    guideline="Please add your Couple Photo (Husband & Wife together) for your Anniversary & Union profile."
+                    label="Couple Photo (Husband & Wife Together)"
+                    labelNote={
+                      membershipType === 'existing'
+                        ? '(Upload new photo if you want to update previous photo)'
+                        : undefined
+                    }
                     value={couplePhotoUrl}
                     required={membershipType === 'new'}
                     fieldError={fieldErrors.couplePhotoUrl}
@@ -2779,47 +2967,56 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     }}
                   />
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('currentCity')}`}>
-                        Current City of Residence *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        data-field-error={fieldErrors.currentCity ? 'true' : undefined}
-                        aria-invalid={Boolean(fieldErrors.currentCity)}
-                        placeholder="e.g. Indore"
-                        value={currentCity}
-                        onChange={(e) => {
-                          setCurrentCity(e.target.value);
-                          clearFieldError('currentCity');
-                        }}
-                        className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('currentCity')}`}
-                      />
-                      {renderFieldError('currentCity')}
-                    </div>
+                  {membershipType === 'new' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('currentCity')}`}>
+                          Current City of Residence *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          data-field-error={fieldErrors.currentCity ? 'true' : undefined}
+                          aria-invalid={Boolean(fieldErrors.currentCity)}
+                          placeholder="e.g. Indore"
+                          value={currentCity}
+                          onChange={(e) => {
+                            setCurrentCity(e.target.value);
+                            clearFieldError('currentCity');
+                          }}
+                          className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('currentCity')}`}
+                        />
+                        {renderFieldError('currentCity')}
+                      </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                        Native Place / Hometown
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Ratlam, Udaipur, Indore"
-                        value={nativePlace}
-                        onChange={(e) => setNativePlace(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
-                      />
+                      <div>
+                        <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('nativePlace')}`}>
+                          Native Place / Hometown *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          data-field-error={fieldErrors.nativePlace ? 'true' : undefined}
+                          aria-invalid={Boolean(fieldErrors.nativePlace)}
+                          placeholder="e.g. Ratlam, Udaipur, Indore"
+                          value={nativePlace}
+                          onChange={(e) => {
+                            setNativePlace(e.target.value);
+                            clearFieldError('nativePlace');
+                          }}
+                          className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('nativePlace')}`}
+                        />
+                        {renderFieldError('nativePlace')}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div>
                     <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('residentialAddress')}`}>
-                      Complete Residential Address *
+                      Complete Residential Address {membershipType === 'new' ? '*' : ''}
                     </label>
                     <textarea
-                      required
+                      required={membershipType === 'new'}
                       rows={3}
                       data-field-error={fieldErrors.residentialAddress ? 'true' : undefined}
                       aria-invalid={Boolean(fieldErrors.residentialAddress)}
@@ -2836,40 +3033,35 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                 </div>
               )}
 
-              {/* STEP 4: CHILDREN / ROYAL HEIRS */}
+              {/* STEP 4: CHILDREN */}
               {activeStep === 4 && (
                 <div key={4} className="space-y-4 animate-fade-in-up">
                   <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE]">
-                    <div>
-                      <h4 className="font-serif-royal font-bold text-sm text-[#1C1917]">
-                        Royal Heirs &amp; Children
-                      </h4>
-                      <p className="text-xs text-[#78716C]">
-                        Register details for your sons and daughters, and add each kid photo with parents.
-                      </p>
-                    </div>
+                    <span className="font-serif-royal font-bold text-sm text-[#1C1917]">
+                      Have children?
+                    </span>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-[#57534E]">Have children?</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = !hasChildren;
-                          setHasChildren(next);
-                          if (next && children.length === 0) {
-                            handleAddChild();
-                          }
-                        }}
-                        className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
-                          hasChildren ? 'bg-[#1C1917]' : 'bg-[#D9CDB8]'
-                        }`}
-                      >
-                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                          hasChildren ? 'translate-x-6' : 'translate-x-0'
-                        }`} />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !hasChildren;
+                        setHasChildren(next);
+                        clearFieldError('childrenList');
+                        if (next && children.length === 0) {
+                          handleAddChild();
+                        }
+                      }}
+                      className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                        hasChildren ? 'bg-[#1C1917]' : 'bg-[#D9CDB8]'
+                      }`}
+                    >
+                      <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        hasChildren ? 'translate-x-6' : 'translate-x-0'
+                      }`} />
+                    </button>
                   </div>
+
+                  {renderFieldError('childrenList')}
 
                   {hasChildren ? (
                     <div className="space-y-4">
@@ -2881,7 +3073,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                           <div className="flex items-center justify-between border-b border-[#F0E8DC] pb-2">
                             <span className="font-serif-royal font-bold text-xs text-[#8C6D2B] flex items-center gap-1.5">
                               <Crown className="w-3.5 h-3.5 text-[#D4AF37]" />
-                              <span>Royal Heir #{index + 1}</span>
+                              <span>Child #{index + 1}</span>
                             </span>
                             {children.length > 1 && (
                               <button
@@ -2897,21 +3089,28 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-[11px] font-semibold uppercase text-[#44403C] mb-1">
-                                Child Full Name
+                              <label className={`block text-[11px] font-semibold uppercase mb-1 ${getLabelColorClass(`childName_${child.id}`)}`}>
+                                Child Full Name {membershipType === 'new' ? '*' : ''}
                               </label>
                               <input
                                 type="text"
+                                required={membershipType === 'new'}
+                                data-field-error={fieldErrors[`childName_${child.id}`] ? 'true' : undefined}
+                                aria-invalid={Boolean(fieldErrors[`childName_${child.id}`])}
                                 placeholder="Child full name"
                                 value={child.name}
-                                onChange={(e) => handleUpdateChild(child.id, 'name', e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg border border-[#D9CDB8] text-xs bg-white outline-hidden focus:ring-1 focus:ring-[#C5A869]"
+                                onChange={(e) => {
+                                  handleUpdateChild(child.id, 'name', e.target.value);
+                                  clearFieldError(`childName_${child.id}`);
+                                }}
+                                className={`w-full px-3 py-2 rounded-lg border text-xs outline-hidden ${getFieldBorderClass(`childName_${child.id}`)}`}
                               />
+                              {renderFieldError(`childName_${child.id}`)}
                             </div>
 
                             <div>
                               <label className="block text-[11px] font-semibold uppercase text-[#44403C] mb-1">
-                                Gender
+                                Gender {membershipType === 'new' ? '*' : ''}
                               </label>
                               <div className="grid grid-cols-2 gap-2">
                                 <button
@@ -2941,11 +3140,12 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
                             <div>
                               <label className={`block text-[11px] font-semibold uppercase mb-1 ${getLabelColorClass(`childDob_${child.id}`)}`}>
-                                Date of Birth / Age
+                                Date of Birth / Age {membershipType === 'new' ? '*' : ''}
                               </label>
                               <input
                                 type="date"
                                 min="1988-01-01"
+                                required={membershipType === 'new'}
                                 data-field-error={fieldErrors[`childDob_${child.id}`] ? 'true' : undefined}
                                 aria-invalid={Boolean(fieldErrors[`childDob_${child.id}`])}
                                 value={child.dob}
@@ -2962,28 +3162,34 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                             </div>
 
                             <div>
-                              <label className="block text-[11px] font-semibold uppercase text-[#44403C] mb-1">
-                                School / College / Profession
+                              <label className={`block text-[11px] font-semibold uppercase mb-1 ${getLabelColorClass(`childEducation_${child.id}`)}`}>
+                                School / College / Profession {membershipType === 'new' ? '*' : ''}
                               </label>
                               <input
                                 type="text"
+                                required={membershipType === 'new'}
+                                data-field-error={fieldErrors[`childEducation_${child.id}`] ? 'true' : undefined}
+                                aria-invalid={Boolean(fieldErrors[`childEducation_${child.id}`])}
                                 placeholder="e.g. Daly College / IIT / Working"
                                 value={child.education}
-                                onChange={(e) => handleUpdateChild(child.id, 'education', e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg border border-[#D9CDB8] text-xs bg-white outline-hidden focus:ring-1 focus:ring-[#C5A869]"
+                                onChange={(e) => {
+                                  handleUpdateChild(child.id, 'education', e.target.value);
+                                  clearFieldError(`childEducation_${child.id}`);
+                                }}
+                                className={`w-full px-3 py-2 rounded-lg border text-xs outline-hidden ${getFieldBorderClass(`childEducation_${child.id}`)}`}
                               />
+                              {renderFieldError(`childEducation_${child.id}`)}
                             </div>
                           </div>
 
-                          {/* Child Photo with Parents / Google Drive Link */}
+                          {/* Child's Photo with Parents */}
                           <PhotoUploadOrDriveLink
-                            label={`📸 ${child.name.trim() ? `${child.name.trim()} — ` : `Child #${index + 1} — `}Kid Photo with Parents / Google Drive Link`}
-                            subtitle={
-                              membershipType === 'new'
-                                ? 'Mandatory for registered children: upload a photo of the kid with parents or paste a Google Drive URL'
-                                : 'Upload a photo of the kid together with parents (Father, Mother & Child) or paste a Google Drive URL'
+                            label={`${child.name.trim() ? `${child.name.trim()} — ` : `Child #${index + 1} — `}Child's Photo with Parents`}
+                            labelNote={
+                              membershipType === 'existing'
+                                ? '(Upload new photo if you want to update previous photo)'
+                                : undefined
                             }
-                            guideline="Picture Instruction: While taking or uploading the picture, please add kid photo with parents (Husband, Wife & Child together)."
                             value={child.photo_url || null}
                             required={membershipType === 'new' && hasChildren}
                             fieldError={fieldErrors[`childPhoto_${child.id}`]}
@@ -2998,236 +3204,365 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       <button
                         type="button"
                         onClick={handleAddChild}
-                        className="w-full py-3 rounded-xl border border-dashed border-[#8C6D2B] bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#8C6D2B] font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        className="w-full py-2.5 rounded-xl border border-dashed border-[#8C6D2B] bg-[#FAF7F2] hover:bg-[#F2ECE1] text-[#8C6D2B] font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <Plus className="w-4 h-4" />
-                        <span>+ Add Another Royal Child</span>
+                        <span>Add Another Child</span>
                       </button>
                     </div>
                   ) : (
-                    <div className="p-8 text-center bg-[#FAF7F2] rounded-2xl border border-[#E7DDCE] text-xs text-[#78716C] space-y-1">
-                      <Baby className="w-8 h-8 text-[#8C6D2B] mx-auto opacity-50 mb-2" />
-                      <div className="font-semibold text-[#1C1917]">No Children Registered</div>
-                      <div>Couples without children can proceed directly to the next step.</div>
+                    <div className="p-6 text-center bg-[#FAF7F2] rounded-2xl border border-[#E7DDCE] text-xs text-[#78716C] space-y-1">
+                      <Baby className="w-7 h-7 text-[#8C6D2B] mx-auto opacity-50 mb-1" />
+                      <div className="font-semibold text-[#1C1917]">No Children Added</div>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* STEP 5: PORTRAIT & ROYAL VISION */}
+              {/* STEP 5: EXPERIENCE FEEDBACK (EXISTING) / CONTRIBUTION & IDEAS (NEW) */}
               {activeStep === 5 && (
-                <div key={5} className="space-y-6 animate-fade-in-up">
-                  
-                  {/* Family Portrait Photo or Google Drive Link */}
-                  <div className="p-5 rounded-2xl bg-[#FAF7F2] border border-[#E7DDCE] space-y-3">
-                    <PhotoUploadOrDriveLink
-                      label="📸 Royal Family Group Portrait / Google Drive Link"
-                      subtitle="Upload a high-resolution family photo or paste your Google Drive link for the 2027 Heritage Directory"
-                      value={familyPhotoUrl}
-                      required={membershipType === 'new'}
-                      fieldError={fieldErrors.familyPhotoUrl}
-                      onChange={(url) => {
-                        setFamilyPhotoUrl(url);
-                        if (url) clearFieldError('familyPhotoUrl');
-                      }}
-                    />
-                  </div>
-
-                  {/* Contribution Areas */}
-                  <div className="space-y-2">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C]">
-                      Areas Where You&apos;d Love to Contribute
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {[
-                        'Cultural & Stage Programs',
-                        'Sports & Fitness Events',
-                        'Community Outreach & Charity',
-                        'Business & Entrepreneurship',
-                        'Youth & Children Mentorship',
-                        'Hospitality & Fellowship'
-                      ].map((area) => {
-                        const isSelected = contributionAreas.includes(area);
-                        return (
-                          <button
-                            key={area}
-                            type="button"
-                            onClick={() => toggleContributionArea(area)}
-                            className={`p-2.5 rounded-xl text-xs font-medium text-left border transition-all cursor-pointer flex items-center justify-between ${
-                              isSelected
-                                ? 'bg-[#1C1917] text-[#FAF7F2] border-[#C5A869]'
-                                : 'bg-[#FAF7F2] text-[#44403C] border-[#E7DDCE] hover:bg-[#F2ECE1]'
-                            }`}
-                          >
-                            <span>{area}</span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Royal Idea */}
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                      One Grand Idea for JSG Royals Chapter 2 (2027)
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Share a unique event, retreat, or initiative you would love our royal club to organize..."
-                      value={royalIdea}
-                      onChange={(e) => setRoyalIdea(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869] focus:border-[#C5A869]"
-                    />
-                  </div>
-
-                  {/* Additional Questions for New Members Only */}
-                  {membershipType === 'new' && (
-                    <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/60 border border-[#D4AF37]/60 space-y-4">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#8C6D2B] block">
-                          New Member Application Questions
-                        </span>
-                        <h4 className="font-serif-royal font-bold text-sm text-[#1C1917]">
-                          Group Background, Business &amp; Reference *
-                        </h4>
-                        <p className="text-[11px] text-[#78716C]">
-                          Please answer these additional questions required for new member review.
+                <div key={5} className="space-y-5 animate-fade-in-up">
+                  {membershipType === 'existing' ? (
+                    <div className="space-y-5">
+                      {/* Header Banner */}
+                      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#1C1917] via-[#24201D] to-[#14110F] text-[#FAF7F2] border border-[#D4AF37]/75 shadow-md space-y-1.5 text-center">
+                        <h3 className="font-serif-royal font-bold text-base sm:text-lg tracking-wide text-[#F3DF9C]">
+                          JSG ROYALS – YOUR EXPERIENCE MATTERS! 🤍
+                        </h3>
+                        <p className="text-xs sm:text-sm text-[#E7DDCE]/90">
+                          We would love to hear your feedback and ideas to make the next tenure even more exciting!
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {/* Q1: Overall Experience Rating (1-10) */}
+                      <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] border border-[#E2D5BE] space-y-3">
                         <div>
-                          <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
-                            Are you part of any other group? *
+                          <label className="block text-xs sm:text-sm font-bold text-[#1C1917]">
+                            Q1. How would you rate your overall experience with JSG Royals in the last tenure?
                           </label>
-                          <select
-                            value={appOtherGroup}
-                            onChange={(e) => {
-                              const val = e.target.value as 'Yes' | 'No';
-                              setAppOtherGroup(val);
-                              if (val === 'No') {
-                                setAppOtherGroupName('');
-                                clearFieldError('appOtherGroupName');
-                              }
-                            }}
-                            className="w-full px-3.5 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
-                          >
-                            <option value="No">No</option>
-                            <option value="Yes">Yes</option>
-                          </select>
+                          <span className="text-[11px] text-[#78716C] block mt-0.5">
+                            (Rate on a scale of 1–10)
+                          </span>
                         </div>
 
-                        {appOtherGroup === 'Yes' && (
-                          <div>
-                            <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appOtherGroupName')}`}>
-                              Group Name *
+                        <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => {
+                            const selected = expRating === score;
+                            return (
+                              <button
+                                key={score}
+                                type="button"
+                                onClick={() => setExpRating(selected ? null : score)}
+                                className={`min-h-[42px] rounded-xl text-sm font-bold tabular-nums border transition-all cursor-pointer flex items-center justify-center ${
+                                  selected
+                                    ? 'bg-[#1C1917] text-[#F3DF9C] border-[#D4AF37] shadow-sm scale-[1.03]'
+                                    : 'bg-white text-[#44403C] border-[#D9CDB8] hover:border-[#B89748] hover:bg-[#FAF6EE]'
+                                }`}
+                              >
+                                {score}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-[#78716C] font-medium px-0.5">
+                          <span>1 · Needs Improvement</span>
+                          {expRating !== null && (
+                            <span className="text-[#8C6D2B] font-bold">
+                              Selected: {expRating} / 10
+                            </span>
+                          )}
+                          <span>10 · Extraordinary</span>
+                        </div>
+                      </div>
+
+                      {/* Q2: Favourite Event / Experience */}
+                      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E2D5BE] space-y-2">
+                        <label className="block text-xs sm:text-sm font-bold text-[#1C1917]">
+                          Q2. Which event or experience was your absolute favourite from the last tenure?
+                        </label>
+                        <textarea
+                          rows={2}
+                          maxLength={1000}
+                          placeholder="Share your favourite event, celebration, or memorable moment..."
+                          value={expFavouriteEvent}
+                          onChange={(e) => setExpFavouriteEvent(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-[#D8CAAF] bg-[#FAF7F2]/50 focus:bg-white text-xs text-[#1C1917] outline-hidden focus:ring-2 focus:ring-[#D4AF37]/25 focus:border-[#B89748] transition-colors"
+                        />
+                      </div>
+
+                      {/* Q3: International Trip Interest */}
+                      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E2D5BE] space-y-3">
+                        <label className="block text-xs sm:text-sm font-bold text-[#1C1917]">
+                          Q3. Would you be interested in an international trip with JSG Royals?
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {(['Yes', 'No'] as const).map((choice) => {
+                            const selected = expInternationalTrip === choice;
+                            return (
+                              <button
+                                key={choice}
+                                type="button"
+                                onClick={() => {
+                                  const next = selected ? '' : choice;
+                                  setExpInternationalTrip(next);
+                                  if (next !== 'Yes') {
+                                    setExpTripMonthDestination('');
+                                  }
+                                }}
+                                className={`min-h-[42px] px-4 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                                  selected
+                                    ? 'bg-[#1C1917] text-[#F3DF9C] border-[#D4AF37] shadow-xs'
+                                    : 'bg-[#FAF7F2] text-[#44403C] border-[#D9CDB8] hover:bg-[#F2ECE1]'
+                                }`}
+                              >
+                                {selected && <Check className="w-3.5 h-3.5 text-[#D4AF37]" />}
+                                <span>{choice === 'Yes' ? 'Yes, Interested' : 'No'}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {expInternationalTrip === 'Yes' && (
+                          <div className="pt-1 space-y-1.5 animate-fade-in-up">
+                            <label className="block text-xs font-semibold text-[#8C6D2B]">
+                              If yes, which month &amp; destination
                             </label>
                             <input
                               type="text"
-                              required
-                              data-field-error={fieldErrors.appOtherGroupName ? 'true' : undefined}
-                              aria-invalid={Boolean(fieldErrors.appOtherGroupName)}
-                              placeholder="Enter name of the other group"
-                              value={appOtherGroupName}
-                              onChange={(e) => {
-                                setAppOtherGroupName(e.target.value);
-                                clearFieldError('appOtherGroupName');
-                              }}
-                              className={`w-full px-3.5 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appOtherGroupName')}`}
+                              maxLength={300}
+                              placeholder="e.g. May / June — Europe, Bali, Dubai, Japan..."
+                              value={expTripMonthDestination}
+                              onChange={(e) => setExpTripMonthDestination(e.target.value)}
+                              className="w-full px-4 py-2.5 rounded-xl border border-[#D8CAAF] bg-white text-xs text-[#1C1917] outline-hidden focus:ring-2 focus:ring-[#D4AF37]/25 focus:border-[#B89748] transition-colors"
                             />
-                            {renderFieldError('appOtherGroupName')}
                           </div>
                         )}
                       </div>
 
-                      <div>
-                        <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appBusinessDesc')}`}>
-                          Business/Job (Short industry or role details) *
+                      {/* Q4: What Was Missing */}
+                      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E2D5BE] space-y-2">
+                        <label className="block text-xs sm:text-sm font-bold text-[#1C1917]">
+                          Q4. What was missing from the last tenure?
                         </label>
                         <textarea
-                          required
-                          rows={2}
-                          data-field-error={fieldErrors.appBusinessDesc ? 'true' : undefined}
-                          aria-invalid={Boolean(fieldErrors.appBusinessDesc)}
-                          placeholder="Briefly describe your business, industry, products/services, or job role..."
-                          value={appBusinessDesc}
-                          onChange={(e) => {
-                            setAppBusinessDesc(e.target.value);
-                            clearFieldError('appBusinessDesc');
-                          }}
-                          className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appBusinessDesc')}`}
+                          rows={3}
+                          maxLength={2000}
+                          placeholder="Share any honest suggestions, activities, or experiences you would love to see..."
+                          value={expMissing}
+                          onChange={(e) => setExpMissing(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-[#D8CAAF] bg-[#FAF7F2]/50 focus:bg-white text-xs text-[#1C1917] outline-hidden focus:ring-2 focus:ring-[#D4AF37]/25 focus:border-[#B89748] transition-colors"
                         />
-                        {renderFieldError('appBusinessDesc')}
                       </div>
 
-                      <div>
-                        <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appContribution')}`}>
-                          How can you contribute to the group? *
-                        </label>
-                        <textarea
-                          required
-                          rows={2}
-                          data-field-error={fieldErrors.appContribution ? 'true' : undefined}
-                          aria-invalid={Boolean(fieldErrors.appContribution)}
-                          placeholder="Share how you can contribute your skills, time, events, or fellowship..."
-                          value={appContribution}
-                          onChange={(e) => {
-                            setAppContribution(e.target.value);
-                            clearFieldError('appContribution');
-                          }}
-                          className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appContribution')}`}
-                        />
-                        {renderFieldError('appContribution')}
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        <div>
-                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appRefName')}`}>
-                            Reference (Referring Member Name) *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            data-field-error={fieldErrors.appRefName ? 'true' : undefined}
-                            aria-invalid={Boolean(fieldErrors.appRefName)}
-                            placeholder="Name of referring JSG Royals member"
-                            value={appRefName}
-                            onChange={(e) => {
-                              setAppRefName(e.target.value);
-                              clearFieldError('appRefName');
-                            }}
-                            className={`w-full px-3.5 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appRefName')}`}
-                          />
-                          {renderFieldError('appRefName')}
-                        </div>
-
-                        <div>
-                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appRefMobile')}`}>
-                            Referring Member Mobile *
-                          </label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-[#78716C]">+91</span>
-                            <input
-                              type="tel"
-                              required
-                              inputMode="numeric"
-                              maxLength={10}
-                              data-field-error={fieldErrors.appRefMobile ? 'true' : undefined}
-                              aria-invalid={Boolean(fieldErrors.appRefMobile)}
-                              placeholder="10-digit mobile"
-                              value={appRefMobile}
-                              onChange={(e) => {
-                                setAppRefMobile(e.target.value.replace(/\D/g, '').slice(0, 10));
-                                clearFieldError('appRefMobile');
-                              }}
-                              className={`w-full pl-11 pr-3.5 py-2.5 rounded-xl border text-xs font-mono tabular-nums outline-hidden ${getFieldBorderClass('appRefMobile')}`}
-                            />
-                          </div>
-                          {renderFieldError('appRefMobile')}
-                        </div>
+                      {/* Closing Footer Message */}
+                      <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#D4AF37]/50 text-center">
+                        <p className="text-xs sm:text-sm font-serif-royal font-bold text-[#1C1917]">
+                          Your feedback will help us make the next tenure bigger, better and more memorable! ❤️
+                        </p>
                       </div>
                     </div>
+                  ) : (
+                    <>
+                      {/* Contribution Areas */}
+                      <div
+                        data-field-error={fieldErrors.contributionAreas ? 'true' : undefined}
+                        className={`space-y-2 rounded-2xl transition-colors ${
+                          fieldErrors.contributionAreas ? 'bg-red-50/70 border border-red-400 p-3' : ''
+                        }`}
+                      >
+                        <label className={`block text-xs font-semibold uppercase tracking-wider ${getLabelColorClass('contributionAreas')}`}>
+                          Areas Where You&apos;d Love to Contribute *
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                          {[
+                            'Cultural & Stage Programs',
+                            'Sports & Fitness Events',
+                            'Community Outreach & Charity',
+                            'Business & Entrepreneurship',
+                            'Youth & Children Mentorship',
+                            'Hospitality & Fellowship'
+                          ].map((area) => {
+                            const isSelected = contributionAreas.includes(area);
+                            return (
+                              <button
+                                key={area}
+                                type="button"
+                                onClick={() => toggleContributionArea(area)}
+                                className={`p-2.5 rounded-xl text-xs font-medium text-left border transition-all cursor-pointer flex items-center justify-between ${
+                                  isSelected
+                                    ? 'bg-[#1C1917] text-[#FAF7F2] border-[#C5A869]'
+                                    : 'bg-[#FAF7F2] text-[#44403C] border-[#E7DDCE] hover:bg-[#F2ECE1]'
+                                }`}
+                              >
+                                <span>{area}</span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {renderFieldError('contributionAreas')}
+                      </div>
+
+                      {/* One Grand Idea */}
+                      <div>
+                        <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('royalIdea')}`}>
+                          One Grand Idea for JSG Royals Chapter 2 (2027) *
+                        </label>
+                        <textarea
+                          rows={2}
+                          required
+                          data-field-error={fieldErrors.royalIdea ? 'true' : undefined}
+                          aria-invalid={Boolean(fieldErrors.royalIdea)}
+                          placeholder="Share an event, retreat, or initiative idea..."
+                          value={royalIdea}
+                          onChange={(e) => {
+                            setRoyalIdea(e.target.value);
+                            clearFieldError('royalIdea');
+                          }}
+                          className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('royalIdea')}`}
+                        />
+                        {renderFieldError('royalIdea')}
+                      </div>
+
+                      {/* Additional Questions for New Members Only */}
+                      <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/60 border border-[#D4AF37]/60 space-y-4">
+                        <h4 className="font-serif-royal font-bold text-sm text-[#1C1917]">
+                          Group Background, Business &amp; Reference *
+                        </h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                          <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wider text-[#44403C] mb-1">
+                              Are you part of any other group? *
+                            </label>
+                            <select
+                              value={appOtherGroup}
+                              onChange={(e) => {
+                                const val = e.target.value as 'Yes' | 'No';
+                                setAppOtherGroup(val);
+                                if (val === 'No') {
+                                  setAppOtherGroupName('');
+                                  clearFieldError('appOtherGroupName');
+                                }
+                              }}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-[#D9CDB8] text-xs text-[#1C1917] bg-white outline-hidden focus:ring-2 focus:ring-[#C5A869]"
+                            >
+                              <option value="No">No</option>
+                              <option value="Yes">Yes</option>
+                            </select>
+                          </div>
+
+                          {appOtherGroup === 'Yes' && (
+                            <div>
+                              <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appOtherGroupName')}`}>
+                                Group Name *
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                data-field-error={fieldErrors.appOtherGroupName ? 'true' : undefined}
+                                aria-invalid={Boolean(fieldErrors.appOtherGroupName)}
+                                placeholder="Enter name of the other group"
+                                value={appOtherGroupName}
+                                onChange={(e) => {
+                                  setAppOtherGroupName(e.target.value);
+                                  clearFieldError('appOtherGroupName');
+                                }}
+                                className={`w-full px-3.5 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appOtherGroupName')}`}
+                              />
+                              {renderFieldError('appOtherGroupName')}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appBusinessDesc')}`}>
+                            Business/Job (Short industry or role details) *
+                          </label>
+                          <textarea
+                            required
+                            rows={2}
+                            data-field-error={fieldErrors.appBusinessDesc ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.appBusinessDesc)}
+                            placeholder="Briefly describe your business, industry, products/services, or job role..."
+                            value={appBusinessDesc}
+                            onChange={(e) => {
+                              setAppBusinessDesc(e.target.value);
+                              clearFieldError('appBusinessDesc');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appBusinessDesc')}`}
+                          />
+                          {renderFieldError('appBusinessDesc')}
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appContribution')}`}>
+                            How can you contribute to the group? *
+                          </label>
+                          <textarea
+                            required
+                            rows={2}
+                            data-field-error={fieldErrors.appContribution ? 'true' : undefined}
+                            aria-invalid={Boolean(fieldErrors.appContribution)}
+                            placeholder="Share how you can contribute your skills, time, events, or fellowship..."
+                            value={appContribution}
+                            onChange={(e) => {
+                              setAppContribution(e.target.value);
+                              clearFieldError('appContribution');
+                            }}
+                            className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appContribution')}`}
+                          />
+                          {renderFieldError('appContribution')}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                          <div>
+                            <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appRefName')}`}>
+                              Reference (Referring Member Name) *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              data-field-error={fieldErrors.appRefName ? 'true' : undefined}
+                              aria-invalid={Boolean(fieldErrors.appRefName)}
+                              placeholder="Name of referring JSG Royals member"
+                              value={appRefName}
+                              onChange={(e) => {
+                                setAppRefName(e.target.value);
+                                clearFieldError('appRefName');
+                              }}
+                              className={`w-full px-3.5 py-2.5 rounded-xl border text-xs outline-hidden ${getFieldBorderClass('appRefName')}`}
+                            />
+                            {renderFieldError('appRefName')}
+                          </div>
+
+                          <div>
+                            <label className={`block text-xs font-semibold uppercase tracking-wider mb-1 ${getLabelColorClass('appRefMobile')}`}>
+                              Referring Member Mobile *
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-[#78716C]">+91</span>
+                              <input
+                                type="tel"
+                                required
+                                inputMode="numeric"
+                                maxLength={10}
+                                data-field-error={fieldErrors.appRefMobile ? 'true' : undefined}
+                                aria-invalid={Boolean(fieldErrors.appRefMobile)}
+                                placeholder="10-digit mobile"
+                                value={appRefMobile}
+                                onChange={(e) => {
+                                  setAppRefMobile(e.target.value.replace(/\D/g, '').slice(0, 10));
+                                  clearFieldError('appRefMobile');
+                                }}
+                                className={`w-full pl-11 pr-3.5 py-2.5 rounded-xl border text-xs font-mono tabular-nums outline-hidden ${getFieldBorderClass('appRefMobile')}`}
+                              />
+                            </div>
+                            {renderFieldError('appRefMobile')}
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
               )}
@@ -3246,21 +3581,18 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                   : [];
 
                 return (
-                  <div key={6} className="space-y-6 animate-fade-in-up">
-                    {/* Complete Royal Dossier Review Card */}
-                    <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-[#1C1917] via-[#24201D] to-[#12100E] text-[#FAF7F2] border-2 border-[#D4AF37]/90 space-y-6 shadow-2xl relative overflow-hidden">
+                  <div key={6} className="space-y-5 animate-fade-in-up">
+                    {/* Summary Review Card */}
+                    <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#1C1917] via-[#24201D] to-[#12100E] text-[#FAF7F2] border-2 border-[#D4AF37]/90 space-y-5 shadow-2xl relative overflow-hidden">
                       <RoyalCornerBrackets />
 
-                      <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-[#C5A869]/30">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#C5A869]/30">
                         <div className="flex items-center gap-3">
                           <RoyalLogo className="w-8 h-8 rounded-lg border border-[#D4AF37]/70 p-0.5" />
-                          <span className="font-serif-royal font-bold text-sm text-[#F3DF9C] tracking-[0.06em]">
-                            Royal Family Seal of Authenticity
+                          <span className="font-serif-royal font-bold text-sm text-[#F3DF9C] tracking-[0.04em]">
+                            {membershipType === 'existing' ? 'Update Summary' : 'Registration Summary'}
                           </span>
                         </div>
-                        <span className="text-[10px] text-[#C5A869] uppercase tracking-[0.14em]">
-                          Complete Record Summary
-                        </span>
                       </div>
 
                       {/* Husband & Wife Full Details */}
@@ -3269,7 +3601,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         <div className="p-4 rounded-2xl bg-white/[0.04] border border-[#C5A869]/20 space-y-2.5">
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] text-[#D4AF37] uppercase tracking-[0.12em] font-bold">
-                              🤵 Royal Gentleman
+                              Husband Details
                             </span>
                             <button
                               type="button"
@@ -3309,7 +3641,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         <div className="p-4 rounded-2xl bg-white/[0.04] border border-[#C5A869]/20 space-y-2.5">
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] text-[#D4AF37] uppercase tracking-[0.12em] font-bold">
-                              👰 Royal Lady
+                              Wife Details
                             </span>
                             <button
                               type="button"
@@ -3346,11 +3678,11 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         </div>
                       </div>
 
-                      {/* Union & Residence */}
+                      {/* Address / Marriage & Residence */}
                       <div className="p-4 rounded-2xl bg-white/[0.04] border border-[#C5A869]/20 space-y-2.5 text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-[#D4AF37] uppercase tracking-[0.12em] font-bold">
-                            💍 Royal Union &amp; Residence
+                            {membershipType === 'existing' ? 'Address & Couple Photo' : 'Marriage & Residence'}
                           </span>
                           <button
                             type="button"
@@ -3360,26 +3692,34 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                             Edit
                           </button>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px]">
-                          <div>
-                            <span className="text-[10px] text-[#C5BCAE] uppercase block">Anniversary</span>
-                            <span className="font-semibold text-[#F3DF9C]">
-                              {marriageAnniversary || 'Not entered'}
-                              {yearsTogether !== null ? ` (${yearsTogether} yrs)` : ''}
-                            </span>
+                        {(membershipType === 'new' || marriageAnniversary || currentCity || nativePlace) && (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px]">
+                            {(membershipType === 'new' || marriageAnniversary) && (
+                              <div>
+                                <span className="text-[10px] text-[#C5BCAE] uppercase block">Anniversary</span>
+                                <span className="font-semibold text-[#F3DF9C]">
+                                  {marriageAnniversary || 'Not entered'}
+                                  {yearsTogether !== null ? ` (${yearsTogether} yrs)` : ''}
+                                </span>
+                              </div>
+                            )}
+                            {(membershipType === 'new' || currentCity) && (
+                              <div>
+                                <span className="text-[10px] text-[#C5BCAE] uppercase block">Current City</span>
+                                <span className="text-white">{currentCity || 'Not entered'}</span>
+                              </div>
+                            )}
+                            {(membershipType === 'new' || nativePlace) && (
+                              <div>
+                                <span className="text-[10px] text-[#C5BCAE] uppercase block">Native Place</span>
+                                <span className="text-white">{nativePlace || '—'}</span>
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <span className="text-[10px] text-[#C5BCAE] uppercase block">Current City</span>
-                            <span className="text-white">{currentCity || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-[#C5BCAE] uppercase block">Native Place</span>
-                            <span className="text-white">{nativePlace || '—'}</span>
-                          </div>
-                        </div>
+                        )}
                         <div className="text-[11px]">
                           <span className="text-[10px] text-[#C5BCAE] uppercase block">Residential Address</span>
-                          <span className="text-[#E7DDCE]">{residentialAddress || 'Not entered'}</span>
+                          <span className="text-[#E7DDCE]">{residentialAddress || 'No change / Not entered'}</span>
                         </div>
                         {couplePhotoUrl ? (
                           <div className="pt-2 border-t border-white/10 space-y-1.5">
@@ -3391,11 +3731,11 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         )}
                       </div>
 
-                      {/* Children / Royal Heirs Full Details */}
+                      {/* Children Details */}
                       <div className="p-4 rounded-2xl bg-white/[0.04] border border-[#C5A869]/20 space-y-3 text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-[#D4AF37] uppercase tracking-[0.12em] font-bold">
-                            👶 Royal Heirs &amp; Children ({hasChildren ? filledChildren.length : 0})
+                            Children ({hasChildren ? filledChildren.length : 0})
                           </span>
                           <button
                             type="button"
@@ -3436,11 +3776,11 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                         )}
                       </div>
 
-                      {/* Family Portrait & Vision */}
+                      {/* Experience Feedback / Ideas & Reference */}
                       <div className="p-4 rounded-2xl bg-white/[0.04] border border-[#C5A869]/20 space-y-3 text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-[#D4AF37] uppercase tracking-[0.12em] font-bold">
-                            📸 Family Portrait &amp; Royal Vision
+                            {membershipType === 'existing' ? 'Your Experience Matters' : 'Ideas & Reference'}
                           </span>
                           <button
                             type="button"
@@ -3451,10 +3791,39 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                           </button>
                         </div>
 
-                        {familyPhotoUrl ? (
-                          <DossierPhotoThumbnail url={familyPhotoUrl} alt="Royal Family Group Portrait" />
-                        ) : (
-                          <div className="text-[11px] text-[#A8A29E]">No Family Group Portrait attached</div>
+                        {membershipType === 'existing' && (
+                          <div className="space-y-2 text-[11px]">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <span className="text-[10px] text-[#C5BCAE] uppercase block">Overall Experience (1–10)</span>
+                                <span className="text-[#F3DF9C] font-bold">
+                                  {expRating !== null ? `${expRating} / 10` : 'Not rated'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-[#C5BCAE] uppercase block">International Trip Interest</span>
+                                <span className="text-white font-semibold">
+                                  {expInternationalTrip === 'Yes'
+                                    ? `Yes${expTripMonthDestination.trim() ? ` — ${expTripMonthDestination.trim()}` : ''}`
+                                    : expInternationalTrip === 'No'
+                                      ? 'No'
+                                      : 'Not answered'}
+                                </span>
+                              </div>
+                            </div>
+                            {expFavouriteEvent.trim() && (
+                              <div>
+                                <span className="text-[10px] text-[#C5BCAE] uppercase block">Favourite Event / Experience</span>
+                                <span className="text-[#FAF7F2]">{expFavouriteEvent.trim()}</span>
+                              </div>
+                            )}
+                            {expMissing.trim() && (
+                              <div>
+                                <span className="text-[10px] text-[#C5BCAE] uppercase block">What Was Missing</span>
+                                <span className="text-[#E7DDCE]">{expMissing.trim()}</span>
+                              </div>
+                            )}
+                          </div>
                         )}
 
                         {contributionAreas.length > 0 && (
@@ -3530,17 +3899,6 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       </div>
                     )}
 
-                    <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-950 space-y-1">
-                      <div className="font-bold flex items-center gap-1.5 text-amber-900">
-                        <Sparkles className="w-4 h-4 text-[#8C6D2B]" />
-                        <span>Automated Cross-Spouse Sync:</span>
-                      </div>
-                      <p className="text-[11px]">
-                        Upon submission, if your spouse visits the portal with their email ({gateRole === 'husband' ? wifeEmail || 'Wife' : husbandEmail || 'Husband'}),
-                        they will immediately be presented with this completed dossier!
-                      </p>
-                    </div>
-
                     {/* Member Declaration */}
                     <div
                       data-field-error={fieldErrors.declarationAccepted ? 'true' : undefined}
@@ -3589,7 +3947,6 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     onClick={() => {
                       setFieldErrors({});
                       setSubmitError(null);
-                      setShowConfirmSubmitModal(false);
                       setActiveStep((prev) => prev - 1);
                     }}
                     className="min-h-[44px] px-4 py-2.5 rounded-xl border border-[#D8CAAF] text-xs font-semibold text-[#1C1917] hover:bg-[#FAF7F2] transition-all flex items-center gap-1.5 cursor-pointer"
@@ -3629,7 +3986,22 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     }}
                     className="min-h-[44px] px-6 py-2.5 rounded-xl bg-[#1C1917] hover:bg-[#2A2623] text-[#FAF7F2] font-semibold text-xs shadow-sm transition-all flex items-center gap-1.5 border border-[#C5A869]/50 cursor-pointer"
                   >
-                    <span>Next: {activeStep === 1 ? 'Wife Details' : activeStep === 2 ? 'Union' : activeStep === 3 ? 'Children' : activeStep === 4 ? 'Portrait' : 'Review'}</span>
+                    <span>
+                      Next:{' '}
+                      {activeStep === 1
+                        ? 'Wife'
+                        : activeStep === 2
+                        ? membershipType === 'existing'
+                          ? 'Address'
+                          : 'Residence'
+                        : activeStep === 3
+                        ? 'Children'
+                        : activeStep === 4
+                        ? membershipType === 'existing'
+                          ? 'Feedback'
+                          : 'Ideas'
+                        : 'Review'}
+                    </span>
                     <ArrowRight className="w-3.5 h-3.5 text-[#D4AF37]" />
                   </button>
                 ) : (
@@ -3637,18 +4009,18 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                     key="review-seal-btn"
                     type="button"
                     disabled={submitting}
-                    onClick={handlePrepareSubmitReview}
+                    onClick={executeSubmitForm}
                     className="min-h-[46px] px-7 py-3 rounded-xl bg-gradient-to-r from-[#1C1917] via-[#2A2623] to-[#12100E] hover:from-black hover:to-[#1C1917] text-[#FAF7F2] font-serif-royal font-bold text-sm shadow-xl transition-all flex items-center gap-2 border-2 border-[#D4AF37] cursor-pointer"
                   >
                     {submitting ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin text-[#D4AF37]" />
-                        <span>{membershipType === 'new' ? 'Submitting Application...' : 'Sealing Royal Dossier...'}</span>
+                        <span>{membershipType === 'new' ? 'Submitting Application...' : 'Saving Updates...'}</span>
                       </>
                     ) : (
                       <>
                         <Crown className="w-4 h-4 text-[#D4AF37]" />
-                        <span>{membershipType === 'new' ? 'Submit New Member Application' : 'Seal & Submit Family Dossier'}</span>
+                        <span>{membershipType === 'new' ? 'Submit New Member Application' : 'Submit Member Update'}</span>
                         <PartyPopper className="w-4 h-4 text-[#D4AF37]" />
                       </>
                     )}
@@ -3673,73 +4045,6 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
               </div>
             </form>
           </div>
-
-          {/* Post-Review Explicit Confirmation Modal */}
-          {showConfirmSubmitModal && (
-            <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white border-2 border-[#C5A869] rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-5 relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 h-1 shimmer-gold-bg" />
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-[#1C1917] text-[#D4AF37] flex items-center justify-center shrink-0 border border-[#C5A869]/40">
-                    <Crown className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#8C6D2B] block">
-                      Final Confirmation
-                    </span>
-                    <h3 className="font-serif-royal font-bold text-lg text-[#1C1917] mt-0.5">
-                      {membershipType === 'new' ? 'Confirm Application Submission?' : 'Confirm & Seal Family Dossier?'}
-                    </h3>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E5D8C0] text-xs text-[#44403C] space-y-2">
-                  <div>
-                    <span className="text-[#78716C]">Couple:</span>{' '}
-                    <strong className="text-[#1C1917]">{husbandName.trim() || 'Husband'} &amp; {wifeName.trim() || 'Wife'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[#78716C]">Category:</span>{' '}
-                    <strong className="text-[#8C6D2B]">
-                      {membershipType === 'new' ? 'New Member Application' : 'Existing Member Renewal'}
-                    </strong>
-                  </div>
-                  <p className="text-[11px] text-[#78716C] pt-1 leading-relaxed">
-                    Once confirmed, this dossier will be permanently sealed and cannot be edited online. If you need any changes, choose &ldquo;Go Back &amp; Edit&rdquo;.
-                  </p>
-                </div>
-
-                <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 pt-1">
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={() => setShowConfirmSubmitModal(false)}
-                    className="w-full sm:w-auto min-h-[42px] px-4 py-2.5 rounded-xl border border-[#D8CAAF] text-xs font-semibold text-[#1C1917] hover:bg-[#FAF7F2] transition-all cursor-pointer"
-                  >
-                    Go Back &amp; Edit
-                  </button>
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={executeSubmitForm}
-                    className="w-full sm:w-auto min-h-[42px] px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#1C1917] via-[#2A2623] to-[#12100E] hover:from-black hover:to-[#1C1917] text-[#FAF7F2] font-semibold text-xs border border-[#D4AF37] shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {submitting ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#D4AF37]" />
-                        <span>{membershipType === 'new' ? 'Submitting...' : 'Sealing...'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#D4AF37]" />
-                        <span>{membershipType === 'new' ? 'Yes, Submit Application' : 'Yes, Confirm & Seal'}</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -3758,19 +4063,23 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
             <div className="space-y-2.5">
               <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8C6D2B] block">
                 {finalRegistration?.membership_type === 'new' || membershipType === 'new'
-                  ? 'New Member Application Received'
-                  : 'Official Certificate of Registration'}
+                  ? (isUpdatedSubmission ? 'New Member Application Updated' : 'New Member Application Received')
+                  : (isUpdatedSubmission ? 'Official Dossier Updated' : 'Official Certificate of Registration')}
               </span>
               <h2 className="font-serif-royal text-2xl sm:text-3xl font-extrabold text-[#1C1917]">
                 {finalRegistration?.membership_type === 'new' || membershipType === 'new'
-                  ? 'Application Submitted for Review!'
-                  : 'Family Dossier Sealed & Registered!'}
+                  ? (isUpdatedSubmission ? 'Application Updated for Review!' : 'Application Submitted for Review!')
+                  : (isUpdatedSubmission ? 'Family Dossier Updated & Sealed!' : 'Family Dossier Sealed & Registered!')}
               </h2>
               <RoyalFlourish />
               <p className="text-xs sm:text-sm text-[#78716C] max-w-md mx-auto leading-relaxed">
                 {finalRegistration?.membership_type === 'new' || membershipType === 'new'
-                  ? 'Thank you for submitting your family dossier and application for JSG Royals Chapter 2 · 2027.'
-                  : 'Congratulations! Your royal household has been officially entered into the JSG Royals Chapter 2 · 2027 Directory.'}
+                  ? (isUpdatedSubmission
+                      ? 'Your updated family dossier and application have been saved for JSG Royals Chapter 2 · 2027.'
+                      : 'Thank you for submitting your family dossier and application for JSG Royals Chapter 2 · 2027.')
+                  : (isUpdatedSubmission
+                      ? 'Your updated royal household details have been saved in the JSG Royals Chapter 2 · 2027 Directory.'
+                      : 'Congratulations! Your royal household has been officially entered into the JSG Royals Chapter 2 · 2027 Directory.')}
               </p>
             </div>
 
@@ -3868,16 +4177,22 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
 
                 {/* Residence & Anniversary */}
                 <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E2D5BE] text-xs space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-[#78716C] block">Marriage Anniversary</span>
-                      <span className="font-semibold text-[#1C1917]">{finalRegistration.marriage_anniversary}</span>
+                  {(finalRegistration.marriage_anniversary || finalRegistration.current_city) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {finalRegistration.marriage_anniversary && (
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-[#78716C] block">Marriage Anniversary</span>
+                          <span className="font-semibold text-[#1C1917]">{finalRegistration.marriage_anniversary}</span>
+                        </div>
+                      )}
+                      {finalRegistration.current_city && (
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-[#78716C] block">Current City</span>
+                          <span className="font-semibold text-[#1C1917]">{finalRegistration.current_city}</span>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-[#78716C] block">Current City</span>
-                      <span className="font-semibold text-[#1C1917]">{finalRegistration.current_city}</span>
-                    </div>
-                  </div>
+                  )}
                   <div>
                     <span className="text-[10px] uppercase font-bold text-[#78716C] block">Residential Address</span>
                     <span className="text-[#1C1917]">{finalRegistration.residential_address}</span>
@@ -3931,6 +4246,48 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
                       📸 Family Portrait Photo / Drive URL
                     </span>
                     <DossierPhotoThumbnail url={finalRegistration.family_photo_url} alt="Family Portrait" />
+                  </div>
+                )}
+
+                {/* Existing Member Experience Feedback */}
+                {(finalRegistration.exp_rating !== null && finalRegistration.exp_rating !== undefined ||
+                  finalRegistration.exp_favourite_event ||
+                  finalRegistration.exp_international_trip ||
+                  finalRegistration.exp_missing) && (
+                  <div className="p-4 rounded-xl bg-white border border-[#E2D5BE] text-xs space-y-2.5">
+                    <span className="text-[10px] uppercase font-bold text-[#8C6D2B] block">
+                      JSG Royals – Your Experience Matters!
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {finalRegistration.exp_rating !== null && finalRegistration.exp_rating !== undefined && (
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-[#78716C] block">Overall Experience (1–10)</span>
+                          <span className="text-[#1C1917] font-bold">{finalRegistration.exp_rating} / 10</span>
+                        </div>
+                      )}
+                      {finalRegistration.exp_international_trip && (
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-[#78716C] block">International Trip Interest</span>
+                          <span className="text-[#1C1917] font-semibold">
+                            {finalRegistration.exp_international_trip === 'Yes' && finalRegistration.exp_trip_month_destination
+                              ? `Yes — ${finalRegistration.exp_trip_month_destination}`
+                              : finalRegistration.exp_international_trip}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {finalRegistration.exp_favourite_event && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#78716C] block">Favourite Event / Experience</span>
+                        <span className="text-[#1C1917]">{finalRegistration.exp_favourite_event}</span>
+                      </div>
+                    )}
+                    {finalRegistration.exp_missing && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#78716C] block">What Was Missing</span>
+                        <span className="text-[#57534E]">{finalRegistration.exp_missing}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
