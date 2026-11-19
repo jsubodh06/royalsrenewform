@@ -874,6 +874,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
   const spouseCelebrationHeadingRef = useRef<HTMLHeadingElement>(null);
   const formStepHeadingRef = useRef<HTMLHeadingElement>(null);
   const successHeadingRef = useRef<HTMLHeadingElement>(null);
+  const successFeesBlockRef = useRef<HTMLDivElement>(null);
 
   // Grand Royal Curtain Reveal state on initial homepage entrance
   const [curtainPhase, setCurtainPhase] = useState<'closed' | 'opening' | 'done'>(() => {
@@ -1205,6 +1206,17 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     }
 
     const timer = window.setTimeout(() => {
+      if (currentView === 'success') {
+        if (successFeesBlockRef.current) {
+          successFeesBlockRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          successFeesBlockRef.current.focus({ preventScroll: true });
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          successHeadingRef.current?.focus({ preventScroll: true });
+        }
+        return;
+      }
+
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
       if (currentView === 'gate') {
@@ -1220,10 +1232,8 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
         spouseCelebrationHeadingRef.current?.focus({ preventScroll: true });
       } else if (currentView === 'form') {
         formStepHeadingRef.current?.focus({ preventScroll: true });
-      } else if (currentView === 'success') {
-        successHeadingRef.current?.focus({ preventScroll: true });
       }
-    }, 70);
+    }, currentView === 'success' ? 120 : 70);
 
     return () => window.clearTimeout(timer);
   }, [currentView, activeStep, gateOtpStep]);
@@ -4742,17 +4752,25 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
               </div>
             )}
 
-            {/* Tailored Membership Fees & Where to Submit Fees */}
-            <MembershipFeeSubmissionSection
-              membershipKind={
-                finalRegistration?.membership_type === 'new' || membershipType === 'new'
-                  ? 'new'
-                  : 'existing'
-              }
-              feeStatus={feeStatus}
-              expandedAddresses={expandedAddresses}
-              setExpandedAddresses={setExpandedAddresses}
-            />
+            {/* Tailored Membership Fees & Where to Submit Fees (Focused automatically after Review Submit) */}
+            <div
+              ref={successFeesBlockRef}
+              tabIndex={-1}
+              data-focus-target="true"
+              aria-label="Membership Fees Structure and Where to Submit Fees"
+              className="scroll-mt-24 sm:scroll-mt-28 rounded-2xl outline-hidden focus-visible:ring-2 focus-visible:ring-[#D4AF37]/80"
+            >
+              <MembershipFeeSubmissionSection
+                membershipKind={
+                  finalRegistration?.membership_type === 'new' || membershipType === 'new'
+                    ? 'new'
+                    : 'existing'
+                }
+                feeStatus={feeStatus}
+                expandedAddresses={expandedAddresses}
+                setExpandedAddresses={setExpandedAddresses}
+              />
+            </div>
 
             <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs text-left flex items-start gap-3">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
