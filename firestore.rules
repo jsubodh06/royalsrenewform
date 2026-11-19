@@ -29,15 +29,15 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function isValidPhotoId(id) {
-      return id.size() >= 3 && id.size() <= 160 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+      return id is string && id.size() >= 3 && id.size() <= 160 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
     }
 
     function isValidCoupleId(id) {
-      return id.size() == 5 && id.matches('^JR[0-9]{3}$');
+      return id is string && id.size() == 5 && id.matches('^JR[0-9]{3}$');
     }
 
     function isRequiredStr(val, minLen, maxLen) {
@@ -112,7 +112,7 @@ service cloud.firestore {
           'has_children', 'children', 'couple_photo_url', 'family_photo_url',
           'contribution_areas', 'royal_idea', 'jsg_should_be_known_for',
           'president_name', 'president_mobile', 'secretary_name', 'secretary_mobile',
-          'other_group_member', 'other_group_name', 'new_member_contribution',
+          'other_group_member', 'other_group_name', 'other_group_position', 'new_member_contribution',
           'reference_name', 'reference_mobile', 'business_description',
           'exp_rating', 'exp_favourite_event', 'exp_international_trip',
           'exp_trip_month_destination', 'exp_missing',
@@ -136,49 +136,29 @@ service cloud.firestore {
         data.children.size() <= 10 &&
         (data.children.size() == 0 || isValidChildEntry(data.children[0])) &&
         data.status in ['submitted', 'pending_review', 'approved', 'rejected'] &&
-        data.created_at is string && data.created_at.size() <= 64 &&
+        (!('created_at' in data) || (data.created_at is string && data.created_at.size() <= 64)) &&
         data.updated_at is string && data.updated_at.size() <= 64 &&
-        (data.husband_dob == null || (data.husband_dob is string && data.husband_dob.size() <= 40)) &&
-        (data.husband_qualification == null || (data.husband_qualification is string && data.husband_qualification.size() <= 200)) &&
-        (data.husband_occupation == null || (data.husband_occupation is string && data.husband_occupation.size() <= 200)) &&
-        (data.husband_organization == null || (data.husband_organization is string && data.husband_organization.size() <= 200)) &&
-        (data.husband_blood_group == null || (data.husband_blood_group is string && data.husband_blood_group.size() <= 10)) &&
-        (data.husband_instagram == null || (data.husband_instagram is string && data.husband_instagram.size() <= 120)) &&
-        ((data.husband_photo_url == null && data.membership_type == 'existing') || (data.husband_photo_url is string && data.husband_photo_url.size() >= 1 && data.husband_photo_url.size() <= 1000)) &&
-        (data.wife_dob == null || (data.wife_dob is string && data.wife_dob.size() <= 40)) &&
-        (data.wife_qualification == null || (data.wife_qualification is string && data.wife_qualification.size() <= 200)) &&
-        (data.wife_occupation == null || (data.wife_occupation is string && data.wife_occupation.size() <= 200)) &&
-        (data.wife_organization == null || (data.wife_organization is string && data.wife_organization.size() <= 200)) &&
-        (data.wife_blood_group == null || (data.wife_blood_group is string && data.wife_blood_group.size() <= 10)) &&
-        (data.wife_instagram == null || (data.wife_instagram is string && data.wife_instagram.size() <= 120)) &&
-        ((data.wife_photo_url == null && data.membership_type == 'existing') || (data.wife_photo_url is string && data.wife_photo_url.size() >= 1 && data.wife_photo_url.size() <= 1000)) &&
-        (data.native_place == null || (data.native_place is string && data.native_place.size() <= 200)) &&
-        ((data.couple_photo_url == null && data.membership_type == 'existing') || (data.couple_photo_url is string && data.couple_photo_url.size() >= 1 && data.couple_photo_url.size() <= 1000)) &&
-        ((data.family_photo_url == null && data.membership_type == 'existing') || (data.family_photo_url is string && data.family_photo_url.size() >= 1 && data.family_photo_url.size() <= 1000)) &&
-        (data.contribution_areas == null || (data.contribution_areas is string && data.contribution_areas.size() <= 1000)) &&
-        (data.royal_idea == null || (data.royal_idea is string && data.royal_idea.size() <= 2000)) &&
-        (data.jsg_should_be_known_for == null || (data.jsg_should_be_known_for is string && data.jsg_should_be_known_for.size() <= 2000)) &&
-        (data.president_name == null || (data.president_name is string && data.president_name.size() <= 150)) &&
-        (data.president_mobile == null || (data.president_mobile is string && data.president_mobile.size() <= 25)) &&
-        (data.secretary_name == null || (data.secretary_name is string && data.secretary_name.size() <= 150)) &&
-        (data.secretary_mobile == null || (data.secretary_mobile is string && data.secretary_mobile.size() <= 25)) &&
-        (data.other_group_member == null || (data.other_group_member is string && data.other_group_member.size() <= 10)) &&
-        (data.other_group_name == null || (data.other_group_name is string && data.other_group_name.size() <= 200)) &&
-        (data.new_member_contribution == null || (data.new_member_contribution is string && data.new_member_contribution.size() <= 2000)) &&
-        (data.reference_name == null || (data.reference_name is string && data.reference_name.size() <= 150)) &&
-        (data.reference_mobile == null || (data.reference_mobile is string && data.reference_mobile.size() <= 20)) &&
-        (data.business_description == null || (data.business_description is string && data.business_description.size() <= 2000)) &&
-        (data.exp_rating == null || (data.exp_rating is number && data.exp_rating >= 1 && data.exp_rating <= 10)) &&
-        (data.exp_favourite_event == null || (data.exp_favourite_event is string && data.exp_favourite_event.size() <= 1000)) &&
-        (data.exp_international_trip == null || data.exp_international_trip in ['Yes', 'No']) &&
-        (data.exp_trip_month_destination == null || (data.exp_trip_month_destination is string && data.exp_trip_month_destination.size() <= 300)) &&
-        (data.exp_missing == null || (data.exp_missing is string && data.exp_missing.size() <= 2000));
+        ('' + data.husband_dob + data.husband_qualification + data.husband_occupation +
+          data.husband_organization + data.husband_blood_group + data.husband_instagram).size() <= 770 &&
+        ('' + data.wife_dob + data.wife_qualification + data.wife_occupation +
+          data.wife_organization + data.wife_blood_group + data.wife_instagram).size() <= 770 &&
+        ('' + data.husband_photo_url + data.wife_photo_url +
+          data.couple_photo_url + data.family_photo_url).size() <= 4000 &&
+        ('' + data.native_place + data.contribution_areas + data.royal_idea +
+          data.jsg_should_be_known_for + data.president_name + data.president_mobile +
+          data.secretary_name + data.secretary_mobile).size() <= 5550 &&
+        ('' + data.other_group_member + data.other_group_name + data.other_group_position +
+          data.new_member_contribution + data.reference_name + data.reference_mobile +
+          data.business_description).size() <= 4580 &&
+        ('' + data.exp_favourite_event + data.exp_international_trip +
+          data.exp_trip_month_destination + data.exp_missing).size() <= 3800 &&
+        (data.exp_rating == null || (data.exp_rating is number && data.exp_rating >= 1 && data.exp_rating <= 10));
     }
 
     function isValidNewMemberApplication(data, appId) {
       return data.keys().hasOnly([
           'app_id', 'applicant_name', 'business_name', 'mobile_number', 'email',
-          'other_group_member', 'other_group_name', 'contribution',
+          'other_group_member', 'other_group_name', 'other_group_position', 'contribution',
           'reference_name', 'reference_mobile', 'business_description',
           'president_name', 'president_mobile', 'secretary_name', 'secretary_mobile',
           'status', 'created_at', 'updated_at', 'createdAt', 'updatedAt'
@@ -194,13 +174,14 @@ service cloud.firestore {
         data.reference_mobile is string && data.reference_mobile.size() >= 10 && data.reference_mobile.size() <= 20 &&
         data.business_description is string && data.business_description.size() >= 1 && data.business_description.size() <= 2000 &&
         data.status in ['pending_review', 'approved', 'rejected'] &&
-        data.created_at is string && data.created_at.size() >= 4 && data.created_at.size() <= 64 &&
+        (!('created_at' in data) || (data.created_at is string && data.created_at.size() >= 4 && data.created_at.size() <= 64)) &&
         data.updated_at is string && data.updated_at.size() >= 4 && data.updated_at.size() <= 64 &&
-        (data.other_group_name == null || (data.other_group_name is string && data.other_group_name.size() <= 200)) &&
-        (data.president_name == null || (data.president_name is string && data.president_name.size() <= 150)) &&
-        (data.president_mobile == null || (data.president_mobile is string && data.president_mobile.size() <= 25)) &&
-        (data.secretary_name == null || (data.secretary_name is string && data.secretary_name.size() <= 150)) &&
-        (data.secretary_mobile == null || (data.secretary_mobile is string && data.secretary_mobile.size() <= 25));
+        (!('other_group_name' in data) || isOptionalStr(data.other_group_name, 200)) &&
+        (!('other_group_position' in data) || isOptionalStr(data.other_group_position, 200)) &&
+        (!('president_name' in data) || isOptionalStr(data.president_name, 150)) &&
+        (!('president_mobile' in data) || isOptionalStr(data.president_mobile, 25)) &&
+        (!('secretary_name' in data) || isOptionalStr(data.secretary_name, 150)) &&
+        (!('secretary_mobile' in data) || isOptionalStr(data.secretary_mobile, 25));
     }
 
     function isValidFamilyPhoto(data, photoId) {
@@ -216,6 +197,79 @@ service cloud.firestore {
         data.size_bytes > 0 &&
         data.size_bytes <= 650000 &&
         data.created_at is string && data.created_at.size() >= 4 && data.created_at.size() <= 64;
+    }
+
+    function isValidMemberVault(data, vaultId) {
+      return data.keys().hasAll(['vault_id', 'reg_id', 'iv', 'auth_tag', 'ciphertext', 'updated_at', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'vault_id', 'reg_id', 'iv', 'auth_tag', 'ciphertext',
+          'created_at', 'updated_at', 'createdAt', 'updatedAt'
+        ]) &&
+        data.vault_id == vaultId &&
+        isValidId(data.reg_id) &&
+        data.iv is string && data.iv.size() >= 12 && data.iv.size() <= 64 &&
+        data.auth_tag is string && data.auth_tag.size() >= 16 && data.auth_tag.size() <= 64 &&
+        data.ciphertext is string && data.ciphertext.size() >= 20 && data.ciphertext.size() <= 120000 &&
+        (!('created_at' in data) || (data.created_at is string && data.created_at.size() >= 4 && data.created_at.size() <= 64)) &&
+        data.updated_at is string && data.updated_at.size() >= 4 && data.updated_at.size() <= 64;
+    }
+
+    function isHouseholdEmailMatch(incomingEmail, prev) {
+      let email = incomingEmail.lower();
+      return (
+        ('submitter_email' in prev && prev.submitter_email is string && email == prev.submitter_email.lower()) ||
+        ('husband_email' in prev && prev.husband_email is string && email == prev.husband_email.lower()) ||
+        ('wife_email' in prev && prev.wife_email is string && email == prev.wife_email.lower())
+      );
+    }
+
+    function canUpdateFamilyRegistration(d, e, regId) {
+      return (!('reg_id' in e) || d.reg_id == e.reg_id) &&
+        (!('createdAt' in e) || d.createdAt == e.createdAt) &&
+        (!('created_at' in e) || d.created_at == e.created_at) &&
+        d.updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            d.diff(e).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']) &&
+            d.status in ['submitted', 'pending_review', 'approved', 'rejected'] &&
+            d.updated_at is string && d.updated_at.size() <= 64
+          ) || (
+            isValidFamilyRegistration(d, regId) &&
+            (
+              isAdmin() || (
+                (!('status' in e) || e.status in ['submitted', 'pending_review']) &&
+                d.status in ['submitted', 'pending_review'] &&
+                isHouseholdEmailMatch(d.submitter_email, e)
+              )
+            )
+          )
+        );
+    }
+
+    function canUpdateNewMemberApplication(d, e, appId) {
+      return (!('app_id' in e) || d.app_id == e.app_id) &&
+        (!('createdAt' in e) || d.createdAt == e.createdAt) &&
+        (!('created_at' in e) || d.created_at == e.created_at) &&
+        d.updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            d.diff(e).affectedKeys().hasOnly(['status', 'updated_at', 'updatedAt']) &&
+            d.status in ['pending_review', 'approved', 'rejected'] &&
+            d.updated_at is string && d.updated_at.size() <= 64
+          ) || (
+            isValidNewMemberApplication(d, appId) &&
+            (
+              isAdmin() || (
+                (!('status' in e) || e.status == 'pending_review') &&
+                d.status == 'pending_review' &&
+                'email' in e && e.email is string &&
+                d.email.lower() == e.email.lower()
+              )
+            )
+          )
+        );
     }
 
     // 3. Members collection: Master Year-1 records (Admin managed)
@@ -248,32 +302,23 @@ service cloud.firestore {
       allow delete: if isValidCoupleId(coupleId) && isAdmin();
     }
 
-    // 6. Family Registrations: Dossier upsert by registered household email; Admin-only read/list/delete & status updates
+    // 6. Family Registrations: Dossier upsert by registered household email; Admin or verified household owner read
     match /family_registrations/{regId} {
-      allow get: if isValidId(regId) && isAdmin();
+      allow get: if isValidId(regId) && (
+        isAdmin() || (
+          isVerifiedAuth() &&
+          (resource == null || isHouseholdEmailMatch(request.auth.token.email, resource.data))
+        )
+      );
       allow list: if isAdmin();
       allow create: if isValidId(regId) &&
+        'created_at' in request.resource.data &&
         isValidFamilyRegistration(request.resource.data, regId) &&
         request.resource.data.createdAt == request.time &&
         request.resource.data.updatedAt == request.time &&
         request.resource.data.status in ['submitted', 'pending_review'];
       allow update: if isValidId(regId) &&
-        isValidFamilyRegistration(request.resource.data, regId) &&
-        request.resource.data.reg_id == existing().reg_id &&
-        request.resource.data.createdAt == existing().createdAt &&
-        request.resource.data.created_at == existing().created_at &&
-        request.resource.data.updatedAt == request.time &&
-        (
-          isAdmin() || (
-            existing().status in ['submitted', 'pending_review'] &&
-            request.resource.data.status in ['submitted', 'pending_review'] &&
-            (
-              request.resource.data.submitter_email == existing().submitter_email ||
-              request.resource.data.submitter_email == existing().husband_email ||
-              request.resource.data.submitter_email == existing().wife_email
-            )
-          )
-        );
+        canUpdateFamilyRegistration(request.resource.data, resource.data, regId);
       allow delete: if isValidId(regId) && isAdmin();
     }
 
@@ -282,23 +327,13 @@ service cloud.firestore {
       allow get: if isValidId(appId) && isAdmin();
       allow list: if isAdmin();
       allow create: if isValidId(appId) &&
+        'created_at' in request.resource.data &&
         isValidNewMemberApplication(request.resource.data, appId) &&
         request.resource.data.createdAt == request.time &&
         request.resource.data.updatedAt == request.time &&
         request.resource.data.status == 'pending_review';
       allow update: if isValidId(appId) &&
-        isValidNewMemberApplication(request.resource.data, appId) &&
-        request.resource.data.app_id == existing().app_id &&
-        request.resource.data.createdAt == existing().createdAt &&
-        request.resource.data.created_at == existing().created_at &&
-        request.resource.data.updatedAt == request.time &&
-        (
-          isAdmin() || (
-            existing().status == 'pending_review' &&
-            request.resource.data.status == 'pending_review' &&
-            request.resource.data.email == existing().email
-          )
-        );
+        canUpdateNewMemberApplication(request.resource.data, resource.data, appId);
       allow delete: if isValidId(appId) && isAdmin();
     }
 
@@ -311,6 +346,33 @@ service cloud.firestore {
         incoming().createdAt == request.time;
       allow update: if false;
       allow delete: if isValidPhotoId(photoId) && isAdmin();
+    }
+
+    // 9. Member Vaults: Zero-PII AES-256-GCM encrypted lookup blobs tied to parent family_registrations
+    match /member_vaults/{vaultId} {
+      allow get: if isValidId(vaultId) && (
+        isAdmin() ||
+        resource == null || (
+          'reg_id' in resource.data &&
+          isValidId(resource.data.reg_id) &&
+          exists(/databases/$(database)/documents/family_registrations/$(resource.data.reg_id))
+        )
+      );
+      allow list: if isAdmin();
+      allow create: if isValidId(vaultId) &&
+        'created_at' in request.resource.data &&
+        isValidMemberVault(request.resource.data, vaultId) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        exists(/databases/$(database)/documents/family_registrations/$(request.resource.data.reg_id));
+      allow update: if isValidId(vaultId) &&
+        isValidMemberVault(request.resource.data, vaultId) &&
+        (!('vault_id' in resource.data) || request.resource.data.vault_id == resource.data.vault_id) &&
+        (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt) &&
+        (!('created_at' in resource.data) || request.resource.data.created_at == resource.data.created_at) &&
+        request.resource.data.updatedAt == request.time &&
+        exists(/databases/$(database)/documents/family_registrations/$(request.resource.data.reg_id));
+      allow delete: if isValidId(vaultId) && isAdmin();
     }
   }
 }

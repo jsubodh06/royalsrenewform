@@ -305,6 +305,7 @@ export function initDatabase() {
       membership_type TEXT NOT NULL DEFAULT 'existing',
       other_group_member TEXT,
       other_group_name TEXT,
+      other_group_position TEXT,
       new_member_contribution TEXT,
       reference_name TEXT,
       reference_mobile TEXT,
@@ -349,6 +350,7 @@ export function initDatabase() {
       email TEXT NOT NULL,
       other_group_member TEXT NOT NULL DEFAULT 'No',
       other_group_name TEXT,
+      other_group_position TEXT,
       contribution TEXT NOT NULL,
       reference_name TEXT NOT NULL,
       reference_mobile TEXT NOT NULL,
@@ -366,6 +368,18 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_nma_mobile ON new_member_applications(mobile_number);
   `);
 
+  // 16. deleted_tombstones — Prevents deleted rows from resurfacing across reloads/instances
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS deleted_tombstones (
+      record_type TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      email TEXT,
+      deleted_at TEXT NOT NULL,
+      PRIMARY KEY (record_type, record_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_dt_email ON deleted_tombstones(email);
+  `);
+
   // Admin users are seeded/maintained with subodhjain2007777@gmail.com and PIN rroyals2027
   seedAdminUsers();
 
@@ -373,6 +387,7 @@ export function initDatabase() {
   ensureYear2Columns();
   ensureMemberColumns();
   ensureFamilyRegistrationColumns();
+  ensureNewMemberApplicationColumns();
   syncExistingFamilyPhotosToDb();
 
   // Master member auto-seeding disabled per user request for fresh database start
@@ -444,6 +459,9 @@ function ensureFamilyRegistrationColumns() {
     if (!columnNames.includes('other_group_name')) {
       db.exec('ALTER TABLE family_registrations ADD COLUMN other_group_name TEXT');
     }
+    if (!columnNames.includes('other_group_position')) {
+      db.exec('ALTER TABLE family_registrations ADD COLUMN other_group_position TEXT');
+    }
     if (!columnNames.includes('new_member_contribution')) {
       db.exec('ALTER TABLE family_registrations ADD COLUMN new_member_contribution TEXT');
     }
@@ -479,6 +497,18 @@ function ensureFamilyRegistrationColumns() {
     }
   } catch (e) {
     console.error('ensureFamilyRegistrationColumns error:', e);
+  }
+}
+
+function ensureNewMemberApplicationColumns() {
+  try {
+    const tableInfo = db.pragma('table_info(new_member_applications)') as any[];
+    const columnNames = (tableInfo || []).map((c) => c.name);
+    if (!columnNames.includes('other_group_position')) {
+      db.exec('ALTER TABLE new_member_applications ADD COLUMN other_group_position TEXT');
+    }
+  } catch (e) {
+    console.error('ensureNewMemberApplicationColumns error:', e);
   }
 }
 

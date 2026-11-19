@@ -3,6 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import nodemailer from 'nodemailer';
 import { db, getSetting, setSetting } from '../db/database.ts';
+import {
+  computeCandidateRegIdsForEmail,
+  computeVaultIdForEmail,
+  signFamilyLookupToken,
+} from './memberVault.ts';
 
 const ROYALS_LOGO_DISK_PATH = path.resolve(
   process.cwd(),
@@ -11,12 +16,35 @@ const ROYALS_LOGO_DISK_PATH = path.resolve(
 
 const OTP_BYPASS_EMAILS = new Set(['jsubodh06@gmail.com']);
 
+function isFamilyRowTombstoned(row: any): boolean {
+  if (!row) return false;
+  const tombstones = db
+    .prepare('SELECT record_id, email, deleted_at FROM deleted_tombstones WHERE record_type = ?')
+    .all('family') as Array<{ record_id: string; email: string | null; deleted_at: string }>;
+  if (tombstones.length === 0) return false;
+
+  const regTime = new Date(row.updated_at || row.created_at || 0).getTime() || 0;
+  const regIdUpper = String(row.reg_id || '').trim().toUpperCase();
+  const rowEmails = [row.submitter_email, row.husband_email, row.wife_email]
+    .map((e) => String(e || '').trim().toLowerCase())
+    .filter((e) => e.includes('@'));
+
+  return tombstones.some((t) => {
+    const delTime = new Date(t.deleted_at || 0).getTime() || 0;
+    const idMatch = t.record_id && regIdUpper && String(t.record_id).trim().toUpperCase() === regIdUpper;
+    const emailMatch = t.email && rowEmails.includes(String(t.email).trim().toLowerCase());
+    return (idMatch || emailMatch) && regTime <= delTime;
+  });
+}
+
 function buildExistingRegistrationCheck(email: string) {
-  const existingRecord = db.prepare(`
+  const candidates = db.prepare(`
     SELECT * FROM family_registrations 
     WHERE LOWER(submitter_email) = ? OR LOWER(husband_email) = ? OR LOWER(wife_email) = ?
-    ORDER BY id DESC LIMIT 1
-  `).get(email, email, email) as any;
+    ORDER BY id DESC
+  `).all(email, email, email) as any[];
+
+  const existingRecord = candidates.find((row) => !isFamilyRowTombstoned(row));
 
   if (!existingRecord) {
     return {
@@ -500,6 +528,9 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
       filedBySpouse: existingInfo.filedBySpouse,
       message: existingInfo.alreadyRegistered ? existingInfo.message : 'Verification bypassed — access granted.',
       registration: existingInfo.registration,
+      vaultId: computeVaultIdForEmail(email),
+      lookupToken: signFamilyLookupToken(email, role),
+      candidateRegIds: computeCandidateRegIdsForEmail(email),
     };
   }
 
@@ -530,37 +561,12 @@ export async function requestEmailOtp(rawEmail: string, role: 'husband' | 'wife'
     VALUES (?, ?, ?, ?, ?, 0, 0, ?)
   `).run(email, role, otpHash, salt, expiresAt, now);
 
-  // Check if email or spouse is already registered
-  const existingRecord = db.prepare(`
-    SELECT * FROM family_registrations 
-    WHERE LOWER(husband_email) = ? OR LOWER(wife_email) = ?
-    ORDER BY id DESC LIMIT 1
-  `).get(email, email) as any;
-
-  let isAlreadyRegistered = false;
-  let spouseName = '';
-  let spouseRole: 'husband' | 'wife' = 'husband';
-  let filedBySpouse = false;
-
-  if (existingRecord) {
-    isAlreadyRegistered = true;
-    const isHusbandEmail = existingRecord.husband_email.toLowerCase() === email;
-    const isWifeEmail = existingRecord.wife_email.toLowerCase() === email;
-    const submittedByRole = existingRecord.submitted_by_role;
-
-    if (isWifeEmail && submittedByRole === 'husband') {
-      filedBySpouse = true;
-      spouseName = existingRecord.husband_name;
-      spouseRole = 'husband';
-    } else if (isHusbandEmail && submittedByRole === 'wife') {
-      filedBySpouse = true;
-      spouseName = existingRecord.wife_name;
-      spouseRole = 'wife';
-    } else {
-      filedBySpouse = false;
-      spouseName = submittedByRole === 'husband' ? existingRecord.wife_name : existingRecord.husband_name;
-    }
-  }
+  // Check if email or spouse is already registered (ignoring tombstoned/deleted rows)
+  const existingInfo = buildExistingRegistrationCheck(email);
+  const isAlreadyRegistered = existingInfo.isAlreadyRegistered;
+  const spouseName = existingInfo.spouseName;
+  const spouseRole = existingInfo.spouseRole;
+  const filedBySpouse = existingInfo.filedBySpouse;
 
   // Attempt real email dispatch
   let emailSentReal = false;
@@ -670,6 +676,9 @@ export function verifyEmailOtp(rawEmail: string, rawOtp: string, role: 'husband'
       spouseRole: existingInfo.spouseRole,
       message: existingInfo.message,
       registration: existingInfo.registration,
+      vaultId: computeVaultIdForEmail(email),
+      lookupToken: signFamilyLookupToken(email, role),
+      candidateRegIds: computeCandidateRegIdsForEmail(email),
     };
   }
 
@@ -715,16 +724,20 @@ export function verifyEmailOtp(rawEmail: string, rawOtp: string, role: 'husband'
   db.prepare('UPDATE email_otp_codes SET verified = 1 WHERE id = ?').run(record.id);
 
   const existingInfo = buildExistingRegistrationCheck(email);
+  const resolvedRole = record.role === 'wife' ? 'wife' : 'husband';
   return {
     verified: true,
     email,
-    role: record.role,
+    role: resolvedRole,
     alreadyRegistered: existingInfo.alreadyRegistered,
     filedBySpouse: existingInfo.filedBySpouse,
     spouseName: existingInfo.spouseName,
     spouseRole: existingInfo.spouseRole,
     message: existingInfo.message,
     registration: existingInfo.registration,
+    vaultId: computeVaultIdForEmail(email),
+    lookupToken: signFamilyLookupToken(email, resolvedRole),
+    candidateRegIds: computeCandidateRegIdsForEmail(email),
   };
 }
 

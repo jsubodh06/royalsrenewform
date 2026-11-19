@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { RoyalHeader } from './components/RoyalHeader.tsx';
 import { LandingScreen } from './components/LandingScreen.tsx';
 import { VerificationScreen } from './components/VerificationScreen.tsx';
@@ -34,6 +34,8 @@ export default function App() {
 
   // Active View: 'family' (Primary fresh email portal) | 'landing' | 'verify' | 'profile' | 'form' | 'success' | 'admin'
   const [activeView, setActiveView] = useState<string>('family');
+  const mainViewRef = useRef<HTMLDivElement>(null);
+  const hasMountedViewRef = useRef<boolean>(false);
 
   // Loaded Member Profile Data
   const [memberYear1, setMemberYear1] = useState<MemberYear1 | null>(null);
@@ -112,6 +114,19 @@ export default function App() {
     }
   }, [adminToken]);
 
+  // Reset scroll position and move focus cleanly on top-level screen transitions
+  useEffect(() => {
+    if (!hasMountedViewRef.current) {
+      hasMountedViewRef.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      mainViewRef.current?.focus({ preventScroll: true });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [activeView]);
+
   // 2. Member Login Callback
   const handleMemberVerified = (session: MemberSession, token: string) => {
     setMemberToken(token);
@@ -182,8 +197,14 @@ export default function App() {
       />
 
       {/* Primary View Routing with Smooth Fade-in and Slide-up Transition */}
-      <main className="flex-1 flex flex-col overflow-x-hidden">
-        <div key={activeView} className="animate-fade-in-up flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col overflow-x-clip">
+        <div
+          key={activeView}
+          ref={mainViewRef}
+          tabIndex={-1}
+          data-focus-target="true"
+          className="animate-fade-in-up flex-1 flex flex-col outline-hidden"
+        >
           {activeView === 'family' && (
             <RoyalFamilyPortal
               onOpenAdmin={() => setActiveView('admin')}

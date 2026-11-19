@@ -8,8 +8,13 @@ import {
   AdminSession,
 } from './types.ts';
 import {
+  checkFamilyRegistrationExistsInFirestore,
+  fetchFamilyRegistrationByCandidateIds,
+  fetchMemberVaultFromFirestore,
+  MemberVaultDocInput,
   saveCompressedPhotoToFirestore,
   saveFamilyRegistrationToFirestore,
+  saveMemberVaultsToFirestore,
   saveNewMemberApplicationToFirestore,
 } from './firestoreStore.ts';
 
@@ -526,6 +531,9 @@ export async function requestFamilyEmailOtpApi(
     filedBySpouse?: boolean;
     providerUsed?: string;
     message: string;
+    vaultId?: string;
+    lookupToken?: string;
+    candidateRegIds?: string[];
   }>('/family/request-email-otp', {
     method: 'POST',
     body: JSON.stringify({ email, role, membershipType }),
@@ -543,10 +551,147 @@ export async function verifyFamilyEmailOtpApi(email: string, otp: string) {
     spouseRole?: 'husband' | 'wife';
     message: string;
     registration?: any;
+    vaultId?: string;
+    lookupToken?: string;
+    candidateRegIds?: string[];
   }>('/family/verify-email-otp', {
     method: 'POST',
     body: JSON.stringify({ email, otp }),
   });
+}
+
+export async function resolveCloudRegistrationAfterOtp<
+  T extends {
+    verified?: boolean;
+    alreadyRegistered?: boolean;
+    registration?: any;
+    filedBySpouse?: boolean;
+    spouseName?: string;
+    spouseRole?: 'husband' | 'wife';
+    message?: string;
+    vaultId?: string;
+    lookupToken?: string;
+    candidateRegIds?: string[];
+  }
+>(serverResult: T): Promise<T> {
+  if (!serverResult?.verified) {
+    return serverResult;
+  }
+
+  const { vaultId, lookupToken, candidateRegIds } = serverResult;
+
+  // Case 1: Server SQLite already found a registration — verify it wasn't deleted directly in Cloud Firestore
+  if (serverResult.alreadyRegistered && serverResult.registration) {
+    if (vaultId) {
+      const vaultCheck = await fetchMemberVaultFromFirestore(vaultId);
+      if (vaultCheck.status === 'deleted_in_cloud') {
+        return {
+          ...serverResult,
+          alreadyRegistered: false,
+          registration: undefined,
+        };
+      }
+      if (vaultCheck.status === 'not_found') {
+        const cloudExists = await checkFamilyRegistrationExistsInFirestore(serverResult.registration.reg_id);
+        if (cloudExists === 'missing') {
+          return {
+            ...serverResult,
+            alreadyRegistered: false,
+            registration: undefined,
+          };
+        }
+        // Silently backfill encrypted vault if parent doc exists in Cloud Firestore
+        if (lookupToken) {
+          apiRequest<{ vaultEntries?: MemberVaultDocInput[] }>('/family/sync-from-cloud', {
+            method: 'POST',
+            body: JSON.stringify({ lookupToken, registration: serverResult.registration }),
+          })
+            .then((syncRes) => {
+              if (syncRes?.vaultEntries?.length) {
+                return saveMemberVaultsToFirestore(syncRes.vaultEntries);
+              }
+            })
+            .catch(() => null);
+        }
+      }
+    }
+    return serverResult;
+  }
+
+  // Case 2: Server SQLite had no record (e.g. fresh/restarted Cloud Run container) — recover from Cloud Firestore
+  if (vaultId && lookupToken) {
+    const vaultRes = await fetchMemberVaultFromFirestore(vaultId);
+    if (vaultRes.status === 'found') {
+      try {
+        const decryptedRes = await apiRequest<{
+          alreadyRegistered: boolean;
+          filedBySpouse?: boolean;
+          spouseName?: string;
+          spouseRole?: 'husband' | 'wife';
+          message?: string;
+          registration?: any;
+        }>('/family/decrypt-vault', {
+          method: 'POST',
+          body: JSON.stringify({ lookupToken, vault: vaultRes.data }),
+        });
+
+        if (decryptedRes?.alreadyRegistered && decryptedRes.registration) {
+          return {
+            ...serverResult,
+            alreadyRegistered: true,
+            filedBySpouse: decryptedRes.filedBySpouse,
+            spouseName: decryptedRes.spouseName,
+            spouseRole: decryptedRes.spouseRole,
+            message: decryptedRes.message || serverResult.message,
+            registration: decryptedRes.registration,
+          };
+        }
+      } catch (err) {
+        console.warn('Cloud vault decrypt lookup failed:', err);
+      }
+    }
+  }
+
+  // Fallback for pre-vault Cloud Firestore registrations (when signed into verified Firebase Auth / Admin)
+  if (candidateRegIds?.length && lookupToken) {
+    const cloudReg = await fetchFamilyRegistrationByCandidateIds(candidateRegIds);
+    if (cloudReg) {
+      try {
+        const syncRes = await apiRequest<{
+          alreadyRegistered: boolean;
+          filedBySpouse?: boolean;
+          spouseName?: string;
+          spouseRole?: 'husband' | 'wife';
+          message?: string;
+          registration?: any;
+          vaultEntries?: MemberVaultDocInput[];
+        }>('/family/sync-from-cloud', {
+          method: 'POST',
+          body: JSON.stringify({ lookupToken, registration: cloudReg }),
+        });
+
+        if (syncRes?.vaultEntries?.length) {
+          await saveMemberVaultsToFirestore(syncRes.vaultEntries).catch(() => null);
+        }
+
+        if (syncRes?.alreadyRegistered && syncRes.registration) {
+          return {
+            ...serverResult,
+            alreadyRegistered: true,
+            filedBySpouse: syncRes.filedBySpouse,
+            spouseName: syncRes.spouseName,
+            spouseRole: syncRes.spouseRole,
+            message: syncRes.message || serverResult.message,
+            registration: syncRes.registration,
+          };
+        }
+      } catch (err) {
+        console.warn('Cloud registration sync fallback failed:', err);
+      }
+    }
+  }
+
+  return serverResult;
 }
 
 export async function getEmailConfigApi(options?: { verify?: boolean; force?: boolean }) {
@@ -630,6 +775,7 @@ async function postRegisterAllowing409(body: any) {
       notice?: string;
       message: string;
       registration: any;
+      vaultEntries?: MemberVaultDocInput[];
       alreadyRegistered: boolean;
       filedBySpouse?: boolean;
       spouseName?: string;
@@ -650,6 +796,7 @@ async function postRegisterAllowing409(body: any) {
     notice?: string;
     message: string;
     registration: any;
+    vaultEntries?: MemberVaultDocInput[];
     alreadyRegistered?: boolean;
     filedBySpouse?: boolean;
     spouseName?: string;
@@ -671,10 +818,17 @@ export async function registerFamilyApi(data: any) {
   // 2. Persist to Cloud Firestore first so container SQLite is never locked if cloud archive fails
   if (previewRes?.registration) {
     await saveFamilyRegistrationToFirestore(previewRes.registration);
+    if (previewRes.vaultEntries?.length) {
+      await saveMemberVaultsToFirestore(previewRes.vaultEntries).catch(() => null);
+    }
   }
 
   // 3. Commit to server SQLite using the exact same regId
-  return await postRegisterAllowing409({ ...data, reg_id: previewRes.regId });
+  const commitRes = await postRegisterAllowing409({ ...data, reg_id: previewRes.regId });
+  if (commitRes?.vaultEntries?.length && !previewRes?.vaultEntries?.length) {
+    await saveMemberVaultsToFirestore(commitRes.vaultEntries).catch(() => null);
+  }
+  return commitRes;
 }
 
 function fileToDataUrl(file: Blob): Promise<string> {
@@ -852,6 +1006,7 @@ export interface NewMemberApplicationPayload {
   email: string;
   other_group_member: 'Yes' | 'No';
   other_group_name?: string;
+  other_group_position?: string | null;
   contribution: string;
   reference_name: string;
   reference_mobile: string;
@@ -898,27 +1053,39 @@ export async function getAdminNewMemberApplicationsApi(adminToken: string) {
   });
 }
 
-export async function deleteAdminFamilyRegistrationApi(adminToken: string, regId: string) {
+export async function deleteAdminFamilyRegistrationApi(
+  adminToken: string,
+  regId: string,
+  email?: string | null
+) {
+  const qs = email && email.includes('@') ? `?email=${encodeURIComponent(email.trim().toLowerCase())}` : '';
   return apiRequest<{
     success: boolean;
     regId: string;
     deletedLocal: boolean;
     deletedLinkedApp: boolean;
     deletedPhotoIds: string[];
-  }>(`/admin/family-registrations/${encodeURIComponent(regId)}`, {
+    deletedVaultIds?: string[];
+  }>(`/admin/family-registrations/${encodeURIComponent(regId)}${qs}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${adminToken}` },
   });
 }
 
-export async function deleteAdminNewMemberApplicationApi(adminToken: string, appId: string) {
+export async function deleteAdminNewMemberApplicationApi(
+  adminToken: string,
+  appId: string,
+  email?: string | null
+) {
+  const qs = email && email.includes('@') ? `?email=${encodeURIComponent(email.trim().toLowerCase())}` : '';
   return apiRequest<{
     success: boolean;
     appId: string;
     deletedLocal: boolean;
     deletedLinkedReg: boolean;
     deletedPhotoIds: string[];
-  }>(`/admin/new-member-applications/${encodeURIComponent(appId)}`, {
+    deletedVaultIds?: string[];
+  }>(`/admin/new-member-applications/${encodeURIComponent(appId)}${qs}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${adminToken}` },
   });
@@ -932,5 +1099,36 @@ export async function deleteAdminMemberApi(adminToken: string, coupleId: string)
   }>(`/admin/member/${encodeURIComponent(coupleId)}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${adminToken}` },
+  });
+}
+
+export async function reconcileAdminCloudApi(
+  adminToken: string,
+  params: {
+    cloudRegIds?: string[];
+    cloudAppIds?: string[];
+    snapshotTimestampMs?: number;
+  }
+) {
+  return apiRequest<{
+    success: boolean;
+    prunedRegistrations: number;
+    prunedApplications: number;
+    deletedPhotoIds: string[];
+  }>('/admin/reconcile-cloud', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify(params),
+  });
+}
+
+export async function encryptAdminVaultsApi(adminToken: string, registrations: any[]) {
+  return apiRequest<{
+    success: boolean;
+    vaultEntries: MemberVaultDocInput[];
+  }>('/admin/encrypt-vaults', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({ registrations }),
   });
 }

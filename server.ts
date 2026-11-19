@@ -57,18 +57,31 @@ async function startServer() {
   const server = http.createServer(app);
 
   if (!isProduction) {
-    // Development mode: mount Vite dev server as middleware (HMR disabled in preview runtime)
-    const { createServer } = await import('vite');
-    const vite = await createServer({
-      server: {
-        middlewareMode: true,
-        hmr: false,
-        watch: process.env.DISABLE_HMR === 'true' ? null : {},
-      },
-      appType: 'spa',
-    });
+    // Initialize Vite dev middleware in the background so port 3000 binds immediately
+    const vitePromise = import('vite')
+      .then(({ createServer }) =>
+        createServer({
+          server: {
+            middlewareMode: true,
+            hmr: false,
+            watch: process.env.DISABLE_HMR === 'true' ? null : {},
+          },
+          appType: 'spa',
+        })
+      )
+      .catch((err) => {
+        console.error('Failed to initialize Vite dev middleware:', err);
+        throw err;
+      });
 
-    app.use(vite.middlewares);
+    app.use(async (req, res, next) => {
+      try {
+        const vite = await vitePromise;
+        vite.middlewares(req, res, next);
+      } catch (err) {
+        next(err);
+      }
+    });
   } else {
     // Production mode: serve built assets from dist
     const distPath = path.resolve(process.cwd(), 'dist');

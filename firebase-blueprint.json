@@ -340,6 +340,11 @@
           "description": "Other group name if applicable",
           "maxLength": 200
         },
+        "other_group_position": {
+          "type": "string",
+          "description": "Current or past position held in other group (optional)",
+          "maxLength": 200
+        },
         "new_member_contribution": {
           "type": "string",
           "description": "New applicant contribution note",
@@ -371,8 +376,8 @@
         },
         "exp_international_trip": {
           "type": "string",
-          "description": "Interest in an international trip with JSG Royals (Yes/No)",
-          "enum": ["Yes", "No"]
+          "description": "Open-text interest, preferred month(s), and destination for an upcoming International / Domestic fellowship trip with JSG Royals",
+          "maxLength": 500
         },
         "exp_trip_month_destination": {
           "type": "string",
@@ -477,6 +482,11 @@
         "other_group_name": {
           "type": "string",
           "description": "Other group name if Yes",
+          "maxLength": 200
+        },
+        "other_group_position": {
+          "type": "string",
+          "description": "Current or past position held in other group (optional)",
           "maxLength": 200
         },
         "contribution": {
@@ -613,6 +623,76 @@
         "created_at",
         "createdAt"
       ]
+    },
+    "MemberVault": {
+      "title": "MemberVault",
+      "description": "Server-encrypted opaque household dossier lookup vault keyed by HMAC-SHA256 of verified member email (zero plaintext PII)",
+      "type": "object",
+      "properties": {
+        "vault_id": {
+          "type": "string",
+          "description": "Server-derived HMAC-SHA256 lookup ID (MV-XXXX...)",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "minLength": 8,
+          "maxLength": 128
+        },
+        "reg_id": {
+          "type": "string",
+          "description": "Parent family_registrations document ID",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "iv": {
+          "type": "string",
+          "description": "Base64 AES-256-GCM initialization vector",
+          "minLength": 12,
+          "maxLength": 64
+        },
+        "auth_tag": {
+          "type": "string",
+          "description": "Base64 AES-256-GCM authentication tag",
+          "minLength": 16,
+          "maxLength": 64
+        },
+        "ciphertext": {
+          "type": "string",
+          "description": "Base64 AES-256-GCM encrypted dossier payload",
+          "minLength": 20,
+          "maxLength": 120000
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO creation timestamp",
+          "maxLength": 64
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "ISO last update timestamp",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firestore server timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firestore server timestamp of last update"
+        }
+      },
+      "required": [
+        "vault_id",
+        "reg_id",
+        "iv",
+        "auth_tag",
+        "ciphertext",
+        "created_at",
+        "updated_at",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -639,6 +719,10 @@
     "/family_photos/{photoId}": {
       "schema": "FamilyPhoto",
       "description": "Compressed image backups keyed by photo filename so admin previews work after any redeploy"
+    },
+    "/member_vaults/{vaultId}": {
+      "schema": "MemberVault",
+      "description": "Encrypted zero-PII lookup vaults enabling OTP-verified returning members to recover submitted dossiers across restarts and deployments"
     }
   }
 }

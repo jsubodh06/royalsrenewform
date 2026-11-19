@@ -29,6 +29,15 @@ import {
   checkFast2SmsWallet,
 } from './sms.ts';
 import { requestEmailOtp, verifyEmailOtp, getEmailConfigStatus, getVerifiedEmailConfigStatus, saveEmailConfig, resetEmailConfig, sendTestEmail } from './emailOtp.ts';
+import {
+  buildRegistrationMatchSummary,
+  collectHouseholdEmails,
+  computeVaultIdForEmail,
+  decryptVaultForEmail,
+  encryptRegistrationForVaults,
+  rehydrateLocalRegistrationCache,
+  verifyFamilyLookupToken,
+} from './memberVault.ts';
 
 export const apiRouter = Router();
 
@@ -2065,6 +2074,63 @@ apiRouter.post('/family/verify-email-otp', (req: Request, res: Response) => {
   }
 });
 
+// Decrypt an OTP-verified member's encrypted Firestore vault blob and rehydrate local cache
+apiRouter.post('/family/decrypt-vault', (req: Request, res: Response) => {
+  try {
+    const token = String(req.body?.lookupToken || '').trim();
+    const verified = verifyFamilyLookupToken(token);
+    if (!verified) {
+      return res.status(401).json({ error: 'Invalid or expired email verification token.' });
+    }
+
+    const vaultDoc = req.body?.vault;
+    const decrypted = decryptVaultForEmail(verified.email, vaultDoc);
+    if (!decrypted || isFamilyRegistrationTombstoned(decrypted)) {
+      return res.json({ alreadyRegistered: false });
+    }
+
+    rehydrateLocalRegistrationCache(decrypted);
+    const summary = buildRegistrationMatchSummary(verified.email, decrypted, verified.role);
+    summary.registration = normalizeFamilyRecordPhotos(summary.registration, summary.registration.children || [], req);
+    res.json(summary);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to verify cloud registration record.' });
+  }
+});
+
+// Sync a cloud registration (read directly by verified owner/admin) to local cache & generate encrypted vault entries
+apiRouter.post('/family/sync-from-cloud', (req: Request, res: Response) => {
+  try {
+    const token = String(req.body?.lookupToken || '').trim();
+    const verified = verifyFamilyLookupToken(token);
+    if (!verified) {
+      return res.status(401).json({ error: 'Invalid or expired email verification token.' });
+    }
+
+    const registration = req.body?.registration;
+    if (!registration || typeof registration !== 'object' || !registration.reg_id) {
+      return res.json({ alreadyRegistered: false, vaultEntries: [] });
+    }
+
+    const householdEmails = collectHouseholdEmails(registration);
+    if (!householdEmails.includes(verified.email) || isFamilyRegistrationTombstoned(registration)) {
+      return res.json({ alreadyRegistered: false, vaultEntries: [] });
+    }
+
+    rehydrateLocalRegistrationCache(registration);
+    const summary = buildRegistrationMatchSummary(verified.email, registration, verified.role);
+    summary.registration = normalizeFamilyRecordPhotos(summary.registration, summary.registration.children || [], req);
+    const vaultEntries = encryptRegistrationForVaults(summary.registration);
+
+    res.json({
+      ...summary,
+      vaultEntries,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to sync cloud registration.' });
+  }
+});
+
 const PUBLIC_APP_URL_FALLBACK =
   'https://ais-pre-t5c2x6fk3je4yhythikayj-923279058412.asia-southeast1.run.app';
 
@@ -2094,13 +2160,15 @@ function toPublicPhotoUrl(url: string | null | undefined, req: Request): string 
   const marker = '/api/family/photo/';
   const idx = trimmed.indexOf(marker);
   if (idx !== -1) {
-    const isPrivateOrRelative =
+    const isKnownOriginOrRelative =
       trimmed.startsWith('/') ||
       trimmed.includes('localhost') ||
       trimmed.includes('127.0.0.1') ||
-      trimmed.includes('ais-dev-');
-    if (isPrivateOrRelative) {
-      const filenamePart = trimmed.slice(idx + marker.length).split('?')[0];
+      trimmed.includes('ais-dev-') ||
+      trimmed.includes('ais-pre-') ||
+      trimmed.includes('royalsrenewform.vercel.app');
+    if (isKnownOriginOrRelative) {
+      const filenamePart = trimmed.slice(idx + marker.length).split('?')[0].split('#')[0];
       return `${resolvePublicAppOrigin(req)}${marker}${filenamePart}`;
     }
   }
@@ -2122,6 +2190,27 @@ function normalizeFamilyRecordPhotos(record: any, childrenList: any[], req: Requ
   };
 }
 
+function isFamilyRegistrationTombstoned(row: any): boolean {
+  if (!row) return false;
+  const tombstones = db
+    .prepare('SELECT record_id, email, deleted_at FROM deleted_tombstones WHERE record_type = ?')
+    .all('family') as Array<{ record_id: string; email: string | null; deleted_at: string }>;
+  if (tombstones.length === 0) return false;
+
+  const regTime = new Date(row.updated_at || row.created_at || 0).getTime() || 0;
+  const regIdUpper = String(row.reg_id || '').trim().toUpperCase();
+  const emails = [row.submitter_email, row.husband_email, row.wife_email]
+    .map((e) => String(e || '').trim().toLowerCase())
+    .filter((e) => e.includes('@'));
+
+  return tombstones.some((t) => {
+    const delTime = new Date(t.deleted_at || 0).getTime() || 0;
+    const idMatch = t.record_id && regIdUpper && String(t.record_id).trim().toUpperCase() === regIdUpper;
+    const emailMatch = t.email && emails.includes(String(t.email).trim().toLowerCase());
+    return (idMatch || emailMatch) && regTime <= delTime;
+  });
+}
+
 // 1. Check if email (or spouse's email) has already been submitted
 apiRouter.post('/family/check-email', (req: Request, res: Response) => {
   try {
@@ -2131,11 +2220,13 @@ apiRouter.post('/family/check-email', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Please enter a valid email address.' });
     }
 
-    const record = db.prepare(`
+    const candidates = db.prepare(`
       SELECT * FROM family_registrations 
       WHERE LOWER(submitter_email) = ? OR LOWER(husband_email) = ? OR LOWER(wife_email) = ?
-      ORDER BY id DESC LIMIT 1
-    `).get(rawEmail, rawEmail, rawEmail) as any;
+      ORDER BY id DESC
+    `).all(rawEmail, rawEmail, rawEmail) as any[];
+
+    const record = candidates.find((r) => !isFamilyRegistrationTombstoned(r));
 
     if (!record) {
       return res.json({ exists: false });
@@ -2268,6 +2359,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       secretary_mobile,
       other_group_member,
       other_group_name,
+      other_group_position,
       new_member_contribution,
       reference_name,
       reference_mobile,
@@ -2349,6 +2441,10 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
     const primaryOrg = String((subRole === 'wife' ? cleanWifeOrg : cleanHusbandOrg) || cleanHusbandOrg || cleanWifeOrg || '').trim();
     const cleanOtherGroupMember = other_group_member === 'Yes' ? 'Yes' : 'No';
     const cleanOtherGroupName = String(other_group_name || '').trim();
+    const cleanOtherGroupPosition =
+      cleanOtherGroupMember === 'Yes'
+        ? String(other_group_position || '').trim().slice(0, 200) || null
+        : null;
     const cleanNewMemberContribution = String(new_member_contribution || '').trim();
     const cleanRefName = String(reference_name || '').trim();
     const cleanRefMobile = String(reference_mobile || '').replace(/\D/g, '');
@@ -2363,11 +2459,8 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       parsedExpRating = ratingNum;
     }
     const cleanExpFavEvent = String(exp_favourite_event || '').trim().slice(0, 1000) || null;
-    const cleanExpIntlTrip = exp_international_trip === 'Yes' ? 'Yes' : exp_international_trip === 'No' ? 'No' : null;
-    const cleanExpTripDest =
-      cleanExpIntlTrip === 'No'
-        ? null
-        : String(exp_trip_month_destination || '').trim().slice(0, 300) || null;
+    const cleanExpIntlTrip = String(exp_international_trip || '').trim().slice(0, 500) || null;
+    const cleanExpTripDest = String(exp_trip_month_destination || '').trim().slice(0, 300) || null;
     const cleanExpMissing = String(exp_missing || '').trim().slice(0, 2000) || null;
 
     if (membershipType === 'new') {
@@ -2398,12 +2491,6 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       }
       if (!cleanWifeQual) {
         return res.status(400).json({ error: 'Wife Educational Qualification is required for new member applications.' });
-      }
-      if (!cleanWifeOcc) {
-        return res.status(400).json({ error: 'Wife Occupation / Profession is required for new member applications.' });
-      }
-      if (!cleanWifeOrg) {
-        return res.status(400).json({ error: 'Wife Company / Business / Organization is required for new member applications.' });
       }
       if (!String(wife_photo_url || '').trim()) {
         return res.status(400).json({ error: 'Wife Photo is required for new member applications.' });
@@ -2520,12 +2607,9 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
     const finalExpRating = preserveExisting ? (parsedExpRating ?? existing.exp_rating ?? null) : parsedExpRating;
     const finalExpFavEvent = preserveExisting ? (cleanExpFavEvent || existing.exp_favourite_event || null) : cleanExpFavEvent;
     const finalExpIntlTrip = preserveExisting ? (cleanExpIntlTrip || existing.exp_international_trip || null) : cleanExpIntlTrip;
-    const finalExpTripDest =
-      finalExpIntlTrip === 'No'
-        ? null
-        : preserveExisting
-          ? (cleanExpTripDest || existing.exp_trip_month_destination || null)
-          : cleanExpTripDest;
+    const finalExpTripDest = preserveExisting
+      ? (cleanExpTripDest || existing.exp_trip_month_destination || null)
+      : cleanExpTripDest;
     const finalExpMissing = preserveExisting ? (cleanExpMissing || existing.exp_missing || null) : cleanExpMissing;
 
     let finalChildrenArray = normalizedChildrenArray;
@@ -2581,6 +2665,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
       membership_type: membershipType,
       other_group_member: membershipType === 'new' ? cleanOtherGroupMember : null,
       other_group_name: membershipType === 'new' && cleanOtherGroupMember === 'Yes' ? cleanOtherGroupName : null,
+      other_group_position: membershipType === 'new' ? cleanOtherGroupPosition : null,
       new_member_contribution: membershipType === 'new' ? cleanNewMemberContribution : null,
       reference_name: membershipType === 'new' ? cleanRefName : null,
       reference_mobile: membershipType === 'new' ? cleanRefMobile : null,
@@ -2596,13 +2681,15 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
     };
 
     if (req.body?.validate_only === true) {
+      const normalizedPreview = normalizeFamilyRecordPhotos(previewRecord, finalChildrenArray, req);
       return res.json({
         success: true,
         validateOnly: true,
         updated: isUpdate,
         regId,
         membershipType,
-        registration: normalizeFamilyRecordPhotos(previewRecord, finalChildrenArray, req)
+        registration: normalizedPreview,
+        vaultEntries: encryptRegistrationForVaults(normalizedPreview),
       });
     }
 
@@ -2650,6 +2737,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
             membership_type = ?,
             other_group_member = ?,
             other_group_name = ?,
+            other_group_position = ?,
             new_member_contribution = ?,
             reference_name = ?,
             reference_mobile = ?,
@@ -2676,6 +2764,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
           membershipType,
           membershipType === 'new' ? cleanOtherGroupMember : null,
           membershipType === 'new' && cleanOtherGroupMember === 'Yes' ? cleanOtherGroupName : null,
+          membershipType === 'new' ? cleanOtherGroupPosition : null,
           membershipType === 'new' ? cleanNewMemberContribution : null,
           membershipType === 'new' ? cleanRefName : null,
           membershipType === 'new' ? cleanRefMobile : null,
@@ -2700,7 +2789,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
             husband_photo_url, wife_photo_url, couple_photo_url, family_photo_url,
             contribution_areas, royal_idea, jsg_should_be_known_for,
             president_name, president_mobile, secretary_name, secretary_mobile,
-            membership_type, other_group_member, other_group_name,
+            membership_type, other_group_member, other_group_name, other_group_position,
             new_member_contribution, reference_name, reference_mobile, business_description,
             exp_rating, exp_favourite_event, exp_international_trip, exp_trip_month_destination, exp_missing,
             status, created_at, updated_at
@@ -2715,7 +2804,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
             ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?,
+            ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?
@@ -2734,6 +2823,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
           membershipType,
           membershipType === 'new' ? cleanOtherGroupMember : null,
           membershipType === 'new' && cleanOtherGroupMember === 'Yes' ? cleanOtherGroupName : null,
+          membershipType === 'new' ? cleanOtherGroupPosition : null,
           membershipType === 'new' ? cleanNewMemberContribution : null,
           membershipType === 'new' ? cleanRefName : null,
           membershipType === 'new' ? cleanRefMobile : null,
@@ -2761,6 +2851,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
               email = ?,
               other_group_member = ?,
               other_group_name = ?,
+              other_group_position = ?,
               contribution = ?,
               reference_name = ?,
               reference_mobile = ?,
@@ -2779,6 +2870,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
             subEmail,
             cleanOtherGroupMember,
             cleanOtherGroupMember === 'Yes' ? cleanOtherGroupName : null,
+            cleanOtherGroupPosition,
             cleanNewMemberContribution,
             cleanRefName,
             cleanRefMobile,
@@ -2794,11 +2886,11 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
           db.prepare(`
             INSERT INTO new_member_applications (
               app_id, applicant_name, business_name, mobile_number, email,
-              other_group_member, other_group_name, contribution,
+              other_group_member, other_group_name, other_group_position, contribution,
               reference_name, reference_mobile, business_description,
               president_name, president_mobile, secretary_name, secretary_mobile,
               status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?)
           `).run(
             regId,
             applicantName,
@@ -2807,6 +2899,7 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
             subEmail,
             cleanOtherGroupMember,
             cleanOtherGroupMember === 'Yes' ? cleanOtherGroupName : null,
+            cleanOtherGroupPosition,
             cleanNewMemberContribution,
             cleanRefName,
             cleanRefMobile,
@@ -2824,12 +2917,26 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
 
     tx();
 
+    // Clear any prior admin deletion tombstone when a family genuinely submits/re-registers
+    try {
+      const clearStmt = db.prepare(
+        'DELETE FROM deleted_tombstones WHERE record_type = ? AND (UPPER(record_id) = UPPER(?) OR LOWER(email) = LOWER(?))'
+      );
+      for (const em of new Set([subEmail, hEmail, wEmail].filter(Boolean))) {
+        clearStmt.run('family', regId, em);
+        if (membershipType === 'new') {
+          clearStmt.run('application', regId, em);
+        }
+      }
+    } catch {}
+
     const created = db.prepare('SELECT * FROM family_registrations WHERE reg_id = ?').get(regId) as any;
     let parsedCreatedChildren = [];
     try {
       parsedCreatedChildren = created.children_json ? JSON.parse(created.children_json) : [];
     } catch (e) {}
 
+    const normalizedCreated = normalizeFamilyRecordPhotos(created, parsedCreatedChildren, req);
     res.json({
       success: true,
       updated: isUpdate,
@@ -2846,7 +2953,8 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
         : (membershipType === 'new'
             ? 'New member application submitted for review!'
             : 'Family dossier registered successfully!'),
-      registration: normalizeFamilyRecordPhotos(created, parsedCreatedChildren, req)
+      registration: normalizedCreated,
+      vaultEntries: encryptRegistrationForVaults(normalizedCreated),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to submit family registration.' });
@@ -2934,7 +3042,11 @@ apiRouter.post('/family/upload-photo-base64', (req: Request, res: Response) => {
 // 3b. Serve uploaded family/individual photos cleanly — completely open/public (no auth required)
 apiRouter.get('/family/photo/:filename', (req: Request, res: Response) => {
   try {
-    const safeFilename = path.basename(req.params.filename || '');
+    let rawParam = req.params.filename || '';
+    try {
+      rawParam = decodeURIComponent(rawParam);
+    } catch {}
+    const safeFilename = path.basename(rawParam).split('?')[0].split('#')[0].trim();
     if (!safeFilename || safeFilename.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename.' });
     }
@@ -2989,7 +3101,9 @@ apiRouter.get('/family/photo/:filename', (req: Request, res: Response) => {
 apiRouter.get('/admin/family-registrations', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
   try {
     const rows = db.prepare('SELECT * FROM family_registrations ORDER BY id DESC').all() as any[];
-    const formatted = rows.map((r) => {
+    const filteredRows = rows.filter((r) => !isFamilyRegistrationTombstoned(r));
+
+    const formatted = filteredRows.map((r) => {
       let children = [];
       try {
         children = r.children_json ? JSON.parse(r.children_json) : [];
@@ -3012,6 +3126,7 @@ apiRouter.post('/family/new-member-application', (req: Request, res: Response) =
       email,
       other_group_member,
       other_group_name,
+      other_group_position,
       contribution,
       reference_name,
       reference_mobile,
@@ -3028,6 +3143,10 @@ apiRouter.post('/family/new-member-application', (req: Request, res: Response) =
     const cleanEmail = String(email || '').trim().toLowerCase();
     const cleanOtherMember = other_group_member === 'Yes' ? 'Yes' : 'No';
     const cleanOtherGroupName = String(other_group_name || '').trim();
+    const cleanOtherGroupPosition =
+      cleanOtherMember === 'Yes'
+        ? String(other_group_position || '').trim().slice(0, 200) || null
+        : null;
     const cleanContribution = String(contribution || '').trim();
     const cleanRefName = String(reference_name || '').trim();
     const cleanRefMobile = String(reference_mobile || '').replace(/\D/g, '');
@@ -3073,6 +3192,7 @@ apiRouter.post('/family/new-member-application', (req: Request, res: Response) =
           email = ?,
           other_group_member = ?,
           other_group_name = ?,
+          other_group_position = ?,
           contribution = ?,
           reference_name = ?,
           reference_mobile = ?,
@@ -3091,6 +3211,7 @@ apiRouter.post('/family/new-member-application', (req: Request, res: Response) =
         cleanEmail,
         cleanOtherMember,
         cleanOtherMember === 'Yes' ? cleanOtherGroupName : null,
+        cleanOtherGroupPosition,
         cleanContribution,
         cleanRefName,
         cleanRefMobile,
@@ -3106,11 +3227,11 @@ apiRouter.post('/family/new-member-application', (req: Request, res: Response) =
       db.prepare(`
         INSERT INTO new_member_applications (
           app_id, applicant_name, business_name, mobile_number, email,
-          other_group_member, other_group_name, contribution,
+          other_group_member, other_group_name, other_group_position, contribution,
           reference_name, reference_mobile, business_description,
           president_name, president_mobile, secretary_name, secretary_mobile,
           status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?)
       `).run(
         appId,
         cleanName,
@@ -3119,6 +3240,7 @@ apiRouter.post('/family/new-member-application', (req: Request, res: Response) =
         cleanEmail,
         cleanOtherMember,
         cleanOtherMember === 'Yes' ? cleanOtherGroupName : null,
+        cleanOtherGroupPosition,
         cleanContribution,
         cleanRefName,
         cleanRefMobile,
@@ -3131,6 +3253,11 @@ apiRouter.post('/family/new-member-application', (req: Request, res: Response) =
         now
       );
     }
+
+    // Clear any prior admin deletion tombstone when an applicant genuinely re-submits
+    try {
+      db.prepare('DELETE FROM deleted_tombstones WHERE record_type = ? AND (UPPER(record_id) = UPPER(?) OR LOWER(email) = LOWER(?))').run('application', appId, cleanEmail);
+    } catch {}
 
     const created = db.prepare('SELECT * FROM new_member_applications WHERE app_id = ?').get(appId);
 
@@ -3149,8 +3276,24 @@ apiRouter.post('/family/new-member-application', (req: Request, res: Response) =
 // 6. Admin API to view all New Member Applications
 apiRouter.get('/admin/new-member-applications', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
   try {
-    const rows = db.prepare('SELECT * FROM new_member_applications ORDER BY id DESC').all();
-    res.json({ success: true, count: rows.length, applications: rows });
+    const rows = db.prepare('SELECT * FROM new_member_applications ORDER BY id DESC').all() as any[];
+    const tombstones = db
+      .prepare('SELECT record_id, email, deleted_at FROM deleted_tombstones WHERE record_type = ?')
+      .all('application') as Array<{ record_id: string; email: string | null; deleted_at: string }>;
+
+    const filteredRows = rows.filter((a) => {
+      const appTime = new Date(a.updated_at || a.created_at || 0).getTime() || 0;
+      const appIdUpper = String(a.app_id || '').toUpperCase();
+      const appEmail = String(a.email || '').trim().toLowerCase();
+      return !tombstones.some((t) => {
+        const delTime = new Date(t.deleted_at || 0).getTime() || 0;
+        const idMatch = t.record_id && String(t.record_id).toUpperCase() === appIdUpper;
+        const emailMatch = t.email && appEmail && t.email.toLowerCase() === appEmail;
+        return (idMatch || emailMatch) && appTime <= delTime;
+      });
+    });
+
+    res.json({ success: true, count: filteredRows.length, applications: filteredRows });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve new member applications.' });
   }
@@ -3228,35 +3371,110 @@ function cleanupUnreferencedFamilyPhotos(candidateFilenames: string[]): string[]
   return deletedPhotoIds;
 }
 
-// 7. Admin DELETE Family Registration (and linked new member application + orphaned photos)
+// 7. Admin DELETE Family Registration (and linked new member application + duplicate email siblings + orphaned photos)
 apiRouter.delete('/admin/family-registrations/:regId', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
   try {
-    const regId = String(req.params.regId || '').trim();
-    if (!regId || !/^[a-zA-Z0-9_-]{2,128}$/.test(regId)) {
+    let regId = String(req.params.regId || '').trim();
+    try {
+      regId = decodeURIComponent(regId).trim();
+    } catch {}
+    if (!regId || regId.length > 160 || regId.includes('..')) {
       return res.status(400).json({ error: 'Invalid registration ID.' });
     }
 
-    const existingReg = db.prepare('SELECT * FROM family_registrations WHERE reg_id = ?').get(regId) as any;
-    const candidatePhotos = collectFamilyRegistrationPhotoFilenames(existingReg);
+    const queryEmail = typeof req.query.email === 'string' ? req.query.email.trim().toLowerCase() : '';
+    const existingRows = db
+      .prepare(
+        `SELECT * FROM family_registrations
+         WHERE UPPER(reg_id) = UPPER(?)
+            OR (? != '' AND (LOWER(submitter_email) = ? OR LOWER(husband_email) = ? OR LOWER(wife_email) = ?))`
+      )
+      .all(regId, queryEmail, queryEmail, queryEmail, queryEmail) as any[];
+
+    const primaryExisting = existingRows[0] || null;
+    const resolvedEmail =
+      queryEmail ||
+      String(primaryExisting?.submitter_email || '').trim().toLowerCase();
+
+    const allMatchedRows = resolvedEmail
+      ? (db
+          .prepare(
+            `SELECT * FROM family_registrations
+             WHERE UPPER(reg_id) = UPPER(?)
+                OR LOWER(submitter_email) = ?
+                OR LOWER(husband_email) = ?
+                OR LOWER(wife_email) = ?`
+          )
+          .all(regId, resolvedEmail, resolvedEmail, resolvedEmail) as any[])
+      : existingRows;
+
+    const allEmails = Array.from(
+      new Set(
+        [
+          queryEmail,
+          ...allMatchedRows.flatMap((r) => [r?.submitter_email, r?.husband_email, r?.wife_email]),
+        ]
+          .map((e) => String(e || '').trim().toLowerCase())
+          .filter((e) => e.includes('@'))
+      )
+    );
+
+    const candidatePhotos = Array.from(
+      new Set(allMatchedRows.flatMap((row) => collectFamilyRegistrationPhotoFilenames(row)))
+    );
 
     let deletedLocal = false;
     let deletedLinkedApp = false;
     let deletedPhotoIds: string[] = [];
+    const nowIso = new Date().toISOString();
 
     const tx = db.transaction(() => {
-      const regRes = db.prepare('DELETE FROM family_registrations WHERE reg_id = ?').run(regId);
-      deletedLocal = regRes.changes > 0;
+      let regChanges = db.prepare('DELETE FROM family_registrations WHERE UPPER(reg_id) = UPPER(?)').run(regId).changes;
+      let appChanges = db.prepare('DELETE FROM new_member_applications WHERE UPPER(app_id) = UPPER(?)').run(regId).changes;
 
-      const appRes = db.prepare('DELETE FROM new_member_applications WHERE app_id = ?').run(regId);
-      deletedLinkedApp = appRes.changes > 0;
+      for (const em of allEmails) {
+        regChanges += db
+          .prepare(
+            `DELETE FROM family_registrations
+             WHERE LOWER(submitter_email) = ? OR LOWER(husband_email) = ? OR LOWER(wife_email) = ?`
+          )
+          .run(em, em, em).changes;
+        appChanges += db
+          .prepare('DELETE FROM new_member_applications WHERE LOWER(email) = ?')
+          .run(em).changes;
+      }
+
+      deletedLocal = regChanges > 0;
+      deletedLinkedApp = appChanges > 0;
+
+      const idsToTombstone = Array.from(
+        new Set([regId, ...allMatchedRows.map((r) => String(r.reg_id || '').trim())].filter(Boolean))
+      );
+      const insertTomb = db.prepare(`
+        INSERT OR REPLACE INTO deleted_tombstones (record_type, record_id, email, deleted_at)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const tid of idsToTombstone) {
+        if (allEmails.length === 0) {
+          insertTomb.run('family', tid.toUpperCase(), null, nowIso);
+          insertTomb.run('application', tid.toUpperCase(), null, nowIso);
+        } else {
+          for (const em of allEmails) {
+            insertTomb.run('family', `${tid.toUpperCase()}:${em}`, em, nowIso);
+            insertTomb.run('application', `${tid.toUpperCase()}:${em}`, em, nowIso);
+          }
+          insertTomb.run('family', tid.toUpperCase(), allEmails[0], nowIso);
+          insertTomb.run('application', tid.toUpperCase(), allEmails[0], nowIso);
+        }
+      }
 
       deletedPhotoIds = cleanupUnreferencedFamilyPhotos(candidatePhotos);
     });
 
     tx();
 
-    const label = existingReg
-      ? `${existingReg.husband_name || ''} & ${existingReg.wife_name || ''} (${existingReg.submitter_email || ''})`
+    const label = primaryExisting
+      ? `${primaryExisting.husband_name || ''} & ${primaryExisting.wife_name || ''} (${primaryExisting.submitter_email || resolvedEmail || ''})`
       : regId;
     logAdminAudit(
       req.admin!.email,
@@ -3265,40 +3483,110 @@ apiRouter.delete('/admin/family-registrations/:regId', requireAdmin, (req: Authe
       `Removed family registration from database: ${label}`
     );
 
+    const deletedVaultIds = Array.from(
+      new Set(allEmails.map((em) => computeVaultIdForEmail(em)).filter(Boolean))
+    );
+
     res.json({
       success: true,
       regId,
       deletedLocal,
       deletedLinkedApp,
       deletedPhotoIds,
+      deletedVaultIds,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete family registration.' });
   }
 });
 
-// 8. Admin DELETE New Member Application (and mirrored family registration if same ID)
+// 8. Admin DELETE New Member Application (and mirrored family registration + duplicates if same ID/email)
 apiRouter.delete('/admin/new-member-applications/:appId', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
   try {
-    const appId = String(req.params.appId || '').trim();
-    if (!appId || !/^[a-zA-Z0-9_-]{2,128}$/.test(appId)) {
+    let appId = String(req.params.appId || '').trim();
+    try {
+      appId = decodeURIComponent(appId).trim();
+    } catch {}
+    if (!appId || appId.length > 160 || appId.includes('..')) {
       return res.status(400).json({ error: 'Invalid application ID.' });
     }
 
-    const existingApp = db.prepare('SELECT * FROM new_member_applications WHERE app_id = ?').get(appId) as any;
-    const linkedReg = db.prepare('SELECT * FROM family_registrations WHERE reg_id = ?').get(appId) as any;
-    const candidatePhotos = collectFamilyRegistrationPhotoFilenames(linkedReg);
+    const queryEmail = typeof req.query.email === 'string' ? req.query.email.trim().toLowerCase() : '';
+    const existingApp = db
+      .prepare('SELECT * FROM new_member_applications WHERE UPPER(app_id) = UPPER(?)')
+      .get(appId) as any;
+    const resolvedEmail =
+      queryEmail || String(existingApp?.email || '').trim().toLowerCase();
+
+    const linkedRegs = resolvedEmail
+      ? (db
+          .prepare(
+            `SELECT * FROM family_registrations
+             WHERE UPPER(reg_id) = UPPER(?) OR LOWER(submitter_email) = ?`
+          )
+          .all(appId, resolvedEmail) as any[])
+      : (db.prepare('SELECT * FROM family_registrations WHERE UPPER(reg_id) = UPPER(?)').all(appId) as any[]);
+
+    const allEmails = Array.from(
+      new Set(
+        [
+          queryEmail,
+          existingApp?.email,
+          ...linkedRegs.flatMap((r) => [r?.submitter_email, r?.husband_email, r?.wife_email]),
+        ]
+          .map((e) => String(e || '').trim().toLowerCase())
+          .filter((e) => e.includes('@'))
+      )
+    );
+
+    const candidatePhotos = Array.from(
+      new Set(linkedRegs.flatMap((row) => collectFamilyRegistrationPhotoFilenames(row)))
+    );
 
     let deletedLocal = false;
     let deletedLinkedReg = false;
     let deletedPhotoIds: string[] = [];
+    const nowIso = new Date().toISOString();
 
     const tx = db.transaction(() => {
-      const appRes = db.prepare('DELETE FROM new_member_applications WHERE app_id = ?').run(appId);
-      deletedLocal = appRes.changes > 0;
+      let appChanges = db.prepare('DELETE FROM new_member_applications WHERE UPPER(app_id) = UPPER(?)').run(appId).changes;
+      let regChanges = db.prepare('DELETE FROM family_registrations WHERE UPPER(reg_id) = UPPER(?)').run(appId).changes;
 
-      const regRes = db.prepare('DELETE FROM family_registrations WHERE reg_id = ?').run(appId);
-      deletedLinkedReg = regRes.changes > 0;
+      for (const em of allEmails) {
+        appChanges += db
+          .prepare('DELETE FROM new_member_applications WHERE LOWER(email) = ?')
+          .run(em).changes;
+        regChanges += db
+          .prepare(
+            `DELETE FROM family_registrations
+             WHERE LOWER(submitter_email) = ? OR LOWER(husband_email) = ? OR LOWER(wife_email) = ?`
+          )
+          .run(em, em, em).changes;
+      }
+
+      deletedLocal = appChanges > 0;
+      deletedLinkedReg = regChanges > 0;
+
+      const idsToTombstone = Array.from(
+        new Set([appId, ...linkedRegs.map((r) => String(r.reg_id || '').trim())].filter(Boolean))
+      );
+      const insertTomb = db.prepare(`
+        INSERT OR REPLACE INTO deleted_tombstones (record_type, record_id, email, deleted_at)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const tid of idsToTombstone) {
+        if (allEmails.length === 0) {
+          insertTomb.run('application', tid.toUpperCase(), null, nowIso);
+          insertTomb.run('family', tid.toUpperCase(), null, nowIso);
+        } else {
+          for (const em of allEmails) {
+            insertTomb.run('application', `${tid.toUpperCase()}:${em}`, em, nowIso);
+            insertTomb.run('family', `${tid.toUpperCase()}:${em}`, em, nowIso);
+          }
+          insertTomb.run('application', tid.toUpperCase(), allEmails[0], nowIso);
+          insertTomb.run('family', tid.toUpperCase(), allEmails[0], nowIso);
+        }
+      }
 
       deletedPhotoIds = cleanupUnreferencedFamilyPhotos(candidatePhotos);
     });
@@ -3306,7 +3594,7 @@ apiRouter.delete('/admin/new-member-applications/:appId', requireAdmin, (req: Au
     tx();
 
     const label = existingApp
-      ? `${existingApp.applicant_name || ''} (${existingApp.email || ''})`
+      ? `${existingApp.applicant_name || ''} (${existingApp.email || resolvedEmail || ''})`
       : appId;
     logAdminAudit(
       req.admin!.email,
@@ -3315,12 +3603,17 @@ apiRouter.delete('/admin/new-member-applications/:appId', requireAdmin, (req: Au
       `Removed new member application from database: ${label}`
     );
 
+    const deletedVaultIds = Array.from(
+      new Set(allEmails.map((em) => computeVaultIdForEmail(em)).filter(Boolean))
+    );
+
     res.json({
       success: true,
       appId,
       deletedLocal,
       deletedLinkedReg,
       deletedPhotoIds,
+      deletedVaultIds,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete new member application.' });
@@ -3330,18 +3623,25 @@ apiRouter.delete('/admin/new-member-applications/:appId', requireAdmin, (req: Au
 // 9. Admin DELETE Year-1 / Year-2 Roster Member (cascades profile, preferences, submissions, notes, photos)
 apiRouter.delete('/admin/member/:coupleId', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
   try {
-    const coupleId = String(req.params.coupleId || '').trim().toUpperCase();
-    if (!coupleId || !/^[a-zA-Z0-9_-]{2,64}$/.test(coupleId)) {
+    let coupleId = String(req.params.coupleId || '').trim().toUpperCase();
+    try {
+      coupleId = decodeURIComponent(coupleId).trim().toUpperCase();
+    } catch {}
+    if (!coupleId || coupleId.length > 64 || coupleId.includes('..')) {
       return res.status(400).json({ error: 'Invalid Couple ID.' });
     }
 
-    const existingMember = db.prepare('SELECT * FROM members WHERE couple_id = ?').get(coupleId) as any;
-    const existingPhotos = db.prepare('SELECT storage_path FROM photos WHERE couple_id = ?').all(coupleId) as any[];
+    const existingMember = db
+      .prepare('SELECT * FROM members WHERE UPPER(couple_id) = UPPER(?)')
+      .get(coupleId) as any;
+    const existingPhotos = db
+      .prepare('SELECT storage_path FROM photos WHERE UPPER(couple_id) = UPPER(?)')
+      .all(coupleId) as any[];
 
     let deletedLocal = false;
     const tx = db.transaction(() => {
-      db.prepare('DELETE FROM otp_codes WHERE couple_id = ?').run(coupleId);
-      const resDel = db.prepare('DELETE FROM members WHERE couple_id = ?').run(coupleId);
+      db.prepare('DELETE FROM otp_codes WHERE UPPER(couple_id) = UPPER(?)').run(coupleId);
+      const resDel = db.prepare('DELETE FROM members WHERE UPPER(couple_id) = UPPER(?)').run(coupleId);
       deletedLocal = resDel.changes > 0;
     });
     tx();
@@ -3375,5 +3675,94 @@ apiRouter.delete('/admin/member/:coupleId', requireAdmin, (req: AuthenticatedReq
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete member record.' });
+  }
+});
+
+// 10. Admin Cloud Archive Reconciliation (prunes SQLite records that were deleted in Firebase Firestore)
+apiRouter.post('/admin/reconcile-cloud', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const cloudRegIdsProvided = Array.isArray(req.body?.cloudRegIds);
+    const cloudAppIdsProvided = Array.isArray(req.body?.cloudAppIds);
+    const snapshotTimestampMs =
+      typeof req.body?.snapshotTimestampMs === 'number' && Number.isFinite(req.body.snapshotTimestampMs)
+        ? req.body.snapshotTimestampMs
+        : Date.now();
+    // Leave a 15-second grace window so any concurrent live submission is never prematurely pruned
+    const cutoffMs = snapshotTimestampMs - 15_000;
+
+    const cloudRegSet = new Set(
+      (cloudRegIdsProvided ? req.body.cloudRegIds : []).map((id: any) => String(id || '').trim().toUpperCase()).filter(Boolean)
+    );
+    const cloudAppSet = new Set(
+      (cloudAppIdsProvided ? req.body.cloudAppIds : []).map((id: any) => String(id || '').trim().toUpperCase()).filter(Boolean)
+    );
+
+    let prunedRegistrations = 0;
+    let prunedApplications = 0;
+    let deletedPhotoIds: string[] = [];
+
+    const tx = db.transaction(() => {
+      const candidatePhotos: string[] = [];
+
+      if (cloudRegIdsProvided) {
+        const localRegs = db.prepare('SELECT * FROM family_registrations').all() as any[];
+        for (const row of localRegs) {
+          const idUpper = String(row.reg_id || '').trim().toUpperCase();
+          const rowTime = new Date(row.updated_at || row.created_at || 0).getTime() || 0;
+          if (!cloudRegSet.has(idUpper) && rowTime <= cutoffMs) {
+            candidatePhotos.push(...collectFamilyRegistrationPhotoFilenames(row));
+            db.prepare('DELETE FROM family_registrations WHERE id = ?').run(row.id);
+            prunedRegistrations++;
+          }
+        }
+      }
+
+      if (cloudAppIdsProvided) {
+        const localApps = db.prepare('SELECT * FROM new_member_applications').all() as any[];
+        for (const row of localApps) {
+          const idUpper = String(row.app_id || '').trim().toUpperCase();
+          const rowTime = new Date(row.updated_at || row.created_at || 0).getTime() || 0;
+          if (!cloudAppSet.has(idUpper) && rowTime <= cutoffMs) {
+            db.prepare('DELETE FROM new_member_applications WHERE id = ?').run(row.id);
+            prunedApplications++;
+          }
+        }
+      }
+
+      if (candidatePhotos.length > 0) {
+        deletedPhotoIds = cleanupUnreferencedFamilyPhotos(Array.from(new Set(candidatePhotos)));
+      }
+    });
+
+    tx();
+
+    res.json({
+      success: true,
+      prunedRegistrations,
+      prunedApplications,
+      deletedPhotoIds,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to reconcile SQLite with cloud archive.' });
+  }
+});
+
+// 11. Admin Encrypted Member Vault Backfill (generates encrypted lookup vaults for existing Firestore dossiers)
+apiRouter.post('/admin/encrypt-vaults', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const registrations = Array.isArray(req.body?.registrations) ? req.body.registrations : [];
+    const vaultEntries: any[] = [];
+    for (const reg of registrations.slice(0, 250)) {
+      if (!reg || typeof reg !== 'object' || !reg.reg_id) continue;
+      if (isFamilyRegistrationTombstoned(reg)) continue;
+      rehydrateLocalRegistrationCache(reg);
+      vaultEntries.push(...encryptRegistrationForVaults(reg));
+    }
+    res.json({
+      success: true,
+      vaultEntries,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to prepare encrypted lookup vaults.' });
   }
 });

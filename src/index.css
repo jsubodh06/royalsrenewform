@@ -19,6 +19,26 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
+    overflow-x: clip;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid #B89748;
+    outline-offset: 2px;
+  }
+
+  [data-focus-target]:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  [data-focus-target],
+  [data-field-error="true"] {
+    scroll-margin-top: 88px;
   }
 }
 
@@ -254,6 +274,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
   .animate-royal-orbit,
   .animate-royal-orbit-reverse,
   .animate-royal-sheen,
