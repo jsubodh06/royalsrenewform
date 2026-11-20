@@ -584,6 +584,11 @@ const FEE_COLLECTION_CONTACTS: FeeCollectionContact[] = [
     name: 'Vivek Samota',
     role: 'Fee Collection Coordinator',
     phone: '+91 96375 26522',
+    addresses: [
+      {
+        text: 'UG-4, Classic Crown, Old Palasia, Indore',
+      },
+    ],
   },
   {
     name: 'Rishabh Betala',
