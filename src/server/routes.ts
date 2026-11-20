@@ -1981,13 +1981,13 @@ function getRenewalWindowInfo(now = new Date()) {
   }).formatToParts(now);
   const month = Number(parts.find((p) => p.type === 'month')?.value || now.getMonth() + 1);
   const day = Number(parts.find((p) => p.type === 'day')?.value || now.getDate());
-  const isAfterDec5 = month === 12 && day > 5;
-  const isLateWindow = month === 12 && day >= 3 && day <= 5;
-  const isRegularWindow = (month === 11 && day >= 18) || (month === 12 && day <= 2);
+  const isAfterDec6 = month === 12 && day > 6;
+  const isLateWindow = month === 12 && day >= 1 && day <= 6;
+  const isRegularWindow = month === 11 && day >= 20 && day <= 30;
   return {
     month,
     day,
-    isAfterDec5,
+    isAfterDec6,
     isLateWindow,
     isRegularWindow,
     renewalFee: isLateWindow ? 70000 : 60000,
@@ -2001,13 +2001,13 @@ apiRouter.post('/family/request-email-otp', async (req: Request, res: Response) 
     const windowInfo = getRenewalWindowInfo();
     const rawEmail = String(req.body?.email || '').trim().toLowerCase();
     const membershipType = req.body?.membershipType === 'new' ? 'new' : 'existing';
-    if (membershipType === 'existing' && windowInfo.isAfterDec5) {
+    if (membershipType === 'existing' && windowInfo.isAfterDec6) {
       const existing = rawEmail
         ? db.prepare('SELECT id FROM family_registrations WHERE LOWER(husband_email) = ? OR LOWER(wife_email) = ? LIMIT 1').get(rawEmail, rawEmail)
         : null;
       if (!existing) {
         return res.status(403).json({
-          error: 'After 5 Dec 2026, existing member renewals are closed and existing members are considered as a New Entry. Please apply under New Member Application.'
+          error: 'After 6 Dec 2026, existing member renewals are closed and existing members are considered as a New Entry. Please apply under New Member Application.'
         });
       }
     }
@@ -2313,9 +2313,9 @@ apiRouter.post('/family/register', (req: Request, res: Response) => {
   try {
     const membershipType = req.body?.membership_type === 'new' ? 'new' : 'existing';
     const windowInfo = getRenewalWindowInfo();
-    if (membershipType === 'existing' && windowInfo.isAfterDec5) {
+    if (membershipType === 'existing' && windowInfo.isAfterDec6) {
       return res.status(403).json({
-        error: 'After 5 Dec 2026, existing member renewals are closed and existing members are considered as a New Entry. Please apply under New Member Application.'
+        error: 'After 6 Dec 2026, existing member renewals are closed and existing members are considered as a New Entry. Please apply under New Member Application.'
       });
     }
 

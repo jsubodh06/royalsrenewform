@@ -505,9 +505,9 @@ function getMembershipFeeWindowStatus(now = new Date()): FeeWindowStatus {
     day = Number(parts.find((p) => p.type === 'day')?.value || day);
   } catch {}
 
-  const isRenewalClosed = month === 12 && day > 5;
-  const isLateWindow = month === 12 && day >= 3 && day <= 5;
-  const isRegularWindow = (month === 11 && day >= 18) || (month === 12 && day <= 2);
+  const isRenewalClosed = month === 12 && day > 6;
+  const isLateWindow = month === 12 && day >= 1 && day <= 6;
+  const isRegularWindow = month === 11 && day >= 20 && day <= 30;
   const isBeforeCollection = !isRenewalClosed && !isLateWindow && !isRegularWindow;
 
   if (isRenewalClosed) {
@@ -519,8 +519,8 @@ function getMembershipFeeWindowStatus(now = new Date()): FeeWindowStatus {
       isRenewalClosed: true,
       isBeforeCollection: false,
       renewalFeeFormatted: 'New Entry',
-      statusHeading: 'Existing Member Renewals Closed (After 5 Dec 2026)',
-      statusDetail: 'After 5 Dec 2026, existing members will be considered as a New Entry (₹60,000 Fees + ₹40,000 One-Time Registration Fees).',
+      statusHeading: 'Existing Member Renewals Closed (After 6 Dec 2026)',
+      statusDetail: 'After 6 Dec 2026, existing members will be considered as a New Entry (₹60,000 Fees + ₹40,000 One-Time Registration Fees).',
     };
   }
 
@@ -533,8 +533,8 @@ function getMembershipFeeWindowStatus(now = new Date()): FeeWindowStatus {
       isRenewalClosed: false,
       isBeforeCollection: false,
       renewalFeeFormatted: '₹70,000',
-      statusHeading: 'Existing Member Fee: ₹70,000 (3–5 Dec 2026)',
-      statusDetail: 'From 3 Dec to 5 Dec 2026, existing member renewal fee is ₹70,000 (with penalty). After 5 Dec 2026, existing members will be considered as a New Entry.',
+      statusHeading: 'Existing Member Fee: ₹70,000 (1–6 Dec 2026)',
+      statusDetail: 'From 1 Dec to 6 Dec 2026, existing member renewal fee is ₹70,000 (with penalty). After 6 Dec 2026, existing members will be considered as a New Entry.',
     };
   }
 
@@ -547,8 +547,8 @@ function getMembershipFeeWindowStatus(now = new Date()): FeeWindowStatus {
       isRenewalClosed: false,
       isBeforeCollection: false,
       renewalFeeFormatted: '₹60,000',
-      statusHeading: 'Existing Member Fee Open: ₹60,000 (18 Nov – 2 Dec 2026)',
-      statusDetail: 'From 18 Nov to 2 Dec 2026, existing member fee is ₹60,000 (₹70,000 with penalty from 3–5 Dec 2026). After 5 Dec 2026, existing members will be considered as a New Entry.',
+      statusHeading: 'Existing Member Fee Open: ₹60,000 (20–30 Nov 2026)',
+      statusDetail: 'From 20 Nov to 30 Nov 2026, existing member fee is ₹60,000 (₹70,000 with penalty from 1–6 Dec 2026). After 6 Dec 2026, existing members will be considered as a New Entry.',
     };
   }
 
@@ -560,8 +560,8 @@ function getMembershipFeeWindowStatus(now = new Date()): FeeWindowStatus {
     isRenewalClosed: false,
     isBeforeCollection: true,
     renewalFeeFormatted: '₹60,000',
-    statusHeading: 'Existing Member Fee Window: 18 Nov – 2 Dec 2026',
-    statusDetail: 'Existing: ₹60,000 (18 Nov – 2 Dec 2026), ₹70,000 with penalty (3–5 Dec 2026). After 5 Dec 2026, existing members will be considered as a New Entry.',
+    statusHeading: 'Existing Member Fee Window: 20–30 Nov 2026',
+    statusDetail: 'Existing: ₹60,000 (20–30 Nov 2026), ₹70,000 with penalty (1–6 Dec 2026). After 6 Dec 2026, existing members will be considered as a New Entry.',
   };
 }
 
@@ -694,7 +694,7 @@ function MembershipFeeSubmissionSection({
             <dl className="divide-y divide-[#EEE5D6] text-xs sm:text-sm bg-white rounded-xl border border-[#E6DAC5] px-3.5 sm:px-5">
               <div className="py-3 flex items-center justify-between gap-3 sm:gap-4">
                 <dt className="text-[#44403C] font-medium min-w-0">
-                  <span>18 Nov – 2 Dec 2026</span>
+                  <span>20 Nov – 30 Nov 2026</span>
                   {feeStatus.isRegularWindow && (
                     <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700 whitespace-nowrap">
                       · Active Slab
@@ -707,7 +707,7 @@ function MembershipFeeSubmissionSection({
               </div>
               <div className="py-3 flex items-center justify-between gap-3 sm:gap-4">
                 <dt className="text-[#44403C] font-medium min-w-0">
-                  <span>3 Dec – 5 Dec 2026</span>
+                  <span>1 Dec – 6 Dec 2026</span>
                   {feeStatus.isLateWindow && (
                     <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800 whitespace-nowrap">
                       · Active Slab
@@ -726,7 +726,7 @@ function MembershipFeeSubmissionSection({
             <div className="p-3 rounded-xl bg-red-50/90 border border-red-200 text-red-900 text-[11px] flex items-start gap-2">
               <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
               <p className="leading-relaxed">
-                <strong>After 5 Dec 2026:</strong> Existing members will be considered as a <strong>New Entry</strong> (₹60,000 Fees + ₹40,000 One-Time Registration Fees).
+                <strong>After 6 Dec 2026:</strong> Existing members will be considered as a <strong>New Entry</strong> (₹60,000 Fees + ₹40,000 One-Time Registration Fees).
               </p>
             </div>
           </>
@@ -1307,7 +1307,7 @@ export function RoyalFamilyPortal({ onOpenAdmin }: RoyalFamilyPortalProps) {
     }
     if (membershipChoice === 'existing' && feeStatus.isRenewalClosed) {
       setGateFieldError('membership');
-      setGateError('After 5 Dec 2026, existing members are treated as a New Entry. Please choose New Member.');
+      setGateError('After 6 Dec 2026, existing members are treated as a New Entry. Please choose New Member.');
       gateMembershipRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       (gateMembershipRef.current?.querySelector('button:not([disabled])') as HTMLElement | null)?.focus({ preventScroll: true });
       return;
